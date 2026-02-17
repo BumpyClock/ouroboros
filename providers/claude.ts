@@ -2,10 +2,12 @@ import { formatShort } from '../core/text';
 import type { CliOptions, PreviewEntry, UsageSummary } from '../core/types';
 import {
   CLAUDE_FIRST_STRING_KEYS,
+  collectRawJsonLines,
   firstStringValue,
   isRecord,
   safeJsonParse,
   toJsonCandidates,
+  toPositiveNumber,
 } from './parsing';
 import { extractRetryDelayFromOutput } from './retry';
 import type { ProviderAdapter } from './types';
@@ -80,23 +82,6 @@ function collectMessages(output: string): PreviewEntry[] {
     messages.push(...previewEntriesFromLine(line));
   }
   return messages;
-}
-
-function collectRawJsonLines(output: string, previewCount: number): string[] {
-  const lines = output
-    .split(/\r?\n/)
-    .map((line) => line.trim())
-    .filter(Boolean)
-    .filter((line) => line.includes('{') || line.includes('}'));
-  return lines.slice(-previewCount);
-}
-
-function toPositiveNumber(value: unknown): number | null {
-  const numeric = typeof value === 'number' ? value : Number.parseFloat(String(value));
-  if (!Number.isFinite(numeric) || numeric <= 0) {
-    return null;
-  }
-  return numeric;
 }
 
 function extractUsageSummary(output: string): UsageSummary | null {

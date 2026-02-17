@@ -1,4 +1,4 @@
-import { isRecord, safeJsonParse } from './parsing';
+import { isRecord, safeJsonParse, toPositiveNumber } from './parsing';
 
 export const RETRY_DELAY_KEYS = [
   'resets_in_seconds',
@@ -8,14 +8,6 @@ export const RETRY_DELAY_KEYS = [
 
 const SECOND_RETRY_RE = /(?:try again|retry).{0,30}?(\d+)\s*(?:seconds?|secs?|s)\b/i;
 const MINUTE_RETRY_RE = /(?:try again|retry).{0,30}?(\d+)\s*(?:minutes?|mins?|m)\b/i;
-
-function toPositiveNumber(value: unknown): number | null {
-  const numeric = typeof value === 'number' ? value : Number.parseFloat(String(value));
-  if (!Number.isFinite(numeric) || numeric <= 0) {
-    return null;
-  }
-  return numeric;
-}
 
 function findRetryDelayInValue(value: unknown, keys: readonly string[]): number | null {
   if (Array.isArray(value)) {
