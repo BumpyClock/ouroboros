@@ -26,6 +26,7 @@
 - Added provider adapters for `claude` and `copilot` and registered both in provider registry.
 - Extended provider adapter contract to receive full prompt so CLIs with `--prompt`/`-p` args work without stdin-only assumptions.
 - Standardized `yolo` mapping per provider (`codex --yolo`, `claude --permission-mode bypassPermissions`, `copilot --allow-all`).
+- 2026-02-17: Added shared retry-delay extraction helper in `providers/retry.ts`; providers now consume a single regex + structured-key extraction path to keep retry delays consistent across `claude`, `copilot`, and `codex`.
 
 ## Build/Packaging
 - Added install scripts for Bun standalone compile (`scripts/install-compiled.sh`, `scripts/install-compiled.ps1`).
@@ -43,3 +44,5 @@
 ## Beads Workflow
 - 2026-02-17: for large refactor beads, use `parent-child` plus `blocks` edges so parents drop out of `bd ready` and only smallest actionable tasks remain.
 - 2026-02-17: when bulk-creating beads via long shell scripts, verify for partial completion/timeouts and dedupe accidental duplicates with `bd duplicate`.
+- 2026-02-17: when closing provider refactor beads, run targeted checks on touched files (e.g., `bunx biome check providers/*.ts`) since repo-wide `doctor` may fail on unrelated pending refactors.
+- 2026-02-17: Shared parser extraction bead shows it's safer to keep provider-specific irstStringValue key-order arrays in one module to avoid subtle behavior drift while still deduplicating recursion/parsing logic.

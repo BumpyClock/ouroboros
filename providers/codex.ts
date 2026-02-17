@@ -1,13 +1,14 @@
-import type { CliOptions, PreviewEntry, UsageSummary } from '../core/types';
 import { formatShort } from '../core/text';
-import type { ProviderAdapter } from './types';
+import type { CliOptions, PreviewEntry, UsageSummary } from '../core/types';
 import {
   CODEX_FIRST_STRING_KEYS,
-  isRecord,
   firstStringValue,
+  isRecord,
   safeJsonParse,
   toJsonCandidates,
 } from './parsing';
+import { extractRetryDelayFromOutput } from './retry';
+import type { ProviderAdapter } from './types';
 
 function summarizeCommand(command: string): string {
   const compact = command.replace(/\s+/g, ' ').trim();
@@ -17,26 +18,6 @@ function summarizeCommand(command: string): string {
     return formatShort(extracted, 140);
   }
   return formatShort(compact, 140);
-}
-
-function toJsonCandidates(line: string): unknown[] {
-  const values: unknown[] = [];
-  const direct = safeJsonParse(line);
-  if (direct !== null) {
-    values.push(direct);
-    return values;
-  }
-
-  const start = line.indexOf('{');
-  const end = line.lastIndexOf('}');
-  if (start >= 0 && end > start) {
-    const embedded = safeJsonParse(line.slice(start, end + 1));
-    if (embedded !== null) {
-      values.push(embedded);
-    }
-  }
-
-  return values;
 }
 
 function codexFirstStringValue(value: unknown): string {
@@ -196,61 +177,6 @@ function extractUsageSummary(output: string): UsageSummary | null {
   return null;
 }
 
-function findRetrySeconds(value: unknown): number | null {
-  if (Array.isArray(value)) {
-    for (const entry of value) {
-      const found = findRetrySeconds(entry);
-      if (found !== null) {
-        return found;
-      }
-    }
-    return null;
-  }
-  if (!isRecord(value)) {
-    return null;
-  }
-
-  const numericKeys = ['resets_in_seconds', 'reset_seconds', 'retry_after_seconds'];
-  for (const key of numericKeys) {
-    const found = toPositiveNumber(value[key]);
-    if (found !== null) {
-      return found;
-    }
-  }
-
-  for (const nested of Object.values(value)) {
-    const found = findRetrySeconds(nested);
-    if (found !== null) {
-      return found;
-    }
-  }
-  return null;
-}
-
-function extractRetryDelaySeconds(output: string): number | null {
-  const lines = output
-    .split(/\r?\n/)
-    .map((line) => line.trim())
-    .filter(Boolean);
-  for (const line of lines) {
-    const parsed = safeJsonParse(line);
-    const found = findRetrySeconds(parsed);
-    if (found !== null) {
-      return found;
-    }
-  }
-
-  const secondMatch = output.match(/(?:try again|retry).{0,30}?(\d+)\s*(?:seconds?|secs?|s)\b/i);
-  if (secondMatch) {
-    return Number.parseInt(secondMatch[1], 10);
-  }
-  const minuteMatch = output.match(/(?:try again|retry).{0,30}?(\d+)\s*(?:minutes?|mins?|m)\b/i);
-  if (minuteMatch) {
-    return Number.parseInt(minuteMatch[1], 10) * 60;
-  }
-  return null;
-}
-
 function hasNoBeadsMarker(output: string): boolean {
   const normalized = output.toLowerCase();
   return normalized.includes('no beads available') || normalized.includes('no_beads_available');
@@ -295,7 +221,7 @@ export const codexProvider: ProviderAdapter = {
   collectMessages,
   collectRawJsonLines,
   extractUsageSummary,
-  extractRetryDelaySeconds,
+  extractRetryDelaySeconds: extractRetryDelayFromOutput,
   hasStopMarker: hasNoBeadsMarker,
   formatCommandHint,
 };

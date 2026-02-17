@@ -1,5 +1,5 @@
-import type { CliOptions, PreviewEntry, UsageSummary } from '../core/types';
 import { formatShort } from '../core/text';
+import type { CliOptions, PreviewEntry, UsageSummary } from '../core/types';
 import {
   CLAUDE_FIRST_STRING_KEYS,
   firstStringValue,
@@ -7,6 +7,7 @@ import {
   safeJsonParse,
   toJsonCandidates,
 } from './parsing';
+import { extractRetryDelayFromOutput } from './retry';
 import type { ProviderAdapter } from './types';
 
 function claudeFirstStringValue(value: unknown): string {
@@ -137,18 +138,6 @@ function extractUsageSummary(output: string): UsageSummary | null {
   return null;
 }
 
-function extractRetryDelaySeconds(output: string): number | null {
-  const secondMatch = output.match(/(?:try again|retry).{0,30}?(\d+)\s*(?:seconds?|secs?|s)\b/i);
-  if (secondMatch) {
-    return Number.parseInt(secondMatch[1], 10);
-  }
-  const minuteMatch = output.match(/(?:try again|retry).{0,30}?(\d+)\s*(?:minutes?|mins?|m)\b/i);
-  if (minuteMatch) {
-    return Number.parseInt(minuteMatch[1], 10) * 60;
-  }
-  return null;
-}
-
 function hasNoBeadsMarker(output: string): boolean {
   const normalized = output.toLowerCase();
   return normalized.includes('no beads available') || normalized.includes('no_beads_available');
@@ -191,7 +180,7 @@ export const claudeProvider: ProviderAdapter = {
   collectMessages,
   collectRawJsonLines,
   extractUsageSummary,
-  extractRetryDelaySeconds,
+  extractRetryDelaySeconds: extractRetryDelayFromOutput,
   hasStopMarker: hasNoBeadsMarker,
   formatCommandHint,
 };
