@@ -1,7 +1,7 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import * as path from 'node:path';
-import type { IterationState } from './types';
 import { isRecord, safeJsonParse } from './json';
+import type { IterationState } from './types';
 
 export const ITERATION_STATE_PATH = '.ai_agents/iteration.json';
 

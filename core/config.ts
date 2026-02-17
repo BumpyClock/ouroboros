@@ -2,8 +2,9 @@ import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { existsSync, readFileSync } from 'node:fs';
 import * as path from 'node:path';
-import type { CliOptions, ReasoningEffort } from './types';
+import { isRecord } from './json';
 import { resolveHomeDir, sanitizeProjectName } from './paths';
+import type { CliOptions, ReasoningEffort } from './types';
 
 type PartialOptions = Partial<
   Omit<CliOptions, 'provider' | 'projectRoot' | 'projectKey' | 'iterationsSet'>
@@ -39,10 +40,6 @@ function projectKeyFromRoot(projectRoot: string): string {
   const basename = sanitizeProjectName(projectRoot);
   const hash = createHash('sha1').update(normalized).digest('hex').slice(0, 10);
   return `${basename}-${hash}`;
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return !!value && typeof value === 'object' && !Array.isArray(value);
 }
 
 function parseTomlFile(configPath: string): Record<string, unknown> {

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'bun:test';
-import * as path from 'node:path';
 import { homedir } from 'node:os';
+import * as path from 'node:path';
 import { defaultLogDir, resolveHomeDir } from './paths';
 
 function restoreEnv(keys: string[], previousValues: Record<string, string | undefined>): void {

@@ -1,7 +1,7 @@
 import { getProviderAdapter, listProviderNames } from '../providers/registry';
 import { loadOuroborosConfig } from './config';
-import type { CliOptions, ReasoningEffort } from './types';
 import { defaultLogDir } from './paths';
+import type { CliOptions, ReasoningEffort } from './types';
 
 type CliOverrides = {
   provider?: string;

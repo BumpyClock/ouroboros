@@ -1,6 +1,6 @@
 import { spawn } from 'node:child_process';
-import type { BeadIssue, BeadsSnapshot } from './types';
 import { safeJsonParse, toRecord } from './json';
+import type { BeadIssue, BeadsSnapshot } from './types';
 
 type ShellResult = {
   status: number | null;
