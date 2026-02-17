@@ -445,3 +445,8 @@ on-zero reviewer/fixer => slot fail, malformed JSONL invalidates snapshot, fallb
   - Kept strip at render tail after agent cards, with empty-state fallback when iteration metadata is missing or unavailable.
   - Learnings: centralized timeline selector is the right source of truth for rendering parity with terminal mode; narrow-mode collapse needs both current context and history count to preserve continuity under width pressure.
   - Challenges: no runtime smoke due request constraints; width behavior should be visually sampled in real terminals before final trim.
+- Completed bead `ouroboros-11.3` (Runtime wiring: run reviewer loop with reviewer adapter/model).
+  - Added `tests/core/loop-engine.mixed-review-provider.test.ts`.
+  - New coverage asserts `runLoop` resolves both primary and reviewer adapters when review is enabled, uses reviewer-command resolution when providers differ (cross-platform via `resolveRunnableCommand`), and keeps reviewer command on primary when providers are same.
+  - Existing `runSlotReviewLoop` contract remains validated by review-loop tests: reviewer subprocess uses `reviewerModel`/reviewer command while fix subprocess uses primary provider command.
+  - Learned: existing mixed-provider wiring was mostly already implemented; this test prevents future regressions by locking the handoff contract in `loop-engine`.
