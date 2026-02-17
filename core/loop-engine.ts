@@ -7,13 +7,13 @@ import { extractReferencedBeadIds, loadBeadsSnapshot } from './beads';
 import type { IterationSummary, LoopPhase, RunContext } from './live-run-state';
 import { resolveRunnableCommand, runAgentProcess, terminateChildProcess } from './process-runner';
 import {
-  buildRunFileBase,
   isCircuitBroken,
   loadIterationState,
   resolveIterationStatePath,
   sleep,
   writeIterationState,
 } from './state';
+import { buildRuns, resolveRunLogDirectory, summarizeArgsForLog } from './loop-runs';
 import {
   ANSI,
   badge,
@@ -32,7 +32,6 @@ import type {
   BeadsSnapshot,
   CliOptions,
   PreviewEntry,
-  RunDefinition,
   RunResult,
   Tone,
 } from './types';
@@ -77,35 +76,6 @@ function createLiveRenderer(
     );
     return new LiveRunRenderer(iteration, stateMaxIterations, agentIds, options.previewLines);
   }
-}
-
-function buildRuns(
-  iteration: number,
-  parallelAgents: number,
-  logDir: string,
-  provider: ProviderAdapter,
-  options: CliOptions,
-  prompt: string,
-): RunDefinition[] {
-  return Array.from({ length: parallelAgents }, (_, index) => {
-    const agentId = index + 1;
-    const runBase = `${buildRunFileBase(iteration)}-agent-${String(agentId).padStart(2, '0')}`;
-    const jsonlLogPath = path.join(logDir, `${runBase}.jsonl`);
-    const lastMessagePath = path.join(logDir, `${runBase}.last-message.txt`);
-    const args = provider.buildExecArgs(prompt, lastMessagePath, options);
-    return { agentId, jsonlLogPath, lastMessagePath, args };
-  });
-}
-
-function summarizeArgsForLog(args: string[]): string {
-  return args
-    .map((arg) => {
-      if (arg.length > 120) {
-        return `<arg:${arg.length} chars>`;
-      }
-      return arg;
-    })
-    .join(' ');
 }
 
 function printInitialSummary(
@@ -394,7 +364,7 @@ export function shouldStopFromProviderOutput(
 export async function runLoop(options: CliOptions, provider: ProviderAdapter): Promise<void> {
   const promptPath = path.resolve(process.cwd(), options.promptPath);
   const statePath = resolveIterationStatePath(process.cwd());
-  const logDir = path.resolve(process.cwd(), options.logDir);
+  const logDir = resolveRunLogDirectory(process.cwd(), options.logDir);
   const command = resolveRunnableCommand(options.command, provider.formatCommandHint);
   const activeChildren = new Set<ChildProcess>();
   const activeSpinnerStopRef: { value: ((message: string, tone?: Tone) => void) | null } = {

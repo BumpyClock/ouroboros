@@ -46,6 +46,7 @@
 - 2026-02-17: when bulk-creating beads via long shell scripts, verify for partial completion/timeouts and dedupe accidental duplicates with `bd duplicate`.
 - 2026-02-17: when closing provider refactor beads, run targeted checks on touched files (e.g., `bunx biome check providers/*.ts`) since repo-wide `doctor` may fail on unrelated pending refactors.
 - 2026-02-17: Shared parser extraction bead shows it's safer to keep provider-specific irstStringValue key-order arrays in one module to avoid subtle behavior drift while still deduplicating recursion/parsing logic.
+- 2026-02-17: when extracting loop-engine helpers (`ouroboros-3.1`), move small helper blocks wholesale into one new file to avoid leaving partial syntax artifacts.
 
 ## TUI Lifecycle
 - 2026-02-17: rich TTY mode now routes iteration lifecycle (`START`/`RUN`/`BATCH`/`TOKENS`/pause/retry) through renderer state updates; these lines should no longer be printed as per-iteration stdout spam.
