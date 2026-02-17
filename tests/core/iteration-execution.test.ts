@@ -150,6 +150,8 @@ async function runIterationWithLine(
       1,
       baseOptions,
       providerWithTruncatedPreview,
+      providerWithTruncatedPreview,
+      'mock',
       snapshot,
       'prompt',
       'mock',

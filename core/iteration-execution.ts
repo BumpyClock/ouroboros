@@ -118,8 +118,10 @@ export type SlotReviewInput = {
   pickedBead: BeadIssue;
   options: CliOptions;
   provider: ProviderAdapter;
+  reviewerProvider: ProviderAdapter;
   reviewerPrompt: string;
   command: string;
+  reviewerCommand: string;
   logDir: string;
   activeChildren: Set<ChildProcess>;
   liveRendererEnabled: boolean;
@@ -134,8 +136,10 @@ export async function runSlotReviewLoop(input: SlotReviewInput): Promise<SlotRev
     pickedBead,
     options,
     provider,
+    reviewerProvider,
     reviewerPrompt,
     command,
+    reviewerCommand,
     logDir,
     activeChildren,
     liveRendererEnabled,
@@ -182,16 +186,17 @@ export async function runSlotReviewLoop(input: SlotReviewInput): Promise<SlotRev
       });
 
       const fullReviewerPrompt = `${reviewerPrompt}\n\n${reviewerContext}`;
-      const reviewArgs = provider.buildExecArgs(fullReviewerPrompt, reviewLastMessagePath, options);
+      const reviewOptions: CliOptions = { ...options, model: options.reviewerModel };
+      const reviewerArgs = reviewerProvider.buildExecArgs(fullReviewerPrompt, reviewLastMessagePath, reviewOptions);
 
       let trackedChild: ChildProcess | null = null;
       const reviewResult = await runAgentProcess({
         prompt: fullReviewerPrompt,
-        command,
-        args: reviewArgs,
+        command: reviewerCommand,
+        args: reviewerArgs,
         logPath: reviewLogPath,
         showRaw: false,
-        formatCommandHint: provider.formatCommandHint,
+        formatCommandHint: reviewerProvider.formatCommandHint,
         onChildChange: (child) => {
           if (child) {
             trackedChild = child;
@@ -328,6 +333,8 @@ export async function runIteration(
   stateMaxIterations: number,
   options: CliOptions,
   provider: ProviderAdapter,
+  reviewerProvider: ProviderAdapter,
+  reviewerCommand: string,
   beadsSnapshot: BeadsSnapshot,
   prompt: string,
   command: string,
@@ -588,8 +595,10 @@ export async function runIteration(
             pickedBead,
             options,
             provider,
+            reviewerProvider,
             reviewerPrompt,
             command,
+            reviewerCommand,
             logDir,
             activeChildren,
             liveRendererEnabled,

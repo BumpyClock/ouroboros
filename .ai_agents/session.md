@@ -1,6 +1,14 @@
 # session log
 
 2026-02-17
+- Completed bead `ouroboros-11.4` (Regression tests and mixed-provider reviewer execution wiring).
+  - Added `tests/core/config.test.ts` to verify `loadOuroborosConfig` preserves project-over-global reviewer override semantics.
+  - Extended `tests/core/cli.test.ts` with explicit reviewer CLI precedence checks.
+  - Added `tests/core/review-loop.test.ts` case that asserts reviewer subprocess uses `reviewerCommand`/`reviewerProvider` model while fix subprocess stays on implementation provider.
+  - Implemented mixed-provider execution wiring in `core/loop-engine.ts`, `core/loop-controller.ts`, and `core/iteration-execution.ts` so review subprocesses use reviewer adapter, command, and model; implementation/fix remains primary path.
+  - Learned: review/fix previously reused primary provider context for both stages, so mixed-provider config was silently ineffective.
+
+2026-02-17
 - Completed bead `ouroboros-10.1` (UX spec for TUI refinement).
   - Added `docs/tui-refinement-spec.md` with:
     - concrete terminal-width breakpoints for desktop/narrow behavior (`>=120`, `100-119`, `80-99`, `<80` cols),

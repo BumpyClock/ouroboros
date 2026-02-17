@@ -26,11 +26,13 @@ type ShutdownProbe = {
 type LoopControllerInput = {
   options: CliOptions;
   provider: ProviderAdapter;
+  reviewerProvider: ProviderAdapter;
   promptPath: string;
   reviewerPromptPath?: string;
   statePath: string;
   logDir: string;
   command: string;
+  reviewerCommand: string;
   activeChildren: Set<ChildProcess>;
   activeSpinnerStopRef: ActiveSpinnerStopRef;
   shutdownProbe: ShutdownProbe;
@@ -174,6 +176,8 @@ export async function runLoopController(
         state.max_iterations,
         options,
         provider,
+        input.reviewerProvider,
+        input.reviewerCommand,
         beadsSnapshot,
         prompt,
         command,

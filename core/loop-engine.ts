@@ -1,5 +1,6 @@
 import type { ChildProcess } from 'node:child_process';
 import type { ProviderAdapter } from '../providers/types';
+import { getProviderAdapter } from '../providers/registry';
 import {
   type IterationLiveRenderer,
   shouldStopFromProviderOutput as shouldStopFromProviderOutputInternal,
@@ -38,6 +39,10 @@ export async function runLoop(options: CliOptions, provider: ProviderAdapter): P
   const statePath = resolveIterationStatePath(cwd);
   const logDir = resolveRunLogDirectory(cwd, options.logDir);
   const command = resolveRunnableCommand(options.command, provider.formatCommandHint);
+  const reviewerProvider = getProviderAdapter(options.reviewerProvider);
+  const reviewerCommand = options.reviewerProvider === provider.name
+    ? command
+    : resolveRunnableCommand(reviewerProvider.defaults.command, reviewerProvider.formatCommandHint);
   const activeChildren = new Set<ChildProcess>();
   const activeSpinnerStopRef: ActiveSpinnerStopRef = {
     value: null,
@@ -52,11 +57,13 @@ export async function runLoop(options: CliOptions, provider: ProviderAdapter): P
     liveRenderer = await runLoopController({
       options,
       provider,
+      reviewerProvider,
       promptPath,
       reviewerPromptPath,
       statePath,
       logDir,
       command,
+      reviewerCommand,
       activeChildren,
       activeSpinnerStopRef,
       shutdownProbe: shutdownGuard,

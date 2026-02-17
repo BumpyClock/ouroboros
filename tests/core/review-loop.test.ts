@@ -25,7 +25,7 @@ import type { ProviderAdapter } from '../../providers/types';
 // --- mock state ---
 let mockRunIndex = 0;
 let mockRunResults: StreamResult[] = [];
-type RunCall = { prompt: string; logPath: string };
+type RunCall = { prompt: string; logPath: string; command: string; args: string[] };
 const runCalls: RunCall[] = [];
 
 function resetMockState(): void {
@@ -41,14 +41,18 @@ mock.module('../../core/process-runner', () => ({
   runAgentProcess: async ({
     prompt,
     logPath,
+    command,
+    args,
   }: {
     prompt: string;
     logPath: string;
+    command: string;
+    args: string[];
     onStdoutLine?: (line: string) => void;
   }) => {
     const idx = mockRunIndex;
     mockRunIndex += 1;
-    runCalls.push({ prompt, logPath });
+    runCalls.push({ prompt, logPath, command, args });
     return mockRunResults[idx] ?? { status: 0, stdout: '', stderr: '' };
   },
 }));
@@ -75,17 +79,17 @@ const REVIEW_LOG_DIR = '.tmp/review-loop-test';
 const baseOptions: CliOptions = {
   projectRoot: process.cwd(),
   projectKey: 'test',
-  provider: 'mock',
-  reviewerProvider: 'mock',
+  provider: 'primary',
+  reviewerProvider: 'reviewer',
   developerPromptPath: '.ai_agents/prompt.md',
   iterationLimit: 1,
   iterationsSet: true,
   previewLines: 3,
   parallelAgents: 1,
   pauseMs: 0,
-  command: 'mock',
-  model: '',
-  reviewerModel: '',
+  command: 'primary-command',
+  model: 'primary-model',
+  reviewerModel: 'reviewer-model',
   reasoningEffort: 'medium',
   yolo: false,
   logDir: REVIEW_LOG_DIR,
@@ -95,16 +99,36 @@ const baseOptions: CliOptions = {
 };
 
 const mockProvider: ProviderAdapter = {
-  name: 'mock',
-  displayName: 'Mock Provider',
+  name: 'primary',
+  displayName: 'Primary Mock',
   defaults: {
-    command: 'mock',
+    command: 'primary-command',
     logDir: REVIEW_LOG_DIR,
-    model: '',
+    model: 'primary-model',
     reasoningEffort: 'medium',
     yolo: false,
   },
-  buildExecArgs: () => ['mock'],
+  buildExecArgs: (_prompt, _lastMessagePath, options) => ['--model', options.model],
+  previewEntriesFromLine: () => [],
+  collectMessages: () => [],
+  collectRawJsonLines: () => [],
+  extractUsageSummary: () => null,
+  extractRetryDelaySeconds: () => null,
+  hasStopMarker: (output: string) => output.toLowerCase().includes('no_beads_available'),
+  formatCommandHint: (command) => command,
+};
+
+const reviewerProvider: ProviderAdapter = {
+  name: 'reviewer',
+  displayName: 'Reviewer Mock',
+  defaults: {
+    command: 'reviewer-command',
+    logDir: REVIEW_LOG_DIR,
+    model: 'reviewer-default',
+    reasoningEffort: 'medium',
+    yolo: false,
+  },
+  buildExecArgs: (_prompt, _lastMessagePath, options) => ['--model', options.model],
   previewEntriesFromLine: () => [],
   collectMessages: () => [],
   collectRawJsonLines: () => [],
@@ -167,8 +191,10 @@ function makeSlotReviewInput(
     pickedBead,
     options: { ...baseOptions, ...opts },
     provider: mockProvider,
+    reviewerProvider,
     reviewerPrompt: '# Review the implementation',
-    command: 'mock',
+    command: 'primary-command',
+    reviewerCommand: 'reviewer-command',
     logDir: REVIEW_LOG_DIR,
     activeChildren: new Set(),
     liveRendererEnabled: false,
@@ -372,6 +398,34 @@ describe('review loop integration', () => {
       expect(outcome.failureReason).toContain('fixer process exited with status 7');
       expect(runCalls.length).toBe(2);
       // third call must not run after failed fixer
+    } finally {
+      console.log = origLog;
+    }
+  });
+
+  it('routes review subprocess to reviewer provider command/model while fix stays on implementation provider', async () => {
+    const reviewResults: StreamResult[] = [
+      { status: 0, stdout: driftVerdict('add guardrails'), stderr: '' },
+      { status: 0, stdout: 'implemented fix', stderr: '' },
+      { status: 0, stdout: passVerdict('fixed'), stderr: '' },
+    ];
+    const input = makeSlotReviewInput(reviewResults, {
+      reviewerProvider: 'reviewer',
+      model: 'primary-model',
+      reviewerModel: 'reviewer-model',
+    });
+
+    const origLog = console.log;
+    console.log = () => {};
+    try {
+      const outcome = await getReviewLoop()(input);
+      expect(outcome.passed).toBe(true);
+      expect(outcome.fixAttempts).toBe(1);
+      expect(runCalls[0].command).toBe('reviewer-command');
+      expect(runCalls[0].args).toContain('--model');
+      expect(runCalls[0].args).toContain('reviewer-model');
+      expect(runCalls[1].command).toBe('primary-command');
+      expect(runCalls[1].args).toContain('primary-model');
     } finally {
       console.log = origLog;
     }
