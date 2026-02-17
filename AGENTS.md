@@ -1,9 +1,12 @@
-<STYLE>
+
 Work style: telegraph; noun-phrases ok; drop grammar; min tokens.
-</STYLE>
+
 
 - read `docs/` and keep them updated with implementation.
 - read `~/.codex/AGENTS.md` 
+
+use `beads` skill.
+
 
 # GOAL
 This is our custom implementation of TUI for ralph wiggum loop. It is designed to be a more robust and flexible alternative to the default TUI implementation, with a focus on stability, extensibility, and user experience.
@@ -24,6 +27,7 @@ Look at these references for inspiration and guidance:
 ## Landing the Plane (Session Completion)
 
 **When ending a work session**, you MUST complete ALL steps below. Work is NOT complete until `git push` succeeds.
+
 
 **MANDATORY WORKFLOW:**
 
