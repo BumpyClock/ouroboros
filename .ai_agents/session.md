@@ -1,6 +1,15 @@
 # session log
 
 ## 2026-02-17
+- Completed bead `ouroboros-11.6` (reviewer command override for non-PATH mixed-provider setups).
+  - Added `--reviewer-command` CLI option and `reviewerCommand` TOML key; wired into `CliOptions`.
+  - Updated `runLoop` to resolve reviewer command with explicit override precedence before provider default resolution.
+  - Added coverage in `tests/core/config.test.ts`, `tests/core/cli.test.ts`, and `tests/core/loop-engine.mixed-review-provider.test.ts`.
+  - Updated `docs/config.md` with command-resolution contract and override examples.
+  - Learning: explicit command override should be resolved through the reviewer provider formatter for consistent quoting behavior.
+  - Challenge: no runtime doctor/test run in this bead by policy.
+
+## 2026-02-17
 - Completed bead `ouroboros-10.6` (ANSI fallback: coherent simplified rendering for card/title/tabs/iterations).
   - Updated `core/terminal-ui.ts` to make the iteration summary compact and stateful: added always-visible current/total iteration context and timeline retry/failure markers, kept token usage + notice summaries, and preserved picked-bead context.
   - Fixed malformed brace in `BEADS unavailable(...)` error suffix rendering.
