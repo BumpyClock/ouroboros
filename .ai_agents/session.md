@@ -416,3 +416,16 @@ on-zero reviewer/fixer => slot fail, malformed JSONL invalidates snapshot, fallb
   - Verification: `bun test tests/core/live-run-state.test.ts tests/core/loop-engine.rich-mode.test.ts` and `bun run doctor` passed.
   - Learning: keeping tab auto-switch memory in shared state avoids renderer-specific branch duplication and aligns with follow-up tab UI bead work.
   - Challenge: repository had unrelated dirty files; staged and committed only bead-specific code changes plus bead metadata updates.
+2026-02-17
+- Completed bead `ouroboros-10.3` (Ink card shell: border-notch + agent title row).
+  - Added `buildAgentNotchLine` in `tui/tui.tsx` for top border notch `"Agent N"` on each agent card.
+  - Switched Ink agent header row to canonical `<bead id> · <bead title>` format with no `[A#]` inline prefix.
+  - Added `formatAgentTitle` truncation with ID-preserving fallback sequence for narrow widths.
+  - Kept existing event feed row rendering intact and preserved snapshot/no-snapshot behavior.
+  - Added dynamic card width + preview width derivations to reduce wrapping on narrow terminals.
+
+## Bead ouroboros-10.4
+- done: implemented Dev/Review tabs in each Ink agent card; active tab now reflects store-backed `activeTab` (Review during review/fix, restored on exit). 
+  - No API changes; tabs render as compact status affordance and preserve existing dev event rows.
+  - Challenge: review-loop textual output remains shared with dev event stream (no separate capture hook in current TUI event feed).
+

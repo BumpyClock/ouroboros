@@ -249,6 +249,49 @@ function renderBeads(state: LiveRunState): React.JSX.Element | null {
   );
 }
 
+function buildAgentNotchLine(agentId: number, cardWidth: number): string {
+  const width = Math.max(20, cardWidth);
+  const innerWidth = Math.max(12, width - 2);
+  const label = formatShort(` Agent ${agentId} `, Math.max(6, innerWidth - 3));
+  const header = `─${label}`;
+  const fillWidth = Math.max(0, innerWidth - header.length);
+  return `╭${header}${'─'.repeat(fillWidth)}╮`;
+}
+
+function formatAgentTitle(picked: BeadIssue | null, maxLength: number): string {
+  const fallback = 'no bead picked';
+  if (maxLength <= 0) {
+    return '';
+  }
+  if (!picked) {
+    return formatShort(fallback, maxLength);
+  }
+  const fullTitle = `${picked.id} · ${picked.title}`;
+  if (fullTitle.length <= maxLength) {
+    return fullTitle;
+  }
+  const titleBudget = maxLength - picked.id.length - 3;
+  if (titleBudget > 0) {
+    return `${picked.id} · ${formatShort(picked.title, titleBudget)}`;
+  }
+
+  const canKeepSeparator = maxLength >= picked.id.length + 5;
+  const idBudget = canKeepSeparator ? maxLength - 5 : Math.max(1, maxLength - 3);
+  const visiblePrefix = Math.max(1, Math.min(picked.id.length, idBudget));
+  const truncatedId = `${picked.id.slice(0, visiblePrefix)}...`;
+  return canKeepSeparator ? `${truncatedId} · ` : truncatedId;
+}
+
+function renderAgentTab(label: string, isActive: boolean, activeTone: Tone, inactiveTone: Tone): React.JSX.Element {
+  return isActive ? (
+    <Text color={activeTone}>{`[${label}]`}</Text>
+  ) : (
+    <Text color={inactiveTone} dimColor>
+      {` ${label} `}
+    </Text>
+  );
+}
+
 function renderAgentCard(
   state: LiveRunState,
   selector: LiveRunAgentSelector,
@@ -257,12 +300,20 @@ function renderAgentCard(
   const snapshot = state.agentState.get(agentId);
   const picked = selector.pickedBead;
   const columns = process.stdout.columns ?? 120;
-  const lineMax = Math.max(28, columns - 52);
-  const titleMax = Math.max(24, columns - 60);
+  const cardWidth = Math.max(48, Math.min(columns - 30, 120));
+  const lineMax = Math.max(24, cardWidth - 18);
+  const statusText = snapshot
+    ? `${snapshot.totalEvents} ${selector.detailText}`
+    : selector.statusText;
+  const statusTextLength = statusText.length;
+  const statusPrefix = `[${selector.statusLabel}]`;
+  const cardInnerWidth = Math.max(16, cardWidth - 2);
+  const titleMax = Math.max(12, cardInnerWidth - statusPrefix.length - statusTextLength - 8);
   const tone: Tone = snapshot ? 'neutral' : 'muted';
   const ageSeconds = snapshot ? selector.ageSeconds : 0;
-  const pickedTitle = picked ? `${picked.id} ${picked.title}` : 'no bead picked';
+  const pickedTitle = formatAgentTitle(picked, titleMax);
   const pickedTitleTone: Tone = picked ? 'success' : 'muted';
+  const selectedReview = selector.activeTab === 'review';
 
   const previewLines = snapshot
     ? (() => {
@@ -275,43 +326,49 @@ function renderAgentCard(
     : [];
 
   return (
-    <Box
-      marginTop={1}
-      borderStyle="round"
-      borderColor={toneToColor(tone)}
-      paddingX={1}
-      flexDirection="column"
-    >
-      {!snapshot ? (
-        <Text>
-          {renderStatusBadge(`A${agentId}`, 'muted')}{' '}
-          <StatusText
-            tone={pickedTitleTone}
-            dim={!picked}
-            text={` ${formatShort(pickedTitle, titleMax)}`}
-          />{' '}
-          {renderStatusBadge(selector.statusLabel, selector.statusTone)}{' '}
-          <StatusText tone={selector.statusTone} dim text={` ${selector.statusText}`} />
-        </Text>
-      ) : (
-        <Text>
-          {renderStatusBadge(`A${agentId}`, 'muted')}{' '}
-          <StatusText
-            tone={pickedTitleTone}
-            dim={!picked}
-            text={` ${formatShort(pickedTitle, titleMax)}`}
-          />{' '}
-          {renderStatusBadge(selector.statusLabel, selector.statusTone)}{' '}
-          <StatusText tone="neutral" text={` ${snapshot.totalEvents}`} />{' '}
-          <StatusText tone="muted" dim text={`updated ${ageSeconds}s ago`} />
-        </Text>
-      )}
-      {previewLines.map((line, rowIndex) => (
-        <Text key={buildPreviewRowKey(agentId, rowIndex)}>
-          <StatusText tone="muted" dim text="  " /> {renderStatusBadge(line.label, line.tone)}{' '}
-          <StatusText tone={line.tone} text={` ${line.text}`} />
-        </Text>
-      ))}
+    <Box marginTop={1} flexDirection="column">
+      <Text color={toneToColor('muted')}>{buildAgentNotchLine(agentId, cardWidth)}</Text>
+      <Box
+        borderStyle="round"
+        borderColor={toneToColor(tone)}
+        paddingX={1}
+        flexDirection="column"
+        width={cardWidth}
+      >
+        <Box>
+          {renderAgentTab('Dev', !selectedReview, 'cyan', 'gray')}
+          <Text> </Text>
+          {renderAgentTab('Review', selectedReview, 'yellow', 'gray')}
+        </Box>
+        {!snapshot ? (
+          <Text>
+            <StatusText
+              tone={pickedTitleTone}
+              dim={!picked}
+              text={formatShort(pickedTitle, titleMax)}
+            />{' '}
+            {renderStatusBadge(selector.statusLabel, selector.statusTone)}{' '}
+            <StatusText tone={selector.statusTone} dim text={` ${selector.statusText}`} />
+          </Text>
+        ) : (
+          <Text>
+            <StatusText
+              tone={pickedTitleTone}
+              dim={!picked}
+              text={formatShort(pickedTitle, titleMax)}
+            />{' '}
+            {renderStatusBadge(selector.statusLabel, selector.statusTone)}{' '}
+            <StatusText tone="neutral" text={` ${snapshot.totalEvents}`} />{' '}
+            <StatusText tone="muted" dim text={`updated ${ageSeconds}s ago`} />
+          </Text>
+        )}
+        {previewLines.map((line, rowIndex) => (
+          <Text key={buildPreviewRowKey(agentId, rowIndex)}>
+            <StatusText tone="muted" dim text="  " /> {renderStatusBadge(line.label, line.tone)}{' '}
+            <StatusText tone={line.tone} text={` ${line.text}`} />
+          </Text>
+        ))}
+      </Box>
     </Box>
   );
 }
@@ -527,3 +584,4 @@ export class InkLiveRunRenderer {
     }
   }
 }
+
