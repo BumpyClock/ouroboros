@@ -23,6 +23,20 @@ describe('builtin prompt assets', () => {
     expect(developerDefault.trim()).toBeTruthy();
     expect(reviewerDefault.trim()).toBeTruthy();
   });
+
+  test('developer default advertises one-task loop execution discipline', () => {
+    const developerDefault = readBuiltinPrompt('developer');
+    expect(developerDefault).toContain('One loop iteration = one meaningful task');
+    expect(developerDefault).toContain('Pick exactly one bead');
+  });
+
+  test('reviewer default enforces strict JSON verdict contract', () => {
+    const reviewerDefault = readBuiltinPrompt('reviewer');
+    expect(reviewerDefault).toContain('Return exactly one JSON object');
+    expect(reviewerDefault).toContain('"verdict":"pass|drift"');
+    expect(reviewerDefault).toContain('"followUpPrompt":"string"');
+    expect(reviewerDefault).toContain('No markdown, no code fences');
+  });
 });
 
 let tmpDir: string;

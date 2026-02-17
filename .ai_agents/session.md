@@ -15,6 +15,7 @@
 - `ouroboros-10`, `ouroboros-10.1`-`ouroboros-10.7`: TUI UX spec plus Ink/ANSI notch/title/tabs/iteration-strip refinements and verification.
 - `ouroboros-11`, `ouroboros-11.1`, `ouroboros-11.3`-`ouroboros-11.6`: reviewer provider/model/command overrides wired for mixed-provider flows, with docs and regression coverage.
 - `ouroboros-12.1`-`ouroboros-12.6`: built-in prompt contracts/assets, fallback resolution, docs, and `--init-prompts` bootstrap flow.
+- `ouroboros-12`: added contract regression tests for built-in developer/reviewer prompt defaults; runtime fallback behavior already present and verified.
 - `ouroboros-13.1`, `ouroboros-13.2`: TUI parity plan plus interactive Ink foundation (keyboard routing and view state machine).
 - `ouroboros-13.3`: Ink multi-pane task/live + iteration history shell with focus-aware pane nav and iteration detail drilldown.
 
@@ -23,6 +24,7 @@
 - Keep reviewer execution explicit: review subprocess can diverge from implementation provider/model/command.
 - Treat malformed JSONL snapshots as untrusted; fail closed and fallback safely.
 - Prefer helper-level renderer tests to lock UI contracts quickly.
+- Treat prompt fallback correctness as behavior, not only config correctness; adding contract-focused tests catches regressions in prompt assets.
 
 ### Cleanup notes
 - Removed duplicate bead entries, malformed control characters, and inconsistent bullet/date formatting.
