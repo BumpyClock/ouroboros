@@ -61,3 +61,18 @@
 ### `ouroboros-13.10` update
 - In progress: implement scoped BEADS snapshot loading for top-level mode using `bd list --parent <id>` (readonly + fallback), then add focused coverage and docs updates.
 - Done: updated `core/beads.ts`, `core/loop-controller.ts`, and `tests/core/json.test.ts`; added parent-scoped command construction, threaded top-level bead id from loop controller, and docs note in `docs/config.md`. Encountered no blockers; no syntax tests run in this iteration.
+
+### `ouroboros-13.11` (done)
+- Added top-level scope runtime enforcement: injected top-level bead constraints into the developer prompt each iteration when `beadMode=top-level`.
+- Added runtime guard in `runLoopController` to stop immediately when top-level snapshot is available and `remaining === 0`.
+- Added unit coverage for prompt injection and top-level exhaustion logic in `tests/core/loop-controller.test.ts`.
+- Updated `docs/config.md` with top-level scope stop/injection behavior.
+- Commit: `a92cef0215a5a99e79bf200feaa380a66da8ea44`.
+- No verification run in this bead (no `bun run doctor` / tests executed).
+### `ouroboros-13.12` (in progress)
+- Plan: add mode-specific loop termination tests (top-level vs auto), scoped snapshot contract checks, and docs/learning updates.
+
+### `ouroboros-13.12` (done)
+- Added loop-controller mode-semantics coverage for early top-level exhaustion, auto-mode stop-marker behavior, and prompt scope injection by mode.
+- Added CLI validation for empty `--top-level-bead` in top-level mode.
+- Updated docs/config and LEARNINGS with termination-order semantics.

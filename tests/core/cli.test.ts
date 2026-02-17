@@ -218,6 +218,15 @@ describe('parseArgs reviewer provider/model resolution', () => {
     ).toThrow(/Top-level mode requires --top-level-bead/);
   });
 
+  it('throws when top-level mode uses a blank top-level bead id', () => {
+    expect(() =>
+      parseWithConfig(
+        ['--bead-mode', 'top-level', '--top-level-bead', '   '],
+        { provider: 'codex', model: 'gpt-5-primary' },
+      ),
+    ).toThrow(/Top-level mode requires --top-level-bead/);
+  });
+
   it('throws when config contains an invalid bead mode', () => {
     expect(() =>
       parseWithConfig(
