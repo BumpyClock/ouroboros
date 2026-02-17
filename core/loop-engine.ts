@@ -3,9 +3,9 @@ import { existsSync, readFileSync } from 'node:fs';
 import * as path from 'node:path';
 import type { ProviderAdapter } from '../providers/types';
 import { InkLiveRunRenderer } from '../tui/tui';
-import { extractReferencedBeadIds, loadBeadsSnapshot } from './beads';
-import type { IterationSummary, LoopPhase, RunContext } from './live-run-state';
-import { resolveRunnableCommand, runAgentProcess, terminateChildProcess } from './process-runner';
+import { loadBeadsSnapshot } from './beads';
+import type { IterationSummary } from './live-run-state';
+import { resolveRunnableCommand, terminateChildProcess } from './process-runner';
 import {
   isCircuitBroken,
   loadIterationState,
@@ -13,17 +13,19 @@ import {
   sleep,
   writeIterationState,
 } from './state';
-import { buildRuns, resolveRunLogDirectory, summarizeArgsForLog } from './loop-runs';
 import {
-  ANSI,
+  aggregateIterationOutput,
+  IterationLiveRenderer,
+  runIteration as runIterationInternal,
+  shouldStopFromProviderOutput as shouldStopFromProviderOutputInternal,
+} from './iteration-execution';
+import { resolveRunLogDirectory } from './loop-runs';
+import {
   badge,
   colorize,
-  createSpinner,
+  ANSI,
   LiveRunRenderer,
-  labelTone,
-  printPreview,
   printSection,
-  printUsageSummary,
   progressBar,
 } from './terminal-ui';
 import { formatShort } from './text';
@@ -35,24 +37,6 @@ import type {
   RunResult,
   Tone,
 } from './types';
-
-type IterationLiveRenderer = {
-  isEnabled(): boolean;
-  setIteration(iteration: number): void;
-  update(agentId: number, entry: PreviewEntry): void;
-  setBeadsSnapshot(snapshot: BeadsSnapshot | null): void;
-  setAgentLogPath(agentId: number, path: string): void;
-  setRunContext(context: RunContext): void;
-  setIterationSummary(summary: IterationSummary): void;
-  setLoopNotice(message: string, tone: Tone): void;
-  setPauseState(msRemaining: number | null): void;
-  setRetryState(secondsRemaining: number | null): void;
-  setLoopPhase(phase: LoopPhase): void;
-  setAgentPickedBead(agentId: number, issue: BeadIssue): void;
-  setAgentQueued(agentId: number, message: string): void;
-  setAgentLaunching(agentId: number, message: string): void;
-  stop(message: string, tone?: Tone): void;
-};
 
 function createLiveRenderer(
   options: CliOptions,
@@ -122,213 +106,19 @@ async function runIteration(
   results: RunResult[];
   pickedByAgent: Map<number, BeadIssue>;
 }> {
-  const runs = buildRuns(iteration, options.parallelAgents, logDir, provider, options, prompt);
-  const liveRendererEnabled = Boolean(liveRenderer?.isEnabled());
-  const startedAt = Date.now();
-  const runContext = {
-    startedAt,
-    command: `${command} ${summarizeArgsForLog(runs[0].args)}`,
-    batch: `target ${runs.length} parallel agent(s), staged startup`,
-    agentLogPaths: new Map<number, string>(),
-  };
-  liveRenderer?.setRunContext(runContext);
-  liveRenderer?.setLoopNotice('iteration started', 'info');
-  liveRenderer?.setLoopPhase('starting');
-  liveRenderer?.setBeadsSnapshot(beadsSnapshot);
-
-  const startedAtLabel = new Date(startedAt).toLocaleTimeString();
-  if (!liveRendererEnabled) {
-    console.log();
-    console.log(
-      `${badge('ITERATION', 'info')} ${iteration}/${stateMaxIterations} ${colorize(
-        progressBar(iteration, stateMaxIterations),
-        ANSI.cyan,
-      )}`,
-    );
-    console.log(`${badge('START', 'muted')} ${startedAtLabel}`);
-    console.log(`${badge('RUN', 'muted')} ${runContext.command}`);
-    console.log(`${badge('BATCH', 'muted')} ${runContext.batch}`);
-    for (const run of runs) {
-      console.log(`${badge(`A${run.agentId}`, 'muted')} ${run.jsonlLogPath}`);
-      liveRenderer?.setAgentLogPath(run.agentId, run.jsonlLogPath);
-    }
-  } else {
-    for (const run of runs) {
-      liveRenderer?.setAgentLogPath(run.agentId, run.jsonlLogPath);
-    }
-  }
-  if (options.showRaw && !liveRendererEnabled) {
-    console.log(`${badge('STREAM', 'warn')} raw event stream enabled`);
-  }
-
-  const spinner =
-    options.showRaw || liveRendererEnabled
-      ? null
-      : createSpinner(
-          `running ${runs.length} ${provider.name} agent(s) for iteration ${iteration}`,
-        );
-  activeSpinnerStopRef.value = liveRendererEnabled ? null : (spinner?.stop ?? null);
-
-  const liveSeen = new Set<string>();
-  const liveCountByAgent = new Map<number, number>();
-  const pickedByAgent = new Map<number, BeadIssue>();
-  const knownBeadIds = new Set(beadsSnapshot.byId.keys());
-  for (const run of runs) {
-    if (run.agentId === 1) {
-      if (liveRendererEnabled) {
-        liveRenderer?.setAgentLaunching(run.agentId, 'launching now, waiting for first response');
-      }
-      continue;
-    }
-    const readinessGate = run.agentId - 1;
-    if (liveRendererEnabled) {
-      liveRenderer?.setAgentQueued(
-        run.agentId,
-        `waiting to spawn until readiness ${readinessGate}/${runs.length}`,
-      );
-    }
-  }
-
-  let readinessCount = 0;
-  const readinessWaiters: Array<{ target: number; resolve: () => void }> = [];
-  const flushReadinessWaiters = () => {
-    const remaining: Array<{ target: number; resolve: () => void }> = [];
-    for (const waiter of readinessWaiters) {
-      if (readinessCount >= waiter.target) {
-        waiter.resolve();
-      } else {
-        remaining.push(waiter);
-      }
-    }
-    readinessWaiters.length = 0;
-    readinessWaiters.push(...remaining);
-  };
-  const releaseReadiness = () => {
-    readinessCount += 1;
-    flushReadinessWaiters();
-  };
-  const waitForReadiness = (target: number): Promise<void> => {
-    if (readinessCount >= target) {
-      return Promise.resolve();
-    }
-    return new Promise((resolve) => {
-      readinessWaiters.push({ target, resolve });
-    });
-  };
-
-  const launchedRuns: Array<Promise<RunResult>> = [];
-  for (let runIndex = 0; runIndex < runs.length; runIndex += 1) {
-    const run = runs[runIndex];
-    if (runIndex > 0) {
-      await waitForReadiness(runIndex);
-      if (liveRendererEnabled) {
-        liveRenderer?.setAgentLaunching(
-          run.agentId,
-          `launching after readiness ${runIndex}/${runs.length}`,
-        );
-      } else {
-        console.log(
-          `${badge('SPAWN', 'muted')} launching agent ${run.agentId} after readiness ${runIndex}/${runs.length}`,
-        );
-      }
-    }
-
-    const launchedRun = (async (): Promise<RunResult> => {
-      let trackedChild: ChildProcess | null = null;
-      let readinessReleased = false;
-      const releaseReadinessOnce = () => {
-        if (readinessReleased) {
-          return;
-        }
-        readinessReleased = true;
-        releaseReadiness();
-      };
-
-      try {
-        const result = await runAgentProcess({
-          prompt,
-          command,
-          args: run.args,
-          logPath: run.jsonlLogPath,
-          showRaw: options.showRaw,
-          formatCommandHint: provider.formatCommandHint,
-          onChildChange: (child) => {
-            if (child) {
-              trackedChild = child;
-              activeChildren.add(child);
-            } else if (trackedChild) {
-              activeChildren.delete(trackedChild);
-              trackedChild = null;
-            }
-          },
-          onStdoutLine: (line) => {
-            if (options.showRaw) {
-              return;
-            }
-            const liveEntries = provider
-              .previewEntriesFromLine(line)
-              .filter(
-                (entry) =>
-                  entry.kind === 'reasoning' ||
-                  entry.kind === 'tool' ||
-                  entry.kind === 'assistant' ||
-                  entry.kind === 'error',
-              );
-            for (const entry of liveEntries) {
-              const matchedIds = extractReferencedBeadIds(entry.text, knownBeadIds);
-              if (matchedIds.length > 0) {
-                const matchedIssue = beadsSnapshot.byId.get(matchedIds[0]);
-                if (matchedIssue) {
-                  pickedByAgent.set(run.agentId, matchedIssue);
-                  liveRenderer?.setAgentPickedBead(run.agentId, matchedIssue);
-                }
-              }
-              if (liveRendererEnabled) {
-                liveRenderer?.update(run.agentId, entry);
-                continue;
-              }
-              const key = `${run.agentId}:${entry.kind}:${entry.text}`;
-              if (liveSeen.has(key)) {
-                continue;
-              }
-              liveSeen.add(key);
-              const count = (liveCountByAgent.get(run.agentId) ?? 0) + 1;
-              liveCountByAgent.set(run.agentId, count);
-              if (count > 20 && entry.kind !== 'assistant' && entry.kind !== 'error') {
-                continue;
-              }
-              if (process.stdout.isTTY) {
-                process.stdout.write('\r\x1b[2K');
-              }
-              const agentPrefix = runs.length > 1 ? `${badge(`A${run.agentId}`, 'muted')} ` : '';
-              const entryBadge = badge(entry.label.toUpperCase(), labelTone(entry.label));
-              console.log(
-                `${badge('LIVE', 'info')} ${agentPrefix}${entryBadge} ${formatShort(entry.text, 180)}`,
-              );
-            }
-          },
-          onFirstResponse: () => {
-            releaseReadinessOnce();
-          },
-        });
-        return {
-          agentId: run.agentId,
-          jsonlLogPath: run.jsonlLogPath,
-          lastMessagePath: run.lastMessagePath,
-          result,
-        };
-      } finally {
-        releaseReadinessOnce();
-      }
-    })();
-
-    launchedRuns.push(launchedRun);
-  }
-
-  return {
-    results: await Promise.all(launchedRuns),
-    pickedByAgent,
-  };
+  return runIterationInternal(
+    iteration,
+    stateMaxIterations,
+    options,
+    provider,
+    beadsSnapshot,
+    prompt,
+    command,
+    logDir,
+    activeChildren,
+    activeSpinnerStopRef,
+    liveRenderer,
+  );
 }
 
 function printBeadsSnapshot(snapshot: BeadsSnapshot): void {
@@ -351,14 +141,7 @@ export function shouldStopFromProviderOutput(
   previewEntries: PreviewEntry[],
   lastMessageOutput: string,
 ): boolean {
-  if (provider.hasStopMarker(lastMessageOutput)) {
-    return true;
-  }
-  return previewEntries.some(
-    (entry) =>
-      (entry.kind === 'assistant' || entry.kind === 'message') &&
-      provider.hasStopMarker(entry.text),
-  );
+  return shouldStopFromProviderOutputInternal(provider, previewEntries, lastMessageOutput);
 }
 
 export async function runLoop(options: CliOptions, provider: ProviderAdapter): Promise<void> {
@@ -478,12 +261,21 @@ export async function runLoop(options: CliOptions, provider: ProviderAdapter): P
         throw error;
       }
 
-      const failed = results.filter((entry) => entry.result.status !== 0);
+      const aggregatedOutput = aggregateIterationOutput({
+        provider,
+        results,
+        beadsSnapshot,
+        pickedByAgent,
+        liveRenderer,
+        previewLines: options.previewLines,
+      });
+      const failed = aggregatedOutput.failed;
+      const usageAggregate = aggregatedOutput.usageAggregate;
+      const stopDetected = aggregatedOutput.stopDetected;
+      pickedByAgent = aggregatedOutput.pickedByAgent;
       if (failed.length > 0) {
         const retryDelays = failed
-          .map((entry) =>
-            provider.extractRetryDelaySeconds(`${entry.result.stdout}\n${entry.result.stderr}`),
-          )
+          .map((entry) => provider.extractRetryDelaySeconds(entry.combinedOutput))
           .filter((value): value is number => value !== null);
         if (retryDelays.length === failed.length && iteration < state.max_iterations) {
           const retrySeconds = Math.max(...retryDelays);
@@ -511,12 +303,11 @@ export async function runLoop(options: CliOptions, provider: ProviderAdapter): P
         }
 
         for (const entry of failed) {
-          const combined = `${entry.result.stdout}\n${entry.result.stderr}`.trim();
           console.log(
-            `${badge(`A${entry.agentId}`, 'error')} exited with status ${entry.result.status}`,
+            `${badge(`A${entry.result.agentId}`, 'error')} exited with status ${entry.status}`,
           );
-          if (combined) {
-            console.log(colorize(formatShort(combined, 600), ANSI.red));
+          if (entry.combinedOutput) {
+            console.log(colorize(formatShort(entry.combinedOutput, 600), ANSI.red));
           }
         }
         if (liveRenderer?.isEnabled()) {
@@ -525,96 +316,6 @@ export async function runLoop(options: CliOptions, provider: ProviderAdapter): P
           terminalLoopPhase = 'failed';
         }
         break;
-      }
-
-      let stopDetected = false;
-      const knownBeadIds = new Set(beadsSnapshot.byId.keys());
-      let usageAggregate: UsageSummary | null = null;
-      for (const entry of results) {
-        const combined = `${entry.result.stdout}\n${entry.result.stderr}`.trim();
-        const context = results.length > 1 ? `agent ${entry.agentId}` : undefined;
-        const preview = provider.collectMessages(combined);
-        if (preview.length > 0) {
-          if (!liveRenderer?.isEnabled()) {
-            printPreview(preview, options.previewLines, context);
-          }
-        } else if (existsSync(entry.lastMessagePath)) {
-          const lastMessage = readFileSync(entry.lastMessagePath, 'utf8').trim();
-          if (lastMessage) {
-            if (!liveRenderer?.isEnabled()) {
-              printPreview(
-                [{ kind: 'assistant', label: 'assistant', text: formatShort(lastMessage) }],
-                options.previewLines,
-                context,
-              );
-            }
-          } else {
-            if (!liveRenderer?.isEnabled()) {
-              printPreview([], options.previewLines, context);
-            }
-          }
-        } else {
-          if (!liveRenderer?.isEnabled()) {
-            printPreview([], options.previewLines, context);
-          }
-        }
-
-        if (preview.length === 0) {
-          const rawPreview = provider.collectRawJsonLines(combined, options.previewLines);
-          if (rawPreview.length > 0) {
-            const suffix = context ? ` (${context})` : '';
-            console.log(
-              `${badge('FALLBACK', 'warn')} JSONL preview fallback (raw lines):${suffix}`,
-            );
-            if (!liveRenderer?.isEnabled()) {
-              for (const rawLine of rawPreview) {
-                console.log(`- ${colorize(formatShort(rawLine, 200), ANSI.dim)}`);
-              }
-            }
-          }
-        }
-
-        const usage = provider.extractUsageSummary(combined);
-        if (usage) {
-          usageAggregate = usageAggregate
-            ? {
-                inputTokens: usageAggregate.inputTokens + usage.inputTokens,
-                cachedInputTokens: usageAggregate.cachedInputTokens + usage.cachedInputTokens,
-                outputTokens: usageAggregate.outputTokens + usage.outputTokens,
-              }
-            : {
-                inputTokens: usage.inputTokens,
-                cachedInputTokens: usage.cachedInputTokens,
-                outputTokens: usage.outputTokens,
-              };
-          if (!liveRenderer?.isEnabled()) {
-            printUsageSummary(usage, context);
-          }
-        }
-
-        const lastMessageOutput = existsSync(entry.lastMessagePath)
-          ? readFileSync(entry.lastMessagePath, 'utf8')
-          : '';
-        if (shouldStopFromProviderOutput(provider, preview, lastMessageOutput)) {
-          stopDetected = true;
-        }
-        if (!pickedByAgent.has(entry.agentId)) {
-          const fallbackIds = extractReferencedBeadIds(combined, knownBeadIds);
-          if (fallbackIds.length > 0) {
-            const fallbackIssue = beadsSnapshot.byId.get(fallbackIds[0]);
-            if (fallbackIssue) {
-              pickedByAgent.set(entry.agentId, fallbackIssue);
-            }
-          }
-        }
-        const picked = pickedByAgent.get(entry.agentId);
-        if (picked) {
-          if (!liveRenderer?.isEnabled()) {
-            console.log(
-              `${badge(`A${entry.agentId}`, 'muted')} picked bead ${picked.id}: ${picked.title}`,
-            );
-          }
-        }
       }
 
       const summary: IterationSummary = {
