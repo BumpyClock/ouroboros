@@ -75,13 +75,13 @@ describe('resolvePromptPath', () => {
     mkdirSync(legacyDir, { recursive: true });
     writeFileSync(path.join(legacyDir, 'prompt.md'), '# legacy');
     const result = resolvePromptPath('reviewer', tmpDir);
-    expect(result).toBeNull();
+    expect(result).toBe(resolveBuiltinPromptPath('reviewer'));
   });
 
-  test('returns null when no files exist', () => {
+  test('falls back to built-in prompt when no role files exist', () => {
     setup();
     const result = resolvePromptPath('developer', tmpDir);
-    expect(result).toBeNull();
+    expect(result).toBe(resolveBuiltinPromptPath('developer'));
   });
 
   test('prefers explicit path over role default', () => {
@@ -128,19 +128,27 @@ describe('resolveDeveloperPromptPath', () => {
     expect(result).toBe(path.join(legacyDir, 'prompt.md'));
   });
 
-  test('throws when no prompt found', () => {
+  test('falls back to built-in prompt when no local prompt exists', () => {
     setup();
-    expect(() => resolveDeveloperPromptPath(tmpDir)).toThrow(/No developer prompt found/);
+    const result = resolveDeveloperPromptPath(tmpDir);
+    expect(result).toBe(resolveBuiltinPromptPath('developer'));
+  });
+
+  test('throws when explicit developer prompt path is missing', () => {
+    setup();
+    expect(() => resolveDeveloperPromptPath(tmpDir, 'missing/developer.md')).toThrow(
+      /No developer prompt found/,
+    );
   });
 });
 
 describe('resolveReviewerPromptPath', () => {
   afterEach(teardown);
 
-  test('returns null when no reviewer prompt exists', () => {
+  test('falls back to built-in reviewer prompt when no local prompt exists', () => {
     setup();
     const result = resolveReviewerPromptPath(tmpDir);
-    expect(result).toBeNull();
+    expect(result).toBe(resolveBuiltinPromptPath('reviewer'));
   });
 
   test('returns path when reviewer prompt exists', () => {
@@ -150,5 +158,11 @@ describe('resolveReviewerPromptPath', () => {
     writeFileSync(path.join(promptsDir, 'reviewer.md'), '# reviewer');
     const result = resolveReviewerPromptPath(tmpDir);
     expect(result).toBe(path.join(promptsDir, 'reviewer.md'));
+  });
+
+  test('preserves explicit path for missing reviewer prompt input', () => {
+    setup();
+    const result = resolveReviewerPromptPath(tmpDir, 'missing/reviewer.md');
+    expect(result).toBe(path.resolve(tmpDir, 'missing/reviewer.md'));
   });
 });

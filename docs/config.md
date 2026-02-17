@@ -134,15 +134,17 @@ Prompt files are resolved per-role with a fallback chain:
 2. `--prompt <path>` or `promptPath` in TOML (legacy flag)
 3. `.ai_agents/prompts/developer.md`
 4. `.ai_agents/prompt.md` (legacy default)
+5. `docs/prompts/developer.default.md` (built-in fallback)
 
-If none of these exist, the loop errors at startup.
+If none of the project-level defaults exist, Ouroboros falls back to built-in defaults in `docs/prompts/developer.default.md`.
 
 ### Reviewer prompt
 
 1. `--reviewer-prompt <path>` or `reviewerPromptPath` in TOML
 2. `.ai_agents/prompts/reviewer.md`
+3. `docs/prompts/reviewer.default.md` (built-in fallback)
 
-When review is enabled (`--review`) and no reviewer prompt is found, the loop errors at startup.
+When review is enabled (`--review`) and no project prompt or explicit path is found, the loop falls back to `docs/prompts/reviewer.default.md`.
 
 ### Directory layout
 

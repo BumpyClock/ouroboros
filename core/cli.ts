@@ -113,7 +113,7 @@ export function printUsage(): void {
 
 Options:
   --provider <name>        Agent provider. default: codex (supported: ${providers})
-  -p, --prompt <path>      Developer prompt file path (fallback: .ai_agents/prompts/developer.md, .ai_agents/prompt.md)
+  -p, --prompt <path>      Developer prompt file path (fallback: .ai_agents/prompts/developer.md, .ai_agents/prompt.md, docs/prompts/developer.default.md)
   -n, --iterations <n>     Max loops. default: 50
   -l, --preview <n>        Number of recent messages shown. default: 3
   -P, --parallel <n>       Run n agents per iteration. default: 1
@@ -135,8 +135,8 @@ Review loop:
       --review                   Enable slot-local review/fix loop (default: off)
       --no-review                Disable review loop
       --review-max-fix-attempts <n>  Max fix attempts per review cycle. default: 5
-      --developer-prompt <path>  Developer prompt (fallback: .ai_agents/prompts/developer.md, .ai_agents/prompt.md)
-      --reviewer-prompt <path>   Reviewer prompt (fallback: .ai_agents/prompts/reviewer.md)
+      --developer-prompt <path>  Developer prompt (fallback: .ai_agents/prompts/developer.md, .ai_agents/prompt.md, docs/prompts/developer.default.md)
+      --reviewer-prompt <path>   Reviewer prompt (fallback: .ai_agents/prompts/reviewer.md, docs/prompts/reviewer.default.md)
 
 Config:
   - Global config: ~/.ouroboros/config.toml

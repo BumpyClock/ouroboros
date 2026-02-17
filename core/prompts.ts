@@ -30,6 +30,7 @@ export function readBuiltinPrompt(role: PromptRole): string {
  *   1. explicitPath (CLI / config override) — resolved against cwd
  *   2. .ai_agents/prompts/{role}.md         — role-specific default
  *   3. .ai_agents/prompt.md                 — legacy (developer only)
+ *   4. docs/prompts/{role}.default.md       — built-in fallback
  *
  * Returns the first existing absolute path, or null if none found.
  */
@@ -59,6 +60,11 @@ export function resolvePromptPath(
     }
   }
 
+  const builtin = resolveBuiltinPromptPath(role);
+  if (existsSync(builtin)) {
+    return builtin;
+  }
+
   return null;
 }
 
@@ -69,7 +75,7 @@ export function resolveDeveloperPromptPath(cwd: string, explicitPath?: string): 
   const resolved = resolvePromptPath('developer', cwd, explicitPath);
   if (!resolved) {
     throw new Error(
-      `No developer prompt found. Provide --prompt / --developer-prompt or create ${PROMPTS_DIR}/developer.md or ${LEGACY_PROMPT}`,
+      `No developer prompt found. Provide --prompt / --developer-prompt, create ${PROMPTS_DIR}/developer.md or ${LEGACY_PROMPT}, or run with built-in docs prompts.`,
     );
   }
   return resolved;
