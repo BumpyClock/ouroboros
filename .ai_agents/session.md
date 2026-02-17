@@ -326,3 +326,13 @@
   - Learning: bun `mock.module` for the same module path across test files collides in the same process; testing exported functions directly avoids mock isolation issues.
   - Challenge: initial attempt to mock `process-runner` in new test file conflicted with existing `iteration-execution.test.ts` mock; resolved by exporting `runSlotReviewLoop` and testing it directly.
   - 80 tests pass, doctor clean (0 warnings).
+
+2026-02-17
+- Completed bead `ouroboros-8.5` (verify relocation and document test-structure convention).
+  - Ran `bun run doctor`: clean (0 fixes, 0 warnings).
+  - Ran `bun test`: 80 pass, 0 fail across 12 files.
+  - Verified 0 `.test.ts` files remain in source dirs (`core/`, `providers/`, `tui/`).
+  - Updated `docs/testing.md` mirror tree listing to include `review-loop.test.ts` (added in 7.6, missing from tree example).
+  - Closed parent bead `ouroboros-8` (all children 8.1-8.5 complete).
+  - Learning: verification beads are quick when prior work is solid; main value is catching stale docs (tree listing was missing one file).
+  - Challenge: none; straightforward verification pass.
