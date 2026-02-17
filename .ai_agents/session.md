@@ -1,6 +1,14 @@
 # session log
 
 ## 2026-02-17
+- Completed bead `ouroboros-10.6` (ANSI fallback: coherent simplified rendering for card/title/tabs/iterations).
+  - Updated `core/terminal-ui.ts` to make the iteration summary compact and stateful: added always-visible current/total iteration context and timeline retry/failure markers, kept token usage + notice summaries, and preserved picked-bead context.
+  - Fixed malformed brace in `BEADS unavailable(...)` error suffix rendering.
+  - Kept implementation minimal by staying on shared `LiveRunStateStore` selectors and timeline data paths already used by Ink.
+  - Learning: `Timeline`-driven retry/failure counters should be the canonical source for both summary and strip to prevent cross-render drift.
+  - Challenge: no visual smoke run was executed, so long-width/TTY wrapping still needs operator eyeballing.
+
+## 2026-02-17
 - Completed bead `ouroboros-13.1` (TUI parity planning).
   - Added `docs/tui-parity-plan.md` with a reference-backed matrix against `references/ralph-tui` for core/enhanced/advanced UI parity.
   - Added `docs/tui-parity-plan.md` to `docs/README.md`.
