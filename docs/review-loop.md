@@ -80,7 +80,19 @@ These phases are surfaced via `setAgentReviewPhase`/`clearAgentReviewPhase` on `
 
 ## Prompt resolution
 
-See [config.md](./config.md#prompt-resolution) for developer and reviewer prompt fallback chains.
+See [config.md](./config.md#prompt-resolution) for full developer and reviewer fallback chains.
+
+Default reviewer prompt availability in review mode:
+
+- The reviewer uses `.ai_agents/prompts/reviewer.md` when present.
+- If no reviewer prompt is present (and no explicit `--reviewer-prompt`/`reviewerPromptPath` is set), review falls back to `docs/prompts/reviewer.default.md`.
+- Explicit missing reviewer paths still fail fast during startup for prompt validation.
+
+```bash
+ouroboros --review --provider claude
+```
+
+starts with built-in defaults when project prompt files are absent.
 
 ## Provider/model resolution contract
 

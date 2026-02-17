@@ -1,6 +1,13 @@
 # session log
 
 ## 2026-02-17
+- Completed bead `ouroboros-12.5` (Docs: default prompt behavior and customization guidance).
+  - Updated `docs/config.md` with concrete examples for custom prompt overrides and explicit built-in fallback usage.
+  - Updated `docs/review-loop.md` with reviewer built-in default availability and behavior when review mode is enabled without project-level prompts.
+  - Learned: built-in defaults are now documented as a practical onboarding path for both roles; explicit overrides still win and still fail fast when unresolved.
+  - Challenge: keeping `config.md` examples both concise and explicit took careful phrasing to avoid over-documenting path precedence.
+
+## 2026-02-17
 - Completed bead `ouroboros-12.6` (Prompt bootstrap helper).
   - Added `core/prompts.ts` initializer `initializeBuiltinPrompts` with role-based, non-destructive materialization and `--force` support.
   - Added CLI surface in `core/cli.ts`: `--init-prompts` and `--force-init-prompts`; wired into usage and parsed options.

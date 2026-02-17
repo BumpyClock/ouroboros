@@ -138,6 +138,22 @@ Prompt files are resolved per-role with a fallback chain:
 
 If none of the project-level defaults exist, Ouroboros falls back to built-in defaults in `docs/prompts/developer.default.md`.
 
+Example using project-local custom prompts:
+
+```bash
+ouroboros --provider codex \
+  --developer-prompt .ai_agents/prompts/custom-developer.md \
+  --reviewer-prompt .ai_agents/prompts/custom-reviewer.md
+```
+
+Example relying on built-in defaults (no project prompt files required):
+
+```bash
+ouroboros --provider codex --command npx -y codex
+```
+
+When neither project prompt exists, the run still starts and uses `docs/prompts/developer.default.md` and `docs/prompts/reviewer.default.md` (if review is enabled).
+
 ### Reviewer prompt
 
 1. `--reviewer-prompt <path>` or `reviewerPromptPath` in TOML
