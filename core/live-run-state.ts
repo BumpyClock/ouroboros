@@ -52,6 +52,13 @@ export type AgentReviewPhase = {
   beadId: string;
 };
 
+export type LiveRunAgentTab = 'dev' | 'review';
+
+type IterationMarkerState = {
+  retryCount: number;
+  outcome: 'success' | 'failed' | null;
+};
+
 export type LiveRunState = {
   startedAt: number;
   frameIndex: number;
@@ -65,6 +72,9 @@ export type LiveRunState = {
   agentState: Map<number, LiveAgentSnapshot>;
   agentSpawnState: Map<number, AgentSpawnState>;
   agentReviewPhase: Map<number, AgentReviewPhase>;
+  agentActiveTab: Map<number, LiveRunAgentTab>;
+  agentTabRestore: Map<number, LiveRunAgentTab>;
+  iterationMarkers: Map<number, IterationMarkerState>;
   beadsSnapshot: BeadsSnapshot | null;
   agentPickedBeads: Map<number, BeadIssue>;
   runContext: RunContext | null;
@@ -97,11 +107,29 @@ export type LiveRunAgentSelector = {
   statusTone: Tone;
   statusText: string;
   detailText: string;
+  activeTab: LiveRunAgentTab;
+  restoreTab: LiveRunAgentTab | null;
   lastUpdatedAt: number;
   ageSeconds: number;
   totalEvents: number;
   phase: RenderPhase;
   reviewPhase: AgentReviewPhase | null;
+};
+
+export type LiveRunIterationMarker = {
+  iteration: number;
+  isCurrent: boolean;
+  retryCount: number;
+  failed: boolean;
+  succeeded: boolean;
+};
+
+export type LiveRunIterationTimeline = {
+  currentIteration: number;
+  maxIterations: number;
+  totalRetries: number;
+  totalFailed: number;
+  markers: LiveRunIterationMarker[];
 };
 
 export function labelTone(label: string): Tone {
@@ -120,6 +148,15 @@ function createInitialState(
   agentIds: number[],
   previewLines: number,
 ): LiveRunState {
+  const nextAgentIds = [...agentIds].sort((left, right) => left - right);
+  const activeTabs = new Map<number, LiveRunAgentTab>();
+  for (const agentId of nextAgentIds) {
+    activeTabs.set(agentId, 'dev');
+  }
+  const iterationMarkers = new Map<number, IterationMarkerState>();
+  if (iteration > 0) {
+    iterationMarkers.set(iteration, { retryCount: 0, outcome: null });
+  }
   return {
     startedAt: Date.now(),
     frameIndex: 0,
@@ -129,10 +166,13 @@ function createInitialState(
     iteration,
     maxIterations,
     previewLines: Math.max(1, previewLines),
-    agentIds: [...agentIds].sort((left, right) => left - right),
+    agentIds: nextAgentIds,
     agentState: new Map<number, LiveAgentSnapshot>(),
     agentSpawnState: new Map<number, AgentSpawnState>(),
     agentReviewPhase: new Map<number, AgentReviewPhase>(),
+    agentActiveTab: activeTabs,
+    agentTabRestore: new Map<number, LiveRunAgentTab>(),
+    iterationMarkers,
     beadsSnapshot: null,
     agentPickedBeads: new Map<number, BeadIssue>(),
     runContext: null,
@@ -167,9 +207,15 @@ export class LiveRunStateStore {
   }
 
   setIteration(iteration: number): void {
+    const nextIteration = Math.max(0, iteration);
+    const nextIterationMarkers = new Map(this.state.iterationMarkers);
+    if (nextIteration > 0 && !nextIterationMarkers.has(nextIteration)) {
+      nextIterationMarkers.set(nextIteration, { retryCount: 0, outcome: null });
+    }
     this.state = {
       ...this.state,
-      iteration: Math.max(0, iteration),
+      iteration: nextIteration,
+      iterationMarkers: nextIterationMarkers,
     };
     this.emit();
   }
@@ -206,6 +252,8 @@ export class LiveRunStateStore {
     const pickedBead = this.state.agentPickedBeads.get(agentId) ?? null;
     const spawn = this.state.agentSpawnState.get(agentId);
     const review = this.state.agentReviewPhase.get(agentId) ?? null;
+    const activeTab = this.state.agentActiveTab.get(agentId) ?? 'dev';
+    const restoreTab = this.state.agentTabRestore.get(agentId) ?? null;
 
     if (!snapshot) {
       if (spawn?.phase === 'launching') {
@@ -215,6 +263,8 @@ export class LiveRunStateStore {
           statusTone: 'info',
           statusText: 'launch in progress',
           detailText: spawn.message,
+          activeTab,
+          restoreTab,
           lastUpdatedAt: now,
           ageSeconds: 0,
           totalEvents: 0,
@@ -229,6 +279,8 @@ export class LiveRunStateStore {
           statusTone: 'warn',
           statusText: 'awaiting launch',
           detailText: spawn.message,
+          activeTab,
+          restoreTab,
           lastUpdatedAt: now,
           ageSeconds: 0,
           totalEvents: 0,
@@ -242,6 +294,8 @@ export class LiveRunStateStore {
         statusTone: 'muted',
         statusText: 'waiting for events',
         detailText: 'waiting for events',
+        activeTab,
+        restoreTab,
         lastUpdatedAt: now,
         ageSeconds: 0,
         totalEvents: 0,
@@ -263,6 +317,8 @@ export class LiveRunStateStore {
           ? `fix attempt ${review.fixAttempt} for ${review.beadId}`
           : `reviewing ${review.beadId}`,
         detailText: `updated ${ageSeconds}s ago`,
+        activeTab,
+        restoreTab,
         lastUpdatedAt: snapshot.lastUpdatedAt,
         ageSeconds,
         totalEvents: snapshot.totalEvents,
@@ -277,11 +333,42 @@ export class LiveRunStateStore {
       statusTone: 'muted',
       statusText: `events ${snapshot.totalEvents}`,
       detailText: `updated ${ageSeconds}s ago`,
+      activeTab,
+      restoreTab,
       lastUpdatedAt: snapshot.lastUpdatedAt,
       ageSeconds,
       totalEvents: snapshot.totalEvents,
       phase: 'waiting',
       reviewPhase: null,
+    };
+  }
+
+  getIterationTimeline(): LiveRunIterationTimeline {
+    const maxIterations = Math.max(1, this.state.maxIterations);
+    const markers: LiveRunIterationMarker[] = [];
+    let totalRetries = 0;
+    let totalFailed = 0;
+    for (let iteration = 1; iteration <= maxIterations; iteration += 1) {
+      const marker = this.state.iterationMarkers.get(iteration) ?? { retryCount: 0, outcome: null };
+      totalRetries += marker.retryCount;
+      if (marker.outcome === 'failed') {
+        totalFailed += 1;
+      }
+      markers.push({
+        iteration,
+        isCurrent: iteration === this.state.iteration,
+        retryCount: marker.retryCount,
+        failed: marker.outcome === 'failed',
+        succeeded: marker.outcome === 'success',
+      });
+    }
+
+    return {
+      currentIteration: this.state.iteration,
+      maxIterations,
+      totalRetries,
+      totalFailed,
+      markers,
     };
   }
 
@@ -435,17 +522,69 @@ export class LiveRunStateStore {
     this.emit();
   }
 
+  setAgentActiveTab(agentId: number, tab: LiveRunAgentTab): void {
+    const nextTabs = new Map(this.state.agentActiveTab);
+    nextTabs.set(agentId, tab);
+    this.state = { ...this.state, agentActiveTab: nextTabs };
+    this.emit();
+  }
+
   setAgentReviewPhase(agentId: number, phase: AgentReviewPhase): void {
-    const next = new Map(this.state.agentReviewPhase);
-    next.set(agentId, phase);
-    this.state = { ...this.state, agentReviewPhase: next };
+    const hadReviewPhase = this.state.agentReviewPhase.has(agentId);
+    const nextReview = new Map(this.state.agentReviewPhase);
+    nextReview.set(agentId, phase);
+    const nextTabs = new Map(this.state.agentActiveTab);
+    const nextRestoreTabs = new Map(this.state.agentTabRestore);
+    if (!hadReviewPhase) {
+      nextRestoreTabs.set(agentId, nextTabs.get(agentId) ?? 'dev');
+    }
+    nextTabs.set(agentId, 'review');
+    this.state = {
+      ...this.state,
+      agentReviewPhase: nextReview,
+      agentActiveTab: nextTabs,
+      agentTabRestore: nextRestoreTabs,
+    };
     this.emit();
   }
 
   clearAgentReviewPhase(agentId: number): void {
-    const next = new Map(this.state.agentReviewPhase);
-    next.delete(agentId);
-    this.state = { ...this.state, agentReviewPhase: next };
+    const nextReview = new Map(this.state.agentReviewPhase);
+    nextReview.delete(agentId);
+    const nextTabs = new Map(this.state.agentActiveTab);
+    const nextRestoreTabs = new Map(this.state.agentTabRestore);
+    nextTabs.set(agentId, nextRestoreTabs.get(agentId) ?? 'dev');
+    nextRestoreTabs.delete(agentId);
+    this.state = {
+      ...this.state,
+      agentReviewPhase: nextReview,
+      agentActiveTab: nextTabs,
+      agentTabRestore: nextRestoreTabs,
+    };
+    this.emit();
+  }
+
+  markIterationRetry(iteration: number): void {
+    const nextIteration = Math.max(1, iteration);
+    const nextMarkers = new Map(this.state.iterationMarkers);
+    const marker = nextMarkers.get(nextIteration) ?? { retryCount: 0, outcome: null };
+    nextMarkers.set(nextIteration, {
+      retryCount: marker.retryCount + 1,
+      outcome: marker.outcome,
+    });
+    this.state = { ...this.state, iterationMarkers: nextMarkers };
+    this.emit();
+  }
+
+  setIterationOutcome(iteration: number, outcome: 'success' | 'failed'): void {
+    const nextIteration = Math.max(1, iteration);
+    const nextMarkers = new Map(this.state.iterationMarkers);
+    const marker = nextMarkers.get(nextIteration) ?? { retryCount: 0, outcome: null };
+    nextMarkers.set(nextIteration, {
+      retryCount: marker.retryCount,
+      outcome,
+    });
+    this.state = { ...this.state, iterationMarkers: nextMarkers };
     this.emit();
   }
 

@@ -1,4 +1,4 @@
-import type { AgentReviewPhase, LiveRunState } from './live-run-state';
+import type { AgentReviewPhase, LiveRunAgentTab, LiveRunState } from './live-run-state';
 import {
   type IterationSummary,
   LIVE_SPINNER_FRAMES,
@@ -304,6 +304,22 @@ export class LiveRunRenderer {
     this.render();
   }
 
+  markIterationRetry(iteration: number): void {
+    this.stateStore.markIterationRetry(iteration);
+    if (!this.enabled || !this.stateStore.isRunning()) {
+      return;
+    }
+    this.render();
+  }
+
+  setIterationOutcome(iteration: number, outcome: 'success' | 'failed'): void {
+    this.stateStore.setIterationOutcome(iteration, outcome);
+    if (!this.enabled || !this.stateStore.isRunning()) {
+      return;
+    }
+    this.render();
+  }
+
   setLoopPhase(phase: LoopPhase): void {
     this.stateStore.setLoopPhase(phase);
     if (!this.enabled || !this.stateStore.isRunning()) {
@@ -322,6 +338,14 @@ export class LiveRunRenderer {
 
   setAgentLaunching(agentId: number, message: string): void {
     this.stateStore.setAgentLaunching(agentId, message);
+    if (!this.enabled || !this.stateStore.isRunning()) {
+      return;
+    }
+    this.render();
+  }
+
+  setAgentActiveTab(agentId: number, tab: LiveRunAgentTab): void {
+    this.stateStore.setAgentActiveTab(agentId, tab);
     if (!this.enabled || !this.stateStore.isRunning()) {
       return;
     }

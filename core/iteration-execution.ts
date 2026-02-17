@@ -4,7 +4,13 @@ import { existsSync, readFileSync } from 'node:fs';
 import * as path from 'node:path';
 import type { ProviderAdapter } from '../providers/types';
 import { extractReferencedBeadIds } from './beads';
-import type { AgentReviewPhase, IterationSummary, LoopPhase, RunContext } from './live-run-state';
+import type {
+  AgentReviewPhase,
+  IterationSummary,
+  LiveRunAgentTab,
+  LoopPhase,
+  RunContext,
+} from './live-run-state';
 import { buildRuns, summarizeArgsForLog } from './loop-runs';
 import { runAgentProcess } from './process-runner';
 import {
@@ -46,10 +52,13 @@ export type IterationLiveRenderer = {
   setLoopNotice(message: string, tone: Tone): void;
   setPauseState(msRemaining: number | null): void;
   setRetryState(secondsRemaining: number | null): void;
+  markIterationRetry(iteration: number): void;
+  setIterationOutcome(iteration: number, outcome: 'success' | 'failed'): void;
   setLoopPhase(phase: LoopPhase): void;
   setAgentPickedBead(agentId: number, issue: BeadIssue): void;
   setAgentQueued(agentId: number, message: string): void;
   setAgentLaunching(agentId: number, message: string): void;
+  setAgentActiveTab(agentId: number, tab: LiveRunAgentTab): void;
   setAgentReviewPhase(agentId: number, phase: AgentReviewPhase): void;
   clearAgentReviewPhase(agentId: number): void;
   stop(message: string, tone?: Tone): void;

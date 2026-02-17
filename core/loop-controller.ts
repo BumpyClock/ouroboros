@@ -286,6 +286,7 @@ export async function runLoopController(
       if (retryDelays.length === failed.length && iteration < state.max_iterations) {
         const retrySeconds = Math.max(...retryDelays);
         const retryMessage = `retry delay detected (${retrySeconds}s). waiting before next iteration`;
+        liveRenderer?.markIterationRetry(iteration);
         if (liveRenderer?.isEnabled()) {
           liveRenderer.setLoopNotice(retryMessage, 'warn');
           liveRenderer.setRetryState(retrySeconds);
@@ -317,6 +318,7 @@ export async function runLoopController(
         }
       }
       if (liveRenderer?.isEnabled()) {
+        liveRenderer.setIterationOutcome(iteration, 'failed');
         liveRenderer.setLoopNotice('one or more agents failed', 'error');
         liveRenderer.setLoopPhase('failed');
         terminalLoopPhase = 'failed';
@@ -339,6 +341,7 @@ export async function runLoopController(
       pickedCount,
     });
     if (shouldIgnoreStopMarker) {
+      liveRenderer?.setIterationOutcome(iteration, 'success');
       if (liveRenderer?.isEnabled()) {
         liveRenderer.setLoopNotice(
           'provider stop marker detected, but picked work suggests continuing',
@@ -354,6 +357,7 @@ export async function runLoopController(
 
     if (stopDetected) {
       stoppedByProviderMarker = true;
+      liveRenderer?.setIterationOutcome(iteration, 'success');
       if (liveRenderer?.isEnabled()) {
         liveRenderer.setLoopNotice('provider stop marker detected', 'success');
         liveRenderer.setLoopPhase('stopped');
@@ -390,6 +394,7 @@ export async function runLoopController(
     } else if (liveRenderer?.isEnabled()) {
       liveRenderer.setLoopPhase('streaming');
     }
+    liveRenderer?.setIterationOutcome(iteration, 'success');
     if (liveRenderer?.isEnabled()) {
       liveRenderer.setLoopNotice('iteration complete', 'info');
     }

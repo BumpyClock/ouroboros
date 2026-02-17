@@ -24,6 +24,7 @@ const baseOptions: CliOptions = {
   projectRoot: process.cwd(),
   projectKey: 'ouroboros',
   provider: 'mock',
+  reviewerProvider: 'mock',
   developerPromptPath: '.ai_agents/prompt.md',
   iterationLimit: 1,
   iterationsSet: true,
@@ -32,6 +33,7 @@ const baseOptions: CliOptions = {
   pauseMs: 0,
   command: 'mock agent',
   model: '',
+  reviewerModel: '',
   reasoningEffort: 'medium',
   yolo: false,
   logDir: '.',
@@ -207,6 +209,14 @@ mock.module('../../tui/tui', () => ({
       rendererCalls.setRetryState.push(seconds);
     }
 
+    markIterationRetry(): void {
+      return;
+    }
+
+    setIterationOutcome(): void {
+      return;
+    }
+
     setLoopPhase(phase: LoopPhase): void {
       this.phase = phase;
       rendererCalls.setLoopPhase.push(phase);
@@ -221,6 +231,10 @@ mock.module('../../tui/tui', () => ({
     }
 
     setAgentLaunching(): void {
+      return;
+    }
+
+    setAgentActiveTab(): void {
       return;
     }
 

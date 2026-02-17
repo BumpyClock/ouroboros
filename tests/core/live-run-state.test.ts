@@ -77,4 +77,57 @@ describe('LiveRunStateStore', () => {
     expect(cleared.pauseMs).toBeNull();
     expect(cleared.retrySeconds).toBeNull();
   });
+
+  it('auto-switches to review tab and restores previous tab after review clears', () => {
+    const store = new LiveRunStateStore(1, 10, [1], 2);
+    expect(store.getAgentSelector(1).activeTab).toBe('dev');
+    expect(store.getAgentSelector(1).restoreTab).toBeNull();
+
+    store.setAgentActiveTab(1, 'review');
+    expect(store.getAgentSelector(1).activeTab).toBe('review');
+
+    store.setAgentReviewPhase(1, {
+      phase: 'reviewing',
+      fixAttempt: 0,
+      beadId: 'ouroboros-10.2',
+    });
+
+    const duringReview = store.getAgentSelector(1);
+    expect(duringReview.activeTab).toBe('review');
+    expect(duringReview.restoreTab).toBe('review');
+
+    store.clearAgentReviewPhase(1);
+    const afterReview = store.getAgentSelector(1);
+    expect(afterReview.activeTab).toBe('review');
+    expect(afterReview.restoreTab).toBeNull();
+  });
+
+  it('tracks iteration retry and failure marker metadata', () => {
+    const store = new LiveRunStateStore(1, 4, [1], 2);
+
+    store.markIterationRetry(1);
+    store.markIterationRetry(1);
+    store.setIterationOutcome(1, 'success');
+    store.setIteration(2);
+    store.markIterationRetry(2);
+    store.setIterationOutcome(2, 'failed');
+
+    const timeline = store.getIterationTimeline();
+    expect(timeline.currentIteration).toBe(2);
+    expect(timeline.totalRetries).toBe(3);
+    expect(timeline.totalFailed).toBe(1);
+
+    const iter1 = timeline.markers.find((marker) => marker.iteration === 1);
+    const iter2 = timeline.markers.find((marker) => marker.iteration === 2);
+    expect(iter1).toBeDefined();
+    expect(iter2).toBeDefined();
+    expect(iter1?.retryCount).toBe(2);
+    expect(iter1?.succeeded).toBeTrue();
+    expect(iter1?.failed).toBeFalse();
+    expect(iter1?.isCurrent).toBeFalse();
+    expect(iter2?.retryCount).toBe(1);
+    expect(iter2?.succeeded).toBeFalse();
+    expect(iter2?.failed).toBeTrue();
+    expect(iter2?.isCurrent).toBeTrue();
+  });
 });

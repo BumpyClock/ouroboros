@@ -4,6 +4,7 @@ import {
   type AgentReviewPhase,
   type IterationSummary,
   type LiveRunAgentSelector,
+  type LiveRunAgentTab,
   type LiveRunHeaderState,
   type LiveRunState,
   LiveRunStateStore,
@@ -460,8 +461,26 @@ export class InkLiveRunRenderer {
     this.emit();
   }
 
+  markIterationRetry(iteration: number): void {
+    this.stateStore.markIterationRetry(iteration);
+    this.state = this.stateStore.getSnapshot();
+    this.emit();
+  }
+
+  setIterationOutcome(iteration: number, outcome: 'success' | 'failed'): void {
+    this.stateStore.setIterationOutcome(iteration, outcome);
+    this.state = this.stateStore.getSnapshot();
+    this.emit();
+  }
+
   setLoopPhase(phase: LoopPhase): void {
     this.stateStore.setLoopPhase(phase);
+    this.state = this.stateStore.getSnapshot();
+    this.emit();
+  }
+
+  setAgentActiveTab(agentId: number, tab: LiveRunAgentTab): void {
+    this.stateStore.setAgentActiveTab(agentId, tab);
     this.state = this.stateStore.getSnapshot();
     this.emit();
   }
