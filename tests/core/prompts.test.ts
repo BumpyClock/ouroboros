@@ -1,12 +1,28 @@
 import { afterEach, describe, expect, test } from 'bun:test';
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import {
+  readBuiltinPrompt,
+  resolveBuiltinPromptPath,
   resolveDeveloperPromptPath,
   resolvePromptPath,
   resolveReviewerPromptPath,
 } from '../../core/prompts';
+
+describe('builtin prompt assets', () => {
+  test('has versioned developer and reviewer defaults', () => {
+    expect(existsSync(resolveBuiltinPromptPath('developer'))).toBe(true);
+    expect(existsSync(resolveBuiltinPromptPath('reviewer'))).toBe(true);
+  });
+
+  test('can read built-in defaults', () => {
+    const developerDefault = readBuiltinPrompt('developer');
+    const reviewerDefault = readBuiltinPrompt('reviewer');
+    expect(developerDefault.trim()).toBeTruthy();
+    expect(reviewerDefault.trim()).toBeTruthy();
+  });
+});
 
 let tmpDir: string;
 

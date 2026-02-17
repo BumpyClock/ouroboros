@@ -1,10 +1,27 @@
-import { existsSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import * as path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 export type PromptRole = 'developer' | 'reviewer';
 
 const PROMPTS_DIR = '.ai_agents/prompts';
 const LEGACY_PROMPT = '.ai_agents/prompt.md';
+const BUILTIN_PROMPTS_DIR = path.resolve(
+  path.dirname(fileURLToPath(import.meta.url)),
+  '..',
+  'docs',
+  'prompts',
+);
+const BUILTIN_DEVELOPER_PROMPT_PATH = path.join(BUILTIN_PROMPTS_DIR, 'developer.default.md');
+const BUILTIN_REVIEWER_PROMPT_PATH = path.join(BUILTIN_PROMPTS_DIR, 'reviewer.default.md');
+
+export function resolveBuiltinPromptPath(role: PromptRole): string {
+  return role === 'developer' ? BUILTIN_DEVELOPER_PROMPT_PATH : BUILTIN_REVIEWER_PROMPT_PATH;
+}
+
+export function readBuiltinPrompt(role: PromptRole): string {
+  return readFileSync(resolveBuiltinPromptPath(role), 'utf8');
+}
 
 /**
  * Resolve a prompt file path for a given role.
