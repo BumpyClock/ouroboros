@@ -116,6 +116,8 @@ export function transitionTuiInteractionState(
   key: InkInputKey,
 ): TuiInteractionState {
   const normalized = input.toLowerCase();
+  const iterationPaneActive =
+    state.view === 'iterations' || state.view === 'iteration-detail' || state.focusedPane === 'iterations';
   if (normalized === '?' || normalized === 'h') {
     return {
       ...state,
@@ -166,28 +168,28 @@ export function transitionTuiInteractionState(
   }
 
   if (key.upArrow || normalized === 'k') {
-    if (state.view === 'tasks' && state.focusedPane === 'iterations') {
+    if (iterationPaneActive) {
       return withIterationDelta(state, -1);
     }
     return withAgentDelta(state, -1);
   }
 
   if (key.downArrow || normalized === 'j') {
-    if (state.view === 'tasks' && state.focusedPane === 'iterations') {
+    if (iterationPaneActive) {
       return withIterationDelta(state, 1);
     }
     return withAgentDelta(state, 1);
   }
 
-  if ((state.view === 'iteration-detail' || state.focusedPane === 'iterations') && normalized === '[') {
+  if (iterationPaneActive && normalized === '[') {
     return withIterationDelta(state, -1);
   }
 
-  if ((state.view === 'iteration-detail' || state.focusedPane === 'iterations') && normalized === ']') {
+  if (iterationPaneActive && normalized === ']') {
     return withIterationDelta(state, 1);
   }
 
-  if (key.return && state.view === 'tasks' && state.focusedPane === 'iterations') {
+  if (key.return && iterationPaneActive && state.view !== 'iteration-detail') {
     return {
       ...state,
       view: 'iteration-detail',
