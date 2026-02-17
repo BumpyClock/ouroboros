@@ -178,12 +178,10 @@ function renderRunContext(state: LiveRunState): React.JSX.Element[] {
   if (!context) {
     return [
       <Text key="runctx-pending">
-        {renderStatusBadge('RUNCTX', 'muted')}{' '}
-        <StatusText tone="muted" text="no run context" />
+        {renderStatusBadge('RUNCTX', 'muted')} <StatusText tone="muted" text="no run context" />
       </Text>,
       <Text key="runctx-pending2">
-        {renderStatusBadge('RUNCTX', 'muted')}{' '}
-        <StatusText tone="muted" text="no log paths" />
+        {renderStatusBadge('RUNCTX', 'muted')} <StatusText tone="muted" text="no log paths" />
       </Text>,
     ];
   }

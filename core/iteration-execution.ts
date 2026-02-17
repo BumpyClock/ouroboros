@@ -304,14 +304,7 @@ export function aggregateIterationOutput(params: {
   liveRenderer: IterationLiveRenderer | null;
   previewLines: number;
 }): AggregatedIterationOutput {
-  const {
-    provider,
-    results,
-    beadsSnapshot,
-    pickedByAgent,
-    liveRenderer,
-    previewLines,
-  } = params;
+  const { provider, results, beadsSnapshot, pickedByAgent, liveRenderer, previewLines } = params;
 
   const failed: AggregatedIterationOutput['failed'] = [];
   let usageAggregate: UsageSummary | null = null;
@@ -400,7 +393,9 @@ export function aggregateIterationOutput(params: {
     }
     const picked = pickedByAgent.get(entry.agentId);
     if (picked && !liveRenderer?.isEnabled()) {
-      console.log(`${badge(`A${entry.agentId}`, 'muted')} picked bead ${picked.id}: ${picked.title}`);
+      console.log(
+        `${badge(`A${entry.agentId}`, 'muted')} picked bead ${picked.id}: ${picked.title}`,
+      );
     }
   }
 
@@ -411,4 +406,3 @@ export function aggregateIterationOutput(params: {
     stopDetected,
   };
 }
-

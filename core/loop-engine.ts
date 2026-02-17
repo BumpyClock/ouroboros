@@ -4,8 +4,16 @@ import * as path from 'node:path';
 import type { ProviderAdapter } from '../providers/types';
 import { InkLiveRunRenderer } from '../tui/tui';
 import { loadBeadsSnapshot } from './beads';
+import {
+  aggregateIterationOutput,
+  type IterationLiveRenderer,
+  runIteration as runIterationInternal,
+  shouldStopFromProviderOutput as shouldStopFromProviderOutputInternal,
+} from './iteration-execution';
 import type { IterationSummary } from './live-run-state';
-import { resolveRunnableCommand, terminateChildProcess } from './process-runner';
+import { resolveRunLogDirectory } from './loop-runs';
+import { resolveRunnableCommand } from './process-runner';
+import { installLoopShutdownGuard } from './shutdown';
 import {
   isCircuitBroken,
   loadIterationState,
@@ -13,30 +21,9 @@ import {
   sleep,
   writeIterationState,
 } from './state';
-import {
-  aggregateIterationOutput,
-  IterationLiveRenderer,
-  runIteration as runIterationInternal,
-  shouldStopFromProviderOutput as shouldStopFromProviderOutputInternal,
-} from './iteration-execution';
-import { resolveRunLogDirectory } from './loop-runs';
-import {
-  badge,
-  colorize,
-  ANSI,
-  LiveRunRenderer,
-  printSection,
-  progressBar,
-} from './terminal-ui';
+import { ANSI, badge, colorize, LiveRunRenderer, printSection, progressBar } from './terminal-ui';
 import { formatShort } from './text';
-import type {
-  BeadIssue,
-  BeadsSnapshot,
-  CliOptions,
-  PreviewEntry,
-  RunResult,
-  Tone,
-} from './types';
+import type { BeadIssue, BeadsSnapshot, CliOptions, PreviewEntry, RunResult, Tone } from './types';
 
 function createLiveRenderer(
   options: CliOptions,
@@ -153,35 +140,11 @@ export async function runLoop(options: CliOptions, provider: ProviderAdapter): P
   const activeSpinnerStopRef: { value: ((message: string, tone?: Tone) => void) | null } = {
     value: null,
   };
-  let shuttingDown = false;
+  const shutdownGuard = installLoopShutdownGuard({
+    activeChildren,
+    activeSpinnerStopRef,
+  });
   let liveRenderer: IterationLiveRenderer | null = null;
-
-  const onSignal = (signal: NodeJS.Signals) => {
-    if (shuttingDown) {
-      return;
-    }
-    shuttingDown = true;
-    console.log();
-    console.log(`${badge('SHUTDOWN', 'warn')} received ${signal}, cleaning up...`);
-    void (async () => {
-      if (activeSpinnerStopRef.value) {
-        activeSpinnerStopRef.value('cancelled', 'warn');
-        activeSpinnerStopRef.value = null;
-      }
-      if (activeChildren.size > 0) {
-        const count = activeChildren.size;
-        await Promise.all([...activeChildren].map((child) => terminateChildProcess(child)));
-        activeChildren.clear();
-        console.log(
-          `${badge('CLEANUP', 'success')} terminated ${count} running child process(es).`,
-        );
-      }
-      process.exit(signal === 'SIGINT' ? 130 : 143);
-    })();
-  };
-
-  process.on('SIGINT', onSignal);
-  process.on('SIGTERM', onSignal);
 
   try {
     const state = loadIterationState(statePath, options.iterationLimit, options.iterationsSet);
@@ -206,7 +169,7 @@ export async function runLoop(options: CliOptions, provider: ProviderAdapter): P
       agentIds,
     );
     for (; state.current_iteration < state.max_iterations; ) {
-      if (shuttingDown) {
+      if (shutdownGuard.isShuttingDown()) {
         break;
       }
 
@@ -385,18 +348,10 @@ export async function runLoop(options: CliOptions, provider: ProviderAdapter): P
       console.log(`${badge('CIRCUIT', 'warn')} max_iterations (${state.max_iterations}) reached`);
     }
   } finally {
-    process.off('SIGINT', onSignal);
-    process.off('SIGTERM', onSignal);
+    shutdownGuard.removeSignalHandlers();
     if (liveRenderer) {
       liveRenderer.stop('', 'success');
     }
-    if (activeChildren.size > 0) {
-      await Promise.all([...activeChildren].map((child) => terminateChildProcess(child)));
-      activeChildren.clear();
-    }
-    if (activeSpinnerStopRef.value) {
-      activeSpinnerStopRef.value('stopped', 'warn');
-      activeSpinnerStopRef.value = null;
-    }
+    await shutdownGuard.finalize();
   }
 }

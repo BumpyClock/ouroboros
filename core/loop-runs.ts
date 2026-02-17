@@ -1,7 +1,7 @@
 import * as path from 'node:path';
 import type { ProviderAdapter } from '../providers/types';
-import type { CliOptions, RunDefinition } from './types';
 import { buildRunFileBase } from './state';
+import type { CliOptions, RunDefinition } from './types';
 
 export function resolveRunLogDirectory(cwd: string, logDir: string): string {
   return path.resolve(cwd, logDir);
