@@ -563,3 +563,19 @@ on-zero reviewer/fixer => slot fail, malformed JSONL invalidates snapshot, fallb
   - Commit: 21cac15`r
   - Challenge: none
 
+
+- 2026-02-17
+- Completed bead ouroboros-13.2 (Interaction foundation: keyboard router + view state machine).
+  - Added interactive Ink TUI interaction state in `tui/tui.tsx`:
+    - explicit `TuiInteractionState`,
+    - pure transition reducer `transitionTuiInteractionState`,
+    - keyboard router via `InkLiveRunRenderer.transition` and `useInput`.
+  - Added view switching and selectors with dedicated rendering paths for:
+    - `tasks` (default),
+    - `iterations`,
+    - `iteration-detail`,
+    - `reviewer`.
+  - Added help overlay/help-toggle and selection navigation keys (`?`/`h`, `Tab`, arrow keys, `j/k`, `1`-`4`, `[ ]`) to support the interaction foundation.
+  - Added test coverage in `tests/tui/tui.test.ts` for view cycling, help toggle, selection movement, and iteration cursor movement.
+  - Learning: separating renderer UI state from `LiveRunStateStore` was straightforward by introducing a small local reducer and exposing `getUiState`/`transition` APIs.
+  - Challenge: no real-terminal interaction smoke run was performed in this bead; view behavior is currently validated by unit tests plus existing rendering helper snapshots.

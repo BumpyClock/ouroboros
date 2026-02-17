@@ -1,5 +1,5 @@
-import { Box, render, Text } from 'ink';
-import React, { useSyncExternalStore } from 'react';
+import { Box, render, Text, useInput } from 'ink';
+import React, { useSyncExternalStore, useState } from 'react';
 import {
   type AgentReviewPhase,
   type IterationSummary,
@@ -18,6 +18,159 @@ import type { BeadIssue, BeadsSnapshot, PreviewEntry, Tone, UsageSummary } from 
 import { buildPreviewRowKey } from './preview-row-key';
 
 type Listener = () => void;
+export type TuiView = 'tasks' | 'iterations' | 'iteration-detail' | 'reviewer';
+const VIEW_SEQUENCE: TuiView[] = ['tasks', 'iterations', 'iteration-detail', 'reviewer'];
+const DEFAULT_HELP_TEXT = [
+  '? / h: help',
+  'Tab: next view',
+  '←/→: prev/next view',
+  'j/k/↑/↓: move agent selection',
+  '[ ]: iteration cursor (iteration detail)',
+  '1/2/3/4: direct view selection',
+];
+
+export type InkInputKey = {
+  tab?: boolean;
+  leftArrow?: boolean;
+  rightArrow?: boolean;
+  upArrow?: boolean;
+  downArrow?: boolean;
+};
+
+export type TuiInteractionState = {
+  view: TuiView;
+  selectedAgentIndex: number;
+  selectedIteration: number;
+  helpVisible: boolean;
+  agentCount: number;
+  maxIterations: number;
+};
+
+function clampIndex(value: number, min: number, max: number): number {
+  if (max <= min) {
+    return min;
+  }
+  return Math.max(min, Math.min(max, value));
+}
+
+export function buildInitialTuiInteractionState(
+  agentCount: number,
+  maxIterations: number,
+): TuiInteractionState {
+  const safeAgentCount = Math.max(0, agentCount);
+  const safeMaxIterations = Math.max(1, maxIterations);
+  return {
+    view: 'tasks',
+    selectedAgentIndex: safeAgentCount > 0 ? 0 : -1,
+    selectedIteration: safeMaxIterations > 0 ? 1 : 1,
+    helpVisible: false,
+    agentCount: safeAgentCount,
+    maxIterations: safeMaxIterations,
+  };
+}
+
+function resolveNextView(view: TuiView, reverse = false): TuiView {
+  const idx = VIEW_SEQUENCE.indexOf(view);
+  if (idx === -1) {
+    return VIEW_SEQUENCE[0];
+  }
+  const next = reverse ? idx - 1 : idx + 1;
+  return VIEW_SEQUENCE[(next + VIEW_SEQUENCE.length) % VIEW_SEQUENCE.length];
+}
+
+function withAgentDelta(
+  state: TuiInteractionState,
+  delta: number,
+): TuiInteractionState {
+  if (state.agentCount === 0) {
+    return state;
+  }
+  const max = Math.max(0, state.agentCount - 1);
+  const nextIndex = clampIndex(state.selectedAgentIndex + delta, 0, max);
+  if (nextIndex === state.selectedAgentIndex) {
+    return state;
+  }
+  return {
+    ...state,
+    selectedAgentIndex: nextIndex,
+  };
+}
+
+function withIterationDelta(
+  state: TuiInteractionState,
+  delta: number,
+): TuiInteractionState {
+  const max = Math.max(1, state.maxIterations);
+  const next = clampIndex(state.selectedIteration + delta, 1, max);
+  if (next === state.selectedIteration) {
+    return state;
+  }
+  return {
+    ...state,
+    selectedIteration: next,
+  };
+}
+
+export function transitionTuiInteractionState(
+  state: TuiInteractionState,
+  input: string,
+  key: InkInputKey,
+): TuiInteractionState {
+  const normalized = input.toLowerCase();
+  if (normalized === '?' || normalized === 'h') {
+    return {
+      ...state,
+      helpVisible: !state.helpVisible,
+    };
+  }
+
+  if (key.tab) {
+    return {
+      ...state,
+      view: resolveNextView(state.view, false),
+    };
+  }
+
+  if (key.leftArrow || normalized === 'p') {
+    return {
+      ...state,
+      view: resolveNextView(state.view, true),
+    };
+  }
+
+  if (key.rightArrow || normalized === 'n') {
+    return {
+      ...state,
+      view: resolveNextView(state.view, false),
+    };
+  }
+
+  if (normalized === '1' || normalized === '2' || normalized === '3' || normalized === '4') {
+    const target = Number.parseInt(normalized, 10) - 1;
+    return {
+      ...state,
+      view: VIEW_SEQUENCE[target],
+    };
+  }
+
+  if (key.upArrow || normalized === 'k') {
+    return withAgentDelta(state, -1);
+  }
+
+  if (key.downArrow || normalized === 'j') {
+    return withAgentDelta(state, 1);
+  }
+
+  if (state.view === 'iteration-detail' && normalized === '[') {
+    return withIterationDelta(state, -1);
+  }
+
+  if (state.view === 'iteration-detail' && normalized === ']') {
+    return withIterationDelta(state, 1);
+  }
+
+  return state;
+}
 
 function toneToColor(tone: Tone): 'white' | 'cyan' | 'green' | 'yellow' | 'red' | 'gray' {
   switch (tone) {
@@ -375,6 +528,114 @@ function renderIterationStrip(
   );
 }
 
+function renderViewHelp(helpVisible: boolean): React.JSX.Element | null {
+  if (!helpVisible) {
+    return null;
+  }
+  return (
+    <Box marginTop={1} borderStyle="round" borderColor="magenta" flexDirection="column" paddingX={1}>
+      {DEFAULT_HELP_TEXT.map((line) => (
+        <Text key={line}>
+          <StatusText tone="muted" text={line} />
+        </Text>
+      ))}
+    </Box>
+  );
+}
+
+function renderIterationDetail(
+  state: TuiInteractionState,
+  timeline: LiveRunIterationTimeline,
+  columns: number,
+): React.JSX.Element | null {
+  const marker = timeline.markers[state.selectedIteration - 1];
+  const iterationText = marker
+    ? `iteration ${marker.iteration} ${marker.succeeded ? 'success' : marker.failed ? 'failed' : 'pending'}`
+    : `iteration ${state.selectedIteration}`;
+  return (
+    <Box marginTop={1} borderStyle="round" borderColor="yellow" flexDirection="column" paddingX={1}>
+      <Text>
+        {renderStatusBadge('ITER-DETAIL', 'info')}{' '}
+        <StatusText tone="neutral" text={iterationText} />
+      </Text>
+      {renderIterationStrip(timeline, columns)}
+    </Box>
+  );
+}
+
+function renderCurrentAgentCard(
+  state: LiveRunState,
+  uiState: TuiInteractionState,
+  selectorForAgentId: (agentId: number) => LiveRunAgentSelector,
+): React.JSX.Element | null {
+  if (state.agentIds.length === 0) {
+    return null;
+  }
+  const maxIndex = Math.max(0, state.agentIds.length - 1);
+  const safeIndex = clampIndex(uiState.selectedAgentIndex, 0, maxIndex);
+  const agentId = state.agentIds[safeIndex];
+  return renderAgentCard(state, selectorForAgentId(agentId), agentId);
+}
+
+function renderViewContent(
+  state: LiveRunState,
+  renderer: InkLiveRunRenderer,
+  uiState: TuiInteractionState,
+  timeline: LiveRunIterationTimeline,
+  columns: number,
+): React.JSX.Element[] {
+  const view = uiState.view;
+  if (view === 'iterations') {
+    return [
+      <Box key="iter-summary" marginTop={1} flexDirection="column">
+        {renderIterationSummary(state).map((line) => line)}
+      </Box>,
+      <React.Fragment key="iter-strip">{renderIterationStrip(timeline, columns)}</React.Fragment>,
+    ];
+  }
+
+  if (view === 'iteration-detail') {
+    return [
+      <Box key="iter-detail" marginTop={1} flexDirection="column">
+        <Text>{renderStatusBadge('DETAIL', 'info')} selected iteration {uiState.selectedIteration}</Text>
+        {renderIterationDetail(uiState, timeline, columns)}
+      </Box>,
+    ];
+  }
+
+  if (view === 'reviewer') {
+    return [
+      <Box key="reviewer-shell" marginTop={1} flexDirection="column">
+        <Text>
+          {renderStatusBadge('VIEW', 'warn')} reviewer panel
+        </Text>
+        <Box marginTop={1} flexDirection="column">
+          {renderRunContext(state).map((line) => line)}
+          {renderCurrentAgentCard(state, uiState, (agentId) => renderer.getAgentSelector(agentId))}
+        </Box>
+      </Box>,
+    ];
+  }
+
+  return [
+    <React.Fragment key="summary">
+      <Box marginTop={1} flexDirection="column">
+        {renderIterationSummary(state).map((line) => line)}
+      </Box>
+      <Box marginTop={1} flexDirection="column">
+        {renderRunContext(state).map((line) => line)}
+      </Box>
+      {renderBeads(state)}
+      {state.agentIds.map((agentId) => (
+        <React.Fragment key={agentId}>
+          {renderAgentCard(state, renderer.getAgentSelector(agentId), agentId)}
+        </React.Fragment>
+      ))}
+      {renderIterationStrip(timeline, columns)}
+    </React.Fragment>,
+  ];
+}
+
 export function buildAgentNotchLine(agentId: number, cardWidth: number): string {
   const width = Math.max(20, cardWidth);
   const innerWidth = Math.max(12, width - 2);
@@ -511,22 +772,34 @@ function LiveView({ renderer }: { renderer: InkLiveRunRenderer }): React.JSX.Ele
     renderer.getSnapshot,
   );
   const headerState = renderer.getHeaderState();
+  const [, setViewTick] = useState(0);
+  const uiState = renderer.getUiState();
+
+  useInput((input, key) => {
+    const next = renderer.transition(input, key);
+    if (next !== null) {
+      setViewTick((value) => value + 1);
+      return;
+    }
+  });
   return (
     <Box flexDirection="column">
       {renderHeader(headerState)}
       <Box marginTop={1} flexDirection="column">
-        {renderIterationSummary(state).map((line) => line)}
+        <Text>
+          {renderStatusBadge('VIEW', 'info')}{' '}
+          <StatusText tone="neutral" text={`${uiState.view} view`} />
+          {uiState.helpVisible ? ' · help on' : ''}
+        </Text>
       </Box>
-      <Box marginTop={1} flexDirection="column">
-        {renderRunContext(state).map((line) => line)}
-      </Box>
-      {renderBeads(state)}
-      {state.agentIds.map((agentId) => (
-        <React.Fragment key={agentId}>
-          {renderAgentCard(state, renderer.getAgentSelector(agentId), agentId)}
-        </React.Fragment>
-      ))}
-      {renderIterationStrip(renderer.getIterationTimeline(), process.stdout.columns ?? 120)}
+      {renderViewHelp(uiState.helpVisible)}
+      {renderViewContent(
+        state,
+        renderer,
+        uiState,
+        renderer.getIterationTimeline(),
+        process.stdout.columns ?? 120,
+      )}
     </Box>
   );
 }
@@ -535,6 +808,7 @@ export class InkLiveRunRenderer {
   private readonly enabled: boolean;
   private state: LiveRunState;
   private readonly stateStore: LiveRunStateStore;
+  private uiState: TuiInteractionState;
   private timer: NodeJS.Timeout | null = null;
   private app: ReturnType<typeof render> | null = null;
   private readonly listeners = new Set<Listener>();
@@ -543,6 +817,7 @@ export class InkLiveRunRenderer {
     this.enabled = Boolean(process.stdout.isTTY);
     this.stateStore = new LiveRunStateStore(iteration, maxIterations, agentIds, previewLines);
     this.state = this.stateStore.getSnapshot();
+    this.uiState = buildInitialTuiInteractionState(agentIds.length, maxIterations);
 
     if (!this.enabled) {
       return;
@@ -571,6 +846,17 @@ export class InkLiveRunRenderer {
   getAgentSelector = (agentId: number): LiveRunAgentSelector =>
     this.stateStore.getAgentSelector(agentId);
   getIterationTimeline = (): LiveRunIterationTimeline => this.stateStore.getIterationTimeline();
+  getUiState = (): TuiInteractionState => this.uiState;
+
+  transition(input: string, key: InkInputKey): TuiInteractionState | null {
+    const next = transitionTuiInteractionState(this.uiState, input, key);
+    if (next === this.uiState) {
+      return null;
+    }
+    this.uiState = next;
+    this.emit();
+    return this.uiState;
+  }
 
   isEnabled(): boolean {
     return this.enabled;

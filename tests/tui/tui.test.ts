@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'bun:test';
 import type { BeadIssue } from '../../core/types';
-import { buildAgentNotchLine, buildIterationStripParts, formatAgentTitle } from '../../tui/tui';
+import {
+  buildAgentNotchLine,
+  buildInitialTuiInteractionState,
+  buildIterationStripParts,
+  formatAgentTitle,
+  transitionTuiInteractionState,
+} from '../../tui/tui';
 
 const makeIssue = (
   id: string,
@@ -74,5 +80,40 @@ describe('Ink TUI rendering helpers', () => {
     expect(narrow.prevCount).toBe(6);
     expect(narrow.retryCount).toBe(11);
     expect(narrow.failedCount).toBe(1);
+  });
+});
+
+describe('Ink TUI interaction state', () => {
+  it('cycles views with tab and shortcuts', () => {
+    const state = buildInitialTuiInteractionState(2, 10);
+
+    const next = transitionTuiInteractionState(state, '', { tab: true });
+    expect(next.view).toBe('iterations');
+    const direct = transitionTuiInteractionState(next, '3', {});
+    expect(direct.view).toBe('iteration-detail');
+    const reversed = transitionTuiInteractionState(direct, '', { leftArrow: true });
+    expect(reversed.view).toBe('iterations');
+  });
+
+  it('toggles help and tracks navigation selections', () => {
+    const state = buildInitialTuiInteractionState(3, 10);
+    const withHelp = transitionTuiInteractionState(state, '?', {});
+    expect(withHelp.helpVisible).toBeTrue();
+
+    const withSelection = transitionTuiInteractionState(withHelp, 'j', {});
+    expect(withSelection.selectedAgentIndex).toBe(1);
+    const clipped = transitionTuiInteractionState(withSelection, 'k', {});
+    expect(clipped.selectedAgentIndex).toBe(0);
+  });
+
+  it('adjusts selected iteration in iteration-detail context', () => {
+    const state = buildInitialTuiInteractionState(1, 5);
+    const detail = transitionTuiInteractionState(state, '3', {});
+    expect(detail.view).toBe('iteration-detail');
+
+    const next = transitionTuiInteractionState(detail, ']', {});
+    expect(next.selectedIteration).toBe(2);
+    const back = transitionTuiInteractionState(next, '[', {});
+    expect(back.selectedIteration).toBe(1);
   });
 });
