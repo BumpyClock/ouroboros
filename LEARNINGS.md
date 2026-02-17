@@ -27,6 +27,8 @@
 - Extended provider adapter contract to receive full prompt so CLIs with `--prompt`/`-p` args work without stdin-only assumptions.
 - Standardized `yolo` mapping per provider (`codex --yolo`, `claude --permission-mode bypassPermissions`, `copilot --allow-all`).
 - 2026-02-17: Added shared retry-delay extraction helper in `providers/retry.ts`; providers now consume a single regex + structured-key extraction path to keep retry delays consistent across `claude`, `copilot`, and `codex`.
+- 2026-02-17: Captured adapter boundary decision in `docs/provider-adapter-boundary.md`: providers remain thin transport/preview adapters, while parsing/retry/marker logic is shared and test-bound.
+- 2026-02-17: Strengthened `ouroboros-6.1` by linking provider boundary policy from `README.md` and documenting explicit good/bad examples in `docs/provider-adapter-boundary.md` so future adapters follow consistent parsing/retry ownership.
 
 ## Build/Packaging
 - Added install scripts for Bun standalone compile (`scripts/install-compiled.sh`, `scripts/install-compiled.ps1`).
