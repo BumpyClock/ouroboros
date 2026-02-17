@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'bun:test';
-import type { ProviderAdapter } from '../providers/types';
-import { shouldStopFromProviderOutput } from './loop-engine';
+import { shouldStopFromProviderOutput } from '../../core/loop-engine';
+import type { ProviderAdapter } from '../../providers/types';
 
 const provider = {
   hasStopMarker: (output: string) => output.toLowerCase().includes('no_beads_available'),

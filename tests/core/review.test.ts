@@ -4,8 +4,8 @@ import {
   isReviewFailure,
   isReviewResult,
   parseReviewerVerdict,
-} from './review';
-import type { BeadIssue } from './types';
+} from '../../core/review';
+import type { BeadIssue } from '../../core/types';
 
 describe('parseReviewerVerdict', () => {
   test('parses valid pass verdict', () => {

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'bun:test';
-import { LiveRunStateStore } from './live-run-state';
-import type { BeadIssue, UsageSummary } from './types';
+import { LiveRunStateStore } from '../../core/live-run-state';
+import type { BeadIssue, UsageSummary } from '../../core/types';
 
 const makeIssue = (id: string): BeadIssue => ({
   id,

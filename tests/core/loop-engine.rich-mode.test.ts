@@ -2,9 +2,9 @@ import { afterAll, beforeAll, describe, expect, it, mock } from 'bun:test';
 import { appendFileSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import * as path from 'node:path';
-import type { ProviderAdapter } from '../providers/types';
-import type { LoopPhase } from './live-run-state';
-import type { CliOptions, IterationState, Tone } from './types';
+import type { LoopPhase } from '../../core/live-run-state';
+import type { CliOptions, IterationState, Tone } from '../../core/types';
+import type { ProviderAdapter } from '../../providers/types';
 
 type RendererCall = {
   setRunContextCount: number;
@@ -87,7 +87,7 @@ function resetState(): void {
   loadBeadsSnapshotCallCount = 0;
 }
 
-mock.module('./beads', () => ({
+mock.module('../../core/beads', () => ({
   extractReferencedBeadIds: () => [],
   loadBeadsSnapshot: async (projectRoot: string) => {
     loadBeadsSnapshotCallCount += 1;
@@ -106,9 +106,26 @@ mock.module('./beads', () => ({
       byId: new Map(),
     };
   },
+  loadBeadsSnapshotFromJsonl: (projectRoot: string) => {
+    loadBeadsSnapshotCallCount += 1;
+    return {
+      available: true,
+      source: '.beads/issues.jsonl',
+      projectRoot,
+      total: 1,
+      remaining: 1,
+      open: 1,
+      inProgress: 0,
+      blocked: 0,
+      closed: 0,
+      deferred: 0,
+      remainingIssues: [],
+      byId: new Map(),
+    };
+  },
 }));
 
-mock.module('./state', () => ({
+mock.module('../../core/state', () => ({
   buildRunFileBase: (iteration: number) => `iter-${String(iteration).padStart(3, '0')}-test`,
   isCircuitBroken: (state: IterationState) => state.current_iteration >= state.max_iterations,
   loadIterationState: () => ({ ...iterationState }),
@@ -121,7 +138,7 @@ mock.module('./state', () => ({
   writeIterationState: () => {},
 }));
 
-mock.module('./process-runner', () => ({
+mock.module('../../core/process-runner', () => ({
   resolveRunnableCommand: (command: string) => command,
   runAgentProcess: async () => {
     if (runAgentDelayMs > 0) {
@@ -136,7 +153,7 @@ mock.module('./process-runner', () => ({
   terminateChildProcess: async () => {},
 }));
 
-mock.module('../tui/tui', () => ({
+mock.module('../../tui/tui', () => ({
   InkLiveRunRenderer: class {
     constructor(
       public iteration: number,
@@ -222,7 +239,7 @@ mock.module('../tui/tui', () => ({
   },
 }));
 
-let loopEngineModule: typeof import('./loop-engine') | null = null;
+let loopEngineModule: typeof import('../../core/loop-engine') | null = null;
 
 const mockProvider: ProviderAdapter = {
   name: 'mock',
@@ -246,7 +263,7 @@ const mockProvider: ProviderAdapter = {
 
 describe('runLoop rich-mode lifecycle', () => {
   beforeAll(async () => {
-    loopEngineModule = await import('./loop-engine');
+    loopEngineModule = await import('../../core/loop-engine');
   });
 
   afterAll(() => {

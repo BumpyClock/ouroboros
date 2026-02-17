@@ -6,7 +6,7 @@ import {
   resolveDeveloperPromptPath,
   resolvePromptPath,
   resolveReviewerPromptPath,
-} from './prompts';
+} from '../../core/prompts';
 
 let tmpDir: string;
 

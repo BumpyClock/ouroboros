@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it, mock } from 'bun:test';
-import type { ProviderAdapter } from '../providers/types';
-import type { BeadIssue, BeadsSnapshot, CliOptions } from './types';
+import type { BeadIssue, BeadsSnapshot, CliOptions } from '../../core/types';
+import type { ProviderAdapter } from '../../providers/types';
 
 let emittedLine = '';
 let firstAgentCompleted = false;
@@ -14,7 +14,7 @@ function resetRunState(): void {
   releaseFirstAgentRun = null;
 }
 
-mock.module('./process-runner', () => ({
+mock.module('../../core/process-runner', () => ({
   resolveRunnableCommand: (command: string) => command,
   terminateChildProcess: async () => {},
   runAgentProcess: async ({
@@ -44,7 +44,7 @@ mock.module('./process-runner', () => ({
   },
 }));
 
-let iterationExecutionModule: typeof import('./iteration-execution') | null = null;
+let iterationExecutionModule: typeof import('../../core/iteration-execution') | null = null;
 
 const baseOptions: CliOptions = {
   projectRoot: process.cwd(),
@@ -176,7 +176,7 @@ async function runIterationWithLine(
 
 describe('runIteration bead picking for staged launch', () => {
   beforeAll(async () => {
-    iterationExecutionModule = await import('./iteration-execution');
+    iterationExecutionModule = await import('../../core/iteration-execution');
   });
 
   afterAll(() => {
