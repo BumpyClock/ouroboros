@@ -25,6 +25,7 @@ ouroboros/
       paths.test.ts
       prompts.test.ts
       review.test.ts
+      review-loop.test.ts
       live-run-state.test.ts
       iteration-execution.test.ts
       loop-engine.stop-marker.test.ts
