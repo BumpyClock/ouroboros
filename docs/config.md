@@ -114,6 +114,16 @@ Matrix (normative for `ouroboros-11.2` to `ouroboros-11.5`):
 | `codex`,`gpt-5.3`,`codex` | `reviewerProvider=claude`, `reviewerModel=sonnet` | `claude` | `sonnet` | claude command path |
 | `claude`,`(empty)`,`claude` | `reviewerProvider=copilot` | `copilot` | copilot default model | copilot command path |
 
+Example overrides:
+
+```bash
+# Same provider, override reviewer model only
+ouroboros --review --provider codex --model gpt-5.3 --reviewer-model o3-mini
+
+# Mixed providers, explicit reviewer model
+ouroboros --review --provider codex --reviewer-provider claude --reviewer-model sonnet
+```
+
 ## Bead snapshot trust model
 
 - Bead snapshots are loaded from `bd list --json --all --limit 0`.

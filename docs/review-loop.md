@@ -94,6 +94,16 @@ ouroboros --review --provider claude
 
 starts with built-in defaults when project prompt files are absent.
 
+Examples:
+
+```bash
+# Same provider, override reviewer model
+ouroboros --review --provider codex --model gpt-5.3 --reviewer-model o3-mini
+
+# Mixed providers: codex reviewer runs in Claude
+ouroboros --review --provider codex --reviewer-provider claude --reviewer-model sonnet
+```
+
 ## Provider/model resolution contract
 
 Source of truth: [config.md](./config.md#reviewer-providermodel-resolution-contract-bead-11-source-of-truth).
