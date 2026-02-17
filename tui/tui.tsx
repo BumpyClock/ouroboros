@@ -1,6 +1,7 @@
 import { Box, render, Text } from 'ink';
 import React, { useSyncExternalStore } from 'react';
 import {
+  type AgentReviewPhase,
   type IterationSummary,
   type LiveRunAgentSelector,
   type LiveRunHeaderState,
@@ -264,35 +265,13 @@ function renderAgentCard(
 
   const previewLines = snapshot
     ? (() => {
-        const filledLines = snapshot.lines.slice(-state.previewLines).map((entry) => ({
+        return snapshot.lines.slice(-state.previewLines).map((entry) => ({
           label: entry.label.toUpperCase(),
           tone: entry.tone,
           text: formatShort(entry.text, lineMax),
         }));
-        const emptyCount = Math.max(0, state.previewLines - filledLines.length);
-        return [
-          ...Array.from({ length: emptyCount }, () => ({
-            label: 'EMPTY',
-            tone: 'muted' as Tone,
-            text: 'no event yet',
-          })),
-          ...filledLines,
-        ];
       })()
-    : (() => {
-        return [
-          {
-            label: 'STATE',
-            tone: selector.statusTone,
-            text: formatShort(selector.detailText, lineMax),
-          },
-          ...Array.from({ length: Math.max(0, state.previewLines - 1) }, () => ({
-            label: 'EMPTY',
-            tone: 'muted' as Tone,
-            text: 'no event yet',
-          })),
-        ];
-      })();
+    : [];
 
   return (
     <Box
@@ -483,6 +462,18 @@ export class InkLiveRunRenderer {
 
   setLoopPhase(phase: LoopPhase): void {
     this.stateStore.setLoopPhase(phase);
+    this.state = this.stateStore.getSnapshot();
+    this.emit();
+  }
+
+  setAgentReviewPhase(agentId: number, phase: AgentReviewPhase): void {
+    this.stateStore.setAgentReviewPhase(agentId, phase);
+    this.state = this.stateStore.getSnapshot();
+    this.emit();
+  }
+
+  clearAgentReviewPhase(agentId: number): void {
+    this.stateStore.clearAgentReviewPhase(agentId);
     this.state = this.stateStore.getSnapshot();
     this.emit();
   }

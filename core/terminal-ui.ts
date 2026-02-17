@@ -1,4 +1,4 @@
-import type { LiveRunState } from './live-run-state';
+import type { AgentReviewPhase, LiveRunState } from './live-run-state';
 import {
   type IterationSummary,
   LIVE_SPINNER_FRAMES,
@@ -328,6 +328,22 @@ export class LiveRunRenderer {
     this.render();
   }
 
+  setAgentReviewPhase(agentId: number, phase: AgentReviewPhase): void {
+    this.stateStore.setAgentReviewPhase(agentId, phase);
+    if (!this.enabled || !this.stateStore.isRunning()) {
+      return;
+    }
+    this.render();
+  }
+
+  clearAgentReviewPhase(agentId: number): void {
+    this.stateStore.clearAgentReviewPhase(agentId);
+    if (!this.enabled || !this.stateStore.isRunning()) {
+      return;
+    }
+    this.render();
+  }
+
   stop(message: string, tone: Tone = 'success'): void {
     if (this.timer) {
       clearInterval(this.timer);
@@ -371,16 +387,8 @@ export class LiveRunRenderer {
       const statusTone = selector.statusTone;
       const statusLabel = selector.statusLabel;
       const statusText = selector.statusText;
-      const detailText = selector.detailText;
-      const emptyLines = Array.from({ length: state.previewLines }, (_, rowIndex) => {
-        if (rowIndex === 0) {
-          return `  ${badge('STATE', statusTone)} ${colorize(formatShort(detailText, Math.max(36, terminalWidth() - 40)), ANSI.dim)}`;
-        }
-        return `  ${badge('EMPTY', 'muted')} ${colorize('no event yet', ANSI.dim)}`;
-      });
       return [
         `${prefix} ${titleText} ${badge(statusLabel, statusTone)} ${colorize(statusText, ANSI.dim)}`,
-        ...emptyLines,
       ];
     }
 
@@ -394,9 +402,6 @@ export class LiveRunRenderer {
       const text = colorize(formatShort(line.text, maxLength), toneColor(line.tone));
       return `  ${lineLabel} ${text}`;
     });
-    while (detailLines.length < state.previewLines) {
-      detailLines.unshift(`  ${badge('EMPTY', 'muted')} ${colorize('no event yet', ANSI.dim)}`);
-    }
     return [header, ...detailLines];
   }
 

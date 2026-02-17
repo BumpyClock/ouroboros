@@ -4,7 +4,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import * as path from 'node:path';
 import type { ProviderAdapter } from '../providers/types';
 import { extractReferencedBeadIds } from './beads';
-import type { IterationSummary, LoopPhase, RunContext } from './live-run-state';
+import type { AgentReviewPhase, IterationSummary, LoopPhase, RunContext } from './live-run-state';
 import { buildRuns, summarizeArgsForLog } from './loop-runs';
 import { runAgentProcess } from './process-runner';
 import {
@@ -50,6 +50,8 @@ export type IterationLiveRenderer = {
   setAgentPickedBead(agentId: number, issue: BeadIssue): void;
   setAgentQueued(agentId: number, message: string): void;
   setAgentLaunching(agentId: number, message: string): void;
+  setAgentReviewPhase(agentId: number, phase: AgentReviewPhase): void;
+  clearAgentReviewPhase(agentId: number): void;
   stop(message: string, tone?: Tone): void;
 };
 
@@ -112,6 +114,7 @@ type SlotReviewInput = {
   logDir: string;
   activeChildren: Set<ChildProcess>;
   liveRendererEnabled: boolean;
+  liveRenderer: IterationLiveRenderer | null;
 };
 
 async function runSlotReviewLoop(input: SlotReviewInput): Promise<SlotReviewOutcome> {
@@ -127,6 +130,7 @@ async function runSlotReviewLoop(input: SlotReviewInput): Promise<SlotReviewOutc
     logDir,
     activeChildren,
     liveRendererEnabled,
+    liveRenderer,
   } = input;
 
   const maxFix = options.reviewMaxFixAttempts;
@@ -134,127 +138,155 @@ async function runSlotReviewLoop(input: SlotReviewInput): Promise<SlotReviewOutc
   let lastImplementLogPath = implementResult.jsonlLogPath;
   let previousFollowUp: string | undefined;
 
-  for (let fixAttempt = 0; fixAttempt <= maxFix; fixAttempt += 1) {
-    const phase = fixAttempt === 0 ? 'review' : `re-review (fix ${fixAttempt})`;
-    const reviewLogBase = `${buildRunFileBase(iteration)}-agent-${String(agentId).padStart(2, '0')}-review-${fixAttempt}`;
-    const reviewLogPath = path.join(logDir, `${reviewLogBase}.jsonl`);
-    const reviewLastMessagePath = path.join(logDir, `${reviewLogBase}.last-message.txt`);
+  const clearReviewPhase = () => {
+    liveRenderer?.clearAgentReviewPhase(agentId);
+  };
 
-    if (!liveRendererEnabled) {
-      console.log(`${badge(`A${agentId}`, 'muted')} ${phase} for bead ${pickedBead.id}`);
-    }
+  try {
+    for (let fixAttempt = 0; fixAttempt <= maxFix; fixAttempt += 1) {
+      const phase = fixAttempt === 0 ? 'review' : `re-review (fix ${fixAttempt})`;
+      const reviewLogBase = `${buildRunFileBase(iteration)}-agent-${String(agentId).padStart(2, '0')}-review-${fixAttempt}`;
+      const reviewLogPath = path.join(logDir, `${reviewLogBase}.jsonl`);
+      const reviewLastMessagePath = path.join(logDir, `${reviewLogBase}.last-message.txt`);
 
-    const gitDiff = captureGitDiff();
-    const reviewerContext = buildReviewerContext({
-      bead: pickedBead,
-      implementerOutput: lastImplementOutput.slice(0, 50_000),
-      implementerLogPath: lastImplementLogPath,
-      gitDiff,
-      parallelAgents: options.parallelAgents,
-      fixAttempt: fixAttempt > 0 ? fixAttempt : undefined,
-      previousFollowUp,
-    });
+      // Signal reviewing phase to live renderer
+      liveRenderer?.setAgentReviewPhase(agentId, {
+        phase: 'reviewing',
+        fixAttempt,
+        beadId: pickedBead.id,
+      });
+      liveRenderer?.setAgentLogPath(agentId, reviewLogPath);
 
-    const fullReviewerPrompt = `${reviewerPrompt}\n\n${reviewerContext}`;
-    const reviewArgs = provider.buildExecArgs(fullReviewerPrompt, reviewLastMessagePath, options);
+      if (!liveRendererEnabled) {
+        console.log(`${badge(`A${agentId}`, 'muted')} ${phase} for bead ${pickedBead.id}`);
+      }
 
-    let trackedChild: ChildProcess | null = null;
-    const reviewResult = await runAgentProcess({
-      prompt: fullReviewerPrompt,
-      command,
-      args: reviewArgs,
-      logPath: reviewLogPath,
-      showRaw: false,
-      formatCommandHint: provider.formatCommandHint,
-      onChildChange: (child) => {
-        if (child) {
-          trackedChild = child;
-          activeChildren.add(child);
-        } else if (trackedChild) {
-          activeChildren.delete(trackedChild);
-          trackedChild = null;
+      const gitDiff = captureGitDiff();
+      const reviewerContext = buildReviewerContext({
+        bead: pickedBead,
+        implementerOutput: lastImplementOutput.slice(0, 50_000),
+        implementerLogPath: lastImplementLogPath,
+        gitDiff,
+        parallelAgents: options.parallelAgents,
+        fixAttempt: fixAttempt > 0 ? fixAttempt : undefined,
+        previousFollowUp,
+      });
+
+      const fullReviewerPrompt = `${reviewerPrompt}\n\n${reviewerContext}`;
+      const reviewArgs = provider.buildExecArgs(fullReviewerPrompt, reviewLastMessagePath, options);
+
+      let trackedChild: ChildProcess | null = null;
+      const reviewResult = await runAgentProcess({
+        prompt: fullReviewerPrompt,
+        command,
+        args: reviewArgs,
+        logPath: reviewLogPath,
+        showRaw: false,
+        formatCommandHint: provider.formatCommandHint,
+        onChildChange: (child) => {
+          if (child) {
+            trackedChild = child;
+            activeChildren.add(child);
+          } else if (trackedChild) {
+            activeChildren.delete(trackedChild);
+            trackedChild = null;
+          }
+        },
+      });
+
+      const reviewOutput = `${reviewResult.stdout}\n${reviewResult.stderr}`.trim();
+      const verdict = parseReviewerVerdict(reviewOutput);
+
+      if (!isReviewResult(verdict)) {
+        if (!liveRendererEnabled) {
+          console.log(
+            `${badge(`A${agentId}`, 'error')} reviewer output parse failed: ${verdict.reason}`,
+          );
         }
-      },
-    });
+        clearReviewPhase();
+        return {
+          passed: false,
+          fixAttempts: fixAttempt,
+          failureReason: `reviewer contract violation: ${verdict.reason}`,
+        };
+      }
 
-    const reviewOutput = `${reviewResult.stdout}\n${reviewResult.stderr}`.trim();
-    const verdict = parseReviewerVerdict(reviewOutput);
-
-    if (!isReviewResult(verdict)) {
       if (!liveRendererEnabled) {
         console.log(
-          `${badge(`A${agentId}`, 'error')} reviewer output parse failed: ${verdict.reason}`,
+          `${badge(`A${agentId}`, verdict.verdict === 'pass' ? 'success' : 'warn')} reviewer verdict: ${verdict.verdict}`,
         );
       }
-      return {
-        passed: false,
-        fixAttempts: fixAttempt,
-        failureReason: `reviewer contract violation: ${verdict.reason}`,
-      };
+
+      if (verdict.verdict === 'pass') {
+        clearReviewPhase();
+        return { passed: true, fixAttempts: fixAttempt, lastVerdict: verdict };
+      }
+
+      // Drift detected — run fix agent if attempts remain
+      if (fixAttempt >= maxFix) {
+        clearReviewPhase();
+        return {
+          passed: false,
+          fixAttempts: fixAttempt,
+          lastVerdict: verdict,
+          failureReason: `drift unresolved after ${maxFix} fix attempt(s)`,
+        };
+      }
+
+      const fixLogBase = `${buildRunFileBase(iteration)}-agent-${String(agentId).padStart(2, '0')}-fix-${fixAttempt + 1}`;
+      const fixLogPath = path.join(logDir, `${fixLogBase}.jsonl`);
+      const fixLastMessagePath = path.join(logDir, `${fixLogBase}.last-message.txt`);
+
+      // Signal fixing phase to live renderer
+      liveRenderer?.setAgentReviewPhase(agentId, {
+        phase: 'fixing',
+        fixAttempt: fixAttempt + 1,
+        beadId: pickedBead.id,
+      });
+      liveRenderer?.setAgentLogPath(agentId, fixLogPath);
+
+      if (!liveRendererEnabled) {
+        console.log(
+          `${badge(`A${agentId}`, 'info')} fix attempt ${fixAttempt + 1}/${maxFix} for bead ${pickedBead.id}`,
+        );
+      }
+
+      const fixPrompt = `The reviewer found drift in your implementation of bead ${pickedBead.id}: ${pickedBead.title}\n\nReviewer feedback:\n${verdict.followUpPrompt}\n\nPlease fix the issues described above.`;
+      const fixArgs = provider.buildExecArgs(fixPrompt, fixLastMessagePath, options);
+
+      let fixTrackedChild: ChildProcess | null = null;
+      const fixResult = await runAgentProcess({
+        prompt: fixPrompt,
+        command,
+        args: fixArgs,
+        logPath: fixLogPath,
+        showRaw: false,
+        formatCommandHint: provider.formatCommandHint,
+        onChildChange: (child) => {
+          if (child) {
+            fixTrackedChild = child;
+            activeChildren.add(child);
+          } else if (fixTrackedChild) {
+            activeChildren.delete(fixTrackedChild);
+            fixTrackedChild = null;
+          }
+        },
+      });
+
+      lastImplementOutput = `${fixResult.stdout}\n${fixResult.stderr}`;
+      lastImplementLogPath = fixLogPath;
+      previousFollowUp = verdict.followUpPrompt;
     }
 
-    if (!liveRendererEnabled) {
-      console.log(
-        `${badge(`A${agentId}`, verdict.verdict === 'pass' ? 'success' : 'warn')} reviewer verdict: ${verdict.verdict}`,
-      );
-    }
-
-    if (verdict.verdict === 'pass') {
-      return { passed: true, fixAttempts: fixAttempt, lastVerdict: verdict };
-    }
-
-    // Drift detected — run fix agent if attempts remain
-    if (fixAttempt >= maxFix) {
-      return {
-        passed: false,
-        fixAttempts: fixAttempt,
-        lastVerdict: verdict,
-        failureReason: `drift unresolved after ${maxFix} fix attempt(s)`,
-      };
-    }
-
-    const fixLogBase = `${buildRunFileBase(iteration)}-agent-${String(agentId).padStart(2, '0')}-fix-${fixAttempt + 1}`;
-    const fixLogPath = path.join(logDir, `${fixLogBase}.jsonl`);
-    const fixLastMessagePath = path.join(logDir, `${fixLogBase}.last-message.txt`);
-
-    if (!liveRendererEnabled) {
-      console.log(
-        `${badge(`A${agentId}`, 'info')} fix attempt ${fixAttempt + 1}/${maxFix} for bead ${pickedBead.id}`,
-      );
-    }
-
-    const fixPrompt = `The reviewer found drift in your implementation of bead ${pickedBead.id}: ${pickedBead.title}\n\nReviewer feedback:\n${verdict.followUpPrompt}\n\nPlease fix the issues described above.`;
-    const fixArgs = provider.buildExecArgs(fixPrompt, fixLastMessagePath, options);
-
-    let fixTrackedChild: ChildProcess | null = null;
-    const fixResult = await runAgentProcess({
-      prompt: fixPrompt,
-      command,
-      args: fixArgs,
-      logPath: fixLogPath,
-      showRaw: false,
-      formatCommandHint: provider.formatCommandHint,
-      onChildChange: (child) => {
-        if (child) {
-          fixTrackedChild = child;
-          activeChildren.add(child);
-        } else if (fixTrackedChild) {
-          activeChildren.delete(fixTrackedChild);
-          fixTrackedChild = null;
-        }
-      },
-    });
-
-    lastImplementOutput = `${fixResult.stdout}\n${fixResult.stderr}`;
-    lastImplementLogPath = fixLogPath;
-    previousFollowUp = verdict.followUpPrompt;
+    clearReviewPhase();
+    return {
+      passed: false,
+      fixAttempts: maxFix,
+      failureReason: `drift unresolved after ${maxFix} fix attempt(s)`,
+    };
+  } finally {
+    clearReviewPhase();
   }
-
-  return {
-    passed: false,
-    fixAttempts: maxFix,
-    failureReason: `drift unresolved after ${maxFix} fix attempt(s)`,
-  };
 }
 
 export async function runIteration(
@@ -527,6 +559,7 @@ export async function runIteration(
             logDir,
             activeChildren,
             liveRendererEnabled,
+            liveRenderer,
           });
           reviewOutcomes.set(run.agentId, outcome);
         }

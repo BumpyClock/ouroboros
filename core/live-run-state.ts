@@ -13,6 +13,8 @@ export type LoopPhase =
   | 'starting'
   | 'streaming'
   | 'collecting'
+  | 'reviewing'
+  | 'fixing'
   | 'paused'
   | 'retry_wait'
   | 'completed'
@@ -44,6 +46,12 @@ export type AgentSpawnState = {
   message: string;
 };
 
+export type AgentReviewPhase = {
+  phase: 'reviewing' | 'fixing';
+  fixAttempt: number;
+  beadId: string;
+};
+
 export type LiveRunState = {
   startedAt: number;
   frameIndex: number;
@@ -56,6 +64,7 @@ export type LiveRunState = {
   agentIds: number[];
   agentState: Map<number, LiveAgentSnapshot>;
   agentSpawnState: Map<number, AgentSpawnState>;
+  agentReviewPhase: Map<number, AgentReviewPhase>;
   beadsSnapshot: BeadsSnapshot | null;
   agentPickedBeads: Map<number, BeadIssue>;
   runContext: RunContext | null;
@@ -92,6 +101,7 @@ export type LiveRunAgentSelector = {
   ageSeconds: number;
   totalEvents: number;
   phase: RenderPhase;
+  reviewPhase: AgentReviewPhase | null;
 };
 
 export function labelTone(label: string): Tone {
@@ -122,6 +132,7 @@ function createInitialState(
     agentIds: [...agentIds].sort((left, right) => left - right),
     agentState: new Map<number, LiveAgentSnapshot>(),
     agentSpawnState: new Map<number, AgentSpawnState>(),
+    agentReviewPhase: new Map<number, AgentReviewPhase>(),
     beadsSnapshot: null,
     agentPickedBeads: new Map<number, BeadIssue>(),
     runContext: null,
@@ -194,6 +205,7 @@ export class LiveRunStateStore {
     const snapshot = this.state.agentState.get(agentId);
     const pickedBead = this.state.agentPickedBeads.get(agentId) ?? null;
     const spawn = this.state.agentSpawnState.get(agentId);
+    const review = this.state.agentReviewPhase.get(agentId) ?? null;
 
     if (!snapshot) {
       if (spawn?.phase === 'launching') {
@@ -207,6 +219,7 @@ export class LiveRunStateStore {
           ageSeconds: 0,
           totalEvents: 0,
           phase: 'launching',
+          reviewPhase: review,
         };
       }
       if (spawn?.phase === 'queued') {
@@ -220,6 +233,7 @@ export class LiveRunStateStore {
           ageSeconds: 0,
           totalEvents: 0,
           phase: 'queued',
+          reviewPhase: review,
         };
       }
       return {
@@ -232,10 +246,31 @@ export class LiveRunStateStore {
         ageSeconds: 0,
         totalEvents: 0,
         phase: 'waiting',
+        reviewPhase: review,
       };
     }
 
     const ageSeconds = Math.max(0, Math.floor((now - snapshot.lastUpdatedAt) / 1000));
+
+    // Override status label/tone when in review/fix phase
+    if (review) {
+      const isFixing = review.phase === 'fixing';
+      return {
+        pickedBead,
+        statusLabel: isFixing ? 'FIX' : 'REVIEW',
+        statusTone: isFixing ? 'warn' : 'info',
+        statusText: isFixing
+          ? `fix attempt ${review.fixAttempt} for ${review.beadId}`
+          : `reviewing ${review.beadId}`,
+        detailText: `updated ${ageSeconds}s ago`,
+        lastUpdatedAt: snapshot.lastUpdatedAt,
+        ageSeconds,
+        totalEvents: snapshot.totalEvents,
+        phase: 'waiting',
+        reviewPhase: review,
+      };
+    }
+
     return {
       pickedBead,
       statusLabel: 'EVENTS',
@@ -246,6 +281,7 @@ export class LiveRunStateStore {
       ageSeconds,
       totalEvents: snapshot.totalEvents,
       phase: 'waiting',
+      reviewPhase: null,
     };
   }
 
@@ -396,6 +432,20 @@ export class LiveRunStateStore {
       ...this.state,
       retrySeconds: seconds,
     };
+    this.emit();
+  }
+
+  setAgentReviewPhase(agentId: number, phase: AgentReviewPhase): void {
+    const next = new Map(this.state.agentReviewPhase);
+    next.set(agentId, phase);
+    this.state = { ...this.state, agentReviewPhase: next };
+    this.emit();
+  }
+
+  clearAgentReviewPhase(agentId: number): void {
+    const next = new Map(this.state.agentReviewPhase);
+    next.delete(agentId);
+    this.state = { ...this.state, agentReviewPhase: next };
     this.emit();
   }
 

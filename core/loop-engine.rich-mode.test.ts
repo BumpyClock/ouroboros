@@ -207,6 +207,14 @@ mock.module('../tui/tui', () => ({
       return;
     }
 
+    setAgentReviewPhase(): void {
+      return;
+    }
+
+    clearAgentReviewPhase(): void {
+      return;
+    }
+
     stop(message: string, tone = 'success' as Tone): void {
       rendererCalls.stopped = true;
       rendererCalls.stop.push({ message, tone });
