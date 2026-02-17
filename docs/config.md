@@ -60,8 +60,31 @@ Supported keys:
 - `yolo`
 - `logDir`
 - `showRaw`
+- `reviewEnabled` (boolean, default `false`)
+- `reviewMaxFixAttempts` (positive integer, default `5`)
+- `developerPromptPath` (optional string)
+- `reviewerPromptPath` (optional string)
 
 Values are normalized into runtime types. Invalid keys are ignored.
+
+## Review loop
+
+When `reviewEnabled = true` (or `--review`), each agent slot runs an optional review/fix cycle after implementation:
+
+1. Implementation runs as normal.
+2. A reviewer agent evaluates the output (using `reviewerPromptPath` if set).
+3. If the reviewer reports drift, a fix agent runs with the reviewer's follow-up prompt.
+4. Steps 2–3 repeat up to `reviewMaxFixAttempts` (default `5`) times.
+5. Unresolved drift after max attempts fails the iteration.
+
+The reviewer is prompt-only and cannot edit code. Review/fix execution uses the same provider/model/command/yolo/reasoning settings as the developer.
+
+Optional prompt paths:
+
+- `developerPromptPath`: overrides the default prompt for developer/fix agents.
+- `reviewerPromptPath`: prompt file for the reviewer agent.
+
+Both are optional; when unset, the system uses default prompt resolution (see bead `ouroboros-7.2`).
 
 ## `yolo` semantics by provider
 

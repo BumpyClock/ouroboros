@@ -112,6 +112,10 @@ function normalizeConfigRecord(input: Record<string, unknown>): PartialOptions {
     yolo: toBoolean(input.yolo),
     logDir: parseString(input.logDir),
     showRaw: toBoolean(input.showRaw),
+    reviewEnabled: toBoolean(input.reviewEnabled),
+    reviewMaxFixAttempts: toPositiveInt(input.reviewMaxFixAttempts),
+    developerPromptPath: parseString(input.developerPromptPath),
+    reviewerPromptPath: parseString(input.reviewerPromptPath),
   };
 }
 

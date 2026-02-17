@@ -17,6 +17,10 @@ type CliOverrides = {
   yolo?: boolean;
   logDir?: string;
   showRaw?: boolean;
+  reviewEnabled?: boolean;
+  reviewMaxFixAttempts?: number;
+  developerPromptPath?: string;
+  reviewerPromptPath?: string;
 };
 
 function parsePositiveInt(value: string | undefined, fallback: number): number {
@@ -76,6 +80,19 @@ function parseCliOverrides(argv: string[]): CliOverrides {
       i += 1;
     } else if (arg === '--show-raw') {
       overrides.showRaw = true;
+    } else if (arg === '--review') {
+      overrides.reviewEnabled = true;
+    } else if (arg === '--no-review') {
+      overrides.reviewEnabled = false;
+    } else if (arg === '--review-max-fix-attempts') {
+      overrides.reviewMaxFixAttempts = parsePositiveInt(argv[i + 1], 5);
+      i += 1;
+    } else if (arg === '--developer-prompt') {
+      overrides.developerPromptPath = argv[i + 1];
+      i += 1;
+    } else if (arg === '--reviewer-prompt') {
+      overrides.reviewerPromptPath = argv[i + 1];
+      i += 1;
     }
   }
 
@@ -104,6 +121,13 @@ Provider-specific:
       --reasoning-effort   low|medium|high (codex only)
       --yolo               Enable high-autonomy mode for selected provider
       --no-yolo            Disable high-autonomy mode
+
+Review loop:
+      --review                   Enable slot-local review/fix loop (default: off)
+      --no-review                Disable review loop
+      --review-max-fix-attempts <n>  Max fix attempts per review cycle. default: 5
+      --developer-prompt <path>  Developer prompt file path (optional)
+      --reviewer-prompt <path>   Reviewer prompt file path (optional)
 
 Config:
   - Global config: ~/.ouroboros/config.toml
@@ -168,5 +192,13 @@ export function parseArgs(argv = process.argv.slice(2)): CliOptions {
       provider.defaults.logDir,
     ) as string,
     showRaw: pick(cli.showRaw, config.runtimeConfig.showRaw, false) as boolean,
+    reviewEnabled: pick(cli.reviewEnabled, config.runtimeConfig.reviewEnabled, false) as boolean,
+    reviewMaxFixAttempts: pick(
+      cli.reviewMaxFixAttempts,
+      config.runtimeConfig.reviewMaxFixAttempts,
+      5,
+    ) as number,
+    developerPromptPath: pick(cli.developerPromptPath, config.runtimeConfig.developerPromptPath),
+    reviewerPromptPath: pick(cli.reviewerPromptPath, config.runtimeConfig.reviewerPromptPath),
   };
 }

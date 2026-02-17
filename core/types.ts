@@ -16,6 +16,10 @@ export type CliOptions = {
   yolo: boolean;
   logDir: string;
   showRaw: boolean;
+  reviewEnabled: boolean;
+  reviewMaxFixAttempts: number;
+  developerPromptPath?: string;
+  reviewerPromptPath?: string;
 };
 
 export type IterationState = {
