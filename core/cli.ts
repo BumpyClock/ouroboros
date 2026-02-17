@@ -1,12 +1,15 @@
 import { getProviderAdapter, listProviderNames } from '../providers/registry';
 import { loadOuroborosConfig } from './config';
 import { defaultLogDir } from './paths';
+import { listThemeNames, resolveTheme } from './theme';
 import type { CliOptions, ReasoningEffort } from './types';
 
 type CliOverrides = {
   provider?: string;
   reviewerProvider?: string;
   reviewerCommand?: string;
+  beadMode?: 'auto' | 'top-level';
+  topLevelBeadId?: string;
   iterationLimit?: number;
   iterationsSet: boolean;
   previewLines?: number;
@@ -21,11 +24,14 @@ type CliOverrides = {
   showRaw?: boolean;
   reviewEnabled?: boolean;
   reviewMaxFixAttempts?: number;
+  theme?: string;
   developerPromptPath?: string;
   reviewerPromptPath?: string;
   initPrompts?: boolean;
   forceInitPrompts?: boolean;
 };
+
+const beadModeValues = new Set(['auto', 'top-level']);
 
 function parsePositiveInt(value: string | undefined, fallback: number): number {
   const parsed = Number.parseInt(value ?? '', 10);
@@ -35,6 +41,19 @@ function parsePositiveInt(value: string | undefined, fallback: number): number {
 function parseNonNegativeInt(value: string | undefined, fallback: number): number {
   const parsed = Number.parseInt(value ?? '', 10);
   return Number.isNaN(parsed) || parsed < 0 ? fallback : parsed;
+}
+
+function parseBeadMode(value: string | undefined): 'auto' | 'top-level' {
+  const normalized = value?.trim().toLowerCase();
+  if (!normalized || !beadModeValues.has(normalized)) {
+    throw new Error('Unsupported bead mode. Expected "auto" or "top-level".');
+  }
+  return normalized;
+}
+
+function parseTopLevelBeadId(value: string | undefined): string | undefined {
+  const trimmed = (value ?? '').trim();
+  return trimmed === '' ? undefined : trimmed;
 }
 
 function parseCliOverrides(argv: string[]): CliOverrides {
@@ -52,6 +71,12 @@ function parseCliOverrides(argv: string[]): CliOverrides {
       i += 1;
     } else if (arg === '--reviewer-command') {
       overrides.reviewerCommand = argv[i + 1];
+      i += 1;
+    } else if (arg === '--bead-mode') {
+      overrides.beadMode = parseBeadMode(argv[i + 1]);
+      i += 1;
+    } else if (arg === '--top-level-bead') {
+      overrides.topLevelBeadId = parseTopLevelBeadId(argv[i + 1]);
       i += 1;
     } else if (arg === '--prompt' || arg === '-p') {
       overrides.developerPromptPath = argv[i + 1];
@@ -91,6 +116,9 @@ function parseCliOverrides(argv: string[]): CliOverrides {
     } else if (arg === '--log-dir') {
       overrides.logDir = argv[i + 1];
       i += 1;
+    } else if (arg === '--theme') {
+      overrides.theme = argv[i + 1];
+      i += 1;
     } else if (arg === '--show-raw') {
       overrides.showRaw = true;
     } else if (arg === '--review') {
@@ -118,11 +146,14 @@ function parseCliOverrides(argv: string[]): CliOverrides {
 
 export function printUsage(): void {
   const providers = listProviderNames().join(', ');
+  const themes = listThemeNames().join(', ');
   console.log(`Usage:
   ouroboros [options]
 
 Options:
   --provider <name>        Agent provider. default: codex (supported: ${providers})
+      --bead-mode <auto|top-level>  Bead selection mode. default: auto
+      --top-level-bead <id>  Target bead id when --bead-mode top-level is active
   -p, --prompt <path>      Developer prompt file path (fallback: .ai_agents/prompts/developer.md, .ai_agents/prompt.md, docs/prompts/developer.default.md)
   -n, --iterations <n>     Max loops. default: 50
   -l, --preview <n>        Number of recent messages shown. default: 3
@@ -130,6 +161,7 @@ Options:
       --pause-ms <ms>      Pause between loops in milliseconds. default: 0
   -c, --command <cmd>      Base command to run. default: provider-specific
       --log-dir <path>     Directory for per-iteration logs. default: ~/.ouroborus/logs/<project_dir>/<date-time>
+      --theme <name|path>  Theme for TUI output (supported: ${themes})
       --show-raw           Stream raw provider output to terminal (default: off)
   -h, --help               Show this help message
 
@@ -183,6 +215,8 @@ export function parseArgs(argv = process.argv.slice(2)): CliOptions {
     config.runtimeConfig.iterationLimit,
     50,
   ) as number;
+  const theme = pick(cli.theme, config.runtimeConfig.theme, 'default') as string;
+  resolveTheme(theme);
   const model = pick(cli.model, config.runtimeConfig.model, provider.defaults.model) as string;
   const reviewerProviderName = pick(
     cli.reviewerProvider,
@@ -196,6 +230,11 @@ export function parseArgs(argv = process.argv.slice(2)): CliOptions {
     reviewerProvider.name === provider.name ? model : reviewerProvider.defaults.model,
   ) as string;
   const reviewerCommand = pick(cli.reviewerCommand, config.runtimeConfig.reviewerCommand);
+  const beadMode = parseBeadMode(pick(cli.beadMode, config.runtimeConfig.beadMode, 'auto'));
+  const topLevelBeadId = parseTopLevelBeadId(pick(cli.topLevelBeadId, config.runtimeConfig.topLevelBeadId));
+  if (beadMode === 'top-level' && !topLevelBeadId) {
+    throw new Error('Top-level mode requires --top-level-bead');
+  }
   const iterationsSet = cli.iterationsSet || config.runtimeConfig.iterationLimit !== undefined;
 
   return {
@@ -231,6 +270,9 @@ export function parseArgs(argv = process.argv.slice(2)): CliOptions {
       config.runtimeConfig.reviewMaxFixAttempts,
       5,
     ) as number,
+    beadMode,
+    topLevelBeadId,
+    theme,
     developerPromptPath: pick(
       cli.developerPromptPath,
       config.runtimeConfig.developerPromptPath,

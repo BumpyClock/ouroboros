@@ -67,8 +67,41 @@ Supported keys:
 - `reviewMaxFixAttempts` (positive integer, default `5`)
 - `developerPromptPath` (optional string)
 - `reviewerPromptPath` (optional string)
+- `theme` (string; builtin name or file path)
+- `beadMode` (`auto` | `top-level`; default: `auto`)
+- `topLevelBeadId` (string; required when `beadMode = "top-level"`)
 
 Values are normalized into runtime types. Invalid keys are ignored.
+
+`theme` behavior:
+
+- Builtin values use names from `listThemeNames` (currently `default`, `matrix`).
+- A theme file is resolved from the current working directory when `theme` is not a builtin name.
+- Theme file format is JSON with optional `ansi` and `ink` theme maps.
+- A file can set any of:
+  - `name`
+  - `ansi` with `reset`, `bold`, `dim`, `border`, `title`, `panel`, `tone` (or `tones`)
+  - `ink` with `border`, `title`, `panel`, `tone` (or `tones`)
+
+`beadMode` behavior:
+
+- `auto` (default): existing default bead selection behavior.
+- `top-level`: Ouroboros targets the configured bead id only. Use `topLevelBeadId` to pin execution.
+
+`top-level` mode requires both:
+
+- `beadMode = "top-level"`
+- a concrete `topLevelBeadId` value
+
+Examples:
+
+```toml
+theme = "matrix"
+theme = "./.ouroboros/theme.matrix.json"
+
+beadMode = "top-level"
+topLevelBeadId = "ouroboros-13.1"
+```
 
 ## Review loop
 

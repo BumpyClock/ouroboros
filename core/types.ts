@@ -1,5 +1,7 @@
 export type ReasoningEffort = 'low' | 'medium' | 'high';
 
+export type BeadMode = 'auto' | 'top-level';
+
 export type CliOptions = {
   projectRoot: string;
   projectKey: string;
@@ -20,6 +22,9 @@ export type CliOptions = {
   showRaw: boolean;
   reviewEnabled: boolean;
   reviewMaxFixAttempts: number;
+  theme?: string;
+  beadMode?: BeadMode;
+  topLevelBeadId?: string;
   developerPromptPath?: string;
   reviewerPromptPath?: string;
   initPrompts?: boolean;

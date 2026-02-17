@@ -36,3 +36,25 @@
 - Removed duplicate bead entries, malformed control characters, and inconsistent bullet/date formatting.
 - Kept only consolidated outcomes for compaction-friendly session memory.
 
+### `ouroboros-13.5` implementation notes
+- Added `dashboardVisible` and `d` toggle to interaction state; dashboard overlay renders runtime status and retry/failure queue without interrupting stream updates.
+- Added transient toast stack in Ink renderer from loop notices (`setLoopNotice`) with tone-based TTL and repeat guards.
+- Added help text update for new keybinding and a focused interaction-state test for dashboard toggle behavior.
+- No test suite run this iteration.
+
+### `ouroboros-13.6` (in progress)
+- Plan: centralize theme selection in `core/theme.ts`, wire builtin + custom theme validation to CLI config and runtime, replace remaining hardcoded Ink colors with theme tone colors, and update docs/tests.
+
+### `ouroboros-13.6` (done)
+- Added runtime theme wiring by resolving/applying `CliOptions.theme` at loop startup via `runLoop` -> `resolveTheme` + `setTheme`.
+- Replaced remaining Ink hardcoded border colors in `tui/tui.tsx` with tone-driven ink colors, keeping `toneToColor` source of truth.
+- Added theme-specific unit tests (`tests/core/theme.test.ts`) plus parser/config coverage for theme merge and failure behavior in `tests/core/cli.test.ts` and `tests/core/config.test.ts`.
+- Documented theme behavior/keys in `docs/config.md`.
+- Note: full test suite was not run.
+
+### `ouroboros-13.9` (done)
+- Added `beadMode` and `topLevelBeadId` to `CliOptions` and config normalization (`core/types.ts`, `core/config.ts`).
+- Added CLI parsing/validation for `--bead-mode` and `--top-level-bead` with fail-fast checks (`core/cli.ts`).
+- Extended tests for precedence and validation (`tests/core/cli.test.ts`) and config merge behavior (`tests/core/config.test.ts`).
+- Updated config docs with bead mode keys, examples, and `top-level` requirement (`docs/config.md`).
+- Not run: `bun run doctor` and test suite; done as scoped to bead contract.

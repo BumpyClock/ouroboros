@@ -151,4 +151,89 @@ describe('parseArgs reviewer provider/model resolution', () => {
       }),
     ).toThrow(/Unsupported provider "not-a-provider"/);
   });
+
+  it('uses CLI theme override with config and default', () => {
+    const withConfig = parseWithConfig(['--theme', 'matrix'], {
+      provider: 'codex',
+      model: 'gpt-5-primary',
+      theme: 'default',
+    });
+
+    expect(withConfig.theme).toBe('matrix');
+
+    const fromConfig = parseWithConfig([], {
+      provider: 'codex',
+      model: 'gpt-5-primary',
+      theme: 'matrix',
+    });
+
+    expect(fromConfig.theme).toBe('matrix');
+  });
+
+  it('throws for unknown theme values', () => {
+    expect(() =>
+      parseWithConfig(['--theme', 'does-not-exist'], { provider: 'codex', model: 'gpt-5-primary' }),
+    ).toThrow(/Unknown theme "does-not-exist"\./);
+  });
+
+  it('supports bead mode from config and CLI override', () => {
+    const fromConfig = parseWithConfig([], {
+      provider: 'codex',
+      model: 'gpt-5-primary',
+      beadMode: 'top-level',
+      topLevelBeadId: 'ouroboros-10',
+    });
+
+    expect(fromConfig.beadMode).toBe('top-level');
+    expect(fromConfig.topLevelBeadId).toBe('ouroboros-10');
+
+    const fromCli = parseWithConfig(['--bead-mode', 'auto'], {
+      provider: 'codex',
+      model: 'gpt-5-primary',
+      beadMode: 'top-level',
+      topLevelBeadId: 'ouroboros-10',
+    });
+
+    expect(fromCli.beadMode).toBe('auto');
+  });
+
+  it('defaults to auto when bead mode is unset', () => {
+    const options = parseWithConfig([
+      '--review',
+    ], {
+      provider: 'codex',
+      model: 'gpt-5-primary',
+    });
+
+    expect(options.beadMode).toBe('auto');
+    expect(options.topLevelBeadId).toBe(undefined);
+  });
+
+  it('throws when top-level mode is used without a top-level bead id', () => {
+    expect(() =>
+      parseWithConfig(
+        ['--bead-mode', 'top-level'],
+        { provider: 'codex', model: 'gpt-5-primary' },
+      ),
+    ).toThrow(/Top-level mode requires --top-level-bead/);
+  });
+
+  it('throws when config contains an invalid bead mode', () => {
+    expect(() =>
+      parseWithConfig(
+        [],
+        { provider: 'codex', model: 'gpt-5-primary', beadMode: 'invalid-mode' },
+      ),
+    ).toThrow(/Unsupported bead mode/);
+  });
+
+  it('accepts top-level mode when CLI provides top-level bead id', () => {
+    const options = parseWithConfig(
+      ['--bead-mode', 'top-level', '--top-level-bead', 'ouroboros-12'],
+      { provider: 'codex', model: 'gpt-5-primary' },
+    );
+
+    expect(options.beadMode).toBe('top-level');
+    expect(options.topLevelBeadId).toBe('ouroboros-12');
+  });
 });

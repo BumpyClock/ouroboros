@@ -119,6 +119,9 @@ function normalizeConfigRecord(input: Record<string, unknown>): PartialOptions {
     showRaw: toBoolean(input.showRaw),
     reviewEnabled: toBoolean(input.reviewEnabled),
     reviewMaxFixAttempts: toPositiveInt(input.reviewMaxFixAttempts),
+    theme: parseString(input.theme),
+    beadMode: parseString(input.beadMode),
+    topLevelBeadId: parseString(input.topLevelBeadId),
     developerPromptPath: parseString(input.developerPromptPath),
     reviewerPromptPath: parseString(input.reviewerPromptPath),
   };
