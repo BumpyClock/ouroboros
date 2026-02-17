@@ -1,6 +1,19 @@
 # session log
 
 2026-02-17
+- Completed bead `ouroboros-10.1` (UX spec for TUI refinement).
+  - Added `docs/tui-refinement-spec.md` with:
+    - concrete terminal-width breakpoints for desktop/narrow behavior (`>=120`, `100-119`, `80-99`, `<80` cols),
+    - notch/header contract (`Agent N`, `<bead id> · <bead title>` copy + truncation rules),
+    - per-agent state table and `Dev`/`Review` auto-switch/restore behavior for implementing/reviewing/fixing phases,
+    - bottom iteration strip collapse contract with `Prev`, retry (`R`) and failure (`F`) markers,
+    - motion + accessibility guidance (limited transitions, reduced-motion immediate swap, no color-only meaning).
+  - Updated `docs/README.md` index to include the new spec.
+  - Verification: `bun run doctor` clean.
+  - Learning: width-first contract in terminal columns prevents ambiguity for follow-up implementation beads.
+  - Challenge: balancing dense terminal copy while preserving bead id visibility required explicit truncation precedence.
+
+2026-02-17
 - Completed bead `ouroboros-1` (umbrella provider parser/retry consolidation).
   - Verified `providers/claude.ts`, `providers/codex.ts`, and `providers/copilot.ts` use shared helper imports from `providers/parsing.ts` and `providers/retry.ts` (no local duplicate parser/retry functions remain).
   - Confirmation was done via direct scan in this session; behavior changes are already captured by earlier child beads `ouroboros-1.1`–`1.4`.
