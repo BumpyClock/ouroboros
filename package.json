@@ -2,9 +2,19 @@
   "name": "ouroboros",
   "private": true,
   "type": "module",
+  "scripts": {
+    "format": "biome format --write .",
+    "lint": "biome lint .",
+    "lint:check": "biome check .",
+    "lint:ci": "biome ci ."
+  },
   "dependencies": {
     "ink": "^6.7.0",
     "react": "^19.2.0",
-    "react-devtools-core": "^7.0.1"
+    "react-devtools-core": "^7.0.1",
+    "@types/node": "^20.4.2"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "2.3.10"
   }
 }

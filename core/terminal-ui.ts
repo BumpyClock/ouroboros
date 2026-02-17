@@ -1,5 +1,5 @@
-import type { BeadIssue, BeadsSnapshot, PreviewEntry, Tone, UsageSummary } from "./types";
-import { formatShort, wrapText } from "./text";
+import type { BeadIssue, BeadsSnapshot, PreviewEntry, Tone, UsageSummary } from './types';
+import { formatShort, wrapText } from './text';
 
 type LivePreviewLine = {
   label: string;
@@ -14,23 +14,23 @@ type LiveAgentSnapshot = {
 };
 
 type AgentSpawnState = {
-  phase: "queued" | "launching";
+  phase: 'queued' | 'launching';
   message: string;
 };
 
-const SPINNER_FRAMES = ["-", "\\", "|", "/"];
+const SPINNER_FRAMES = ['-', '\\', '|', '/'];
 
 export const ANSI = {
-  reset: "\x1b[0m",
-  bold: "\x1b[1m",
-  dim: "\x1b[2m",
-  cyan: "\x1b[36m",
-  blue: "\x1b[34m",
-  green: "\x1b[32m",
-  yellow: "\x1b[33m",
-  red: "\x1b[31m",
-  gray: "\x1b[90m",
-  white: "\x1b[97m",
+  reset: '\x1b[0m',
+  bold: '\x1b[1m',
+  dim: '\x1b[2m',
+  cyan: '\x1b[36m',
+  blue: '\x1b[34m',
+  green: '\x1b[32m',
+  yellow: '\x1b[33m',
+  red: '\x1b[31m',
+  gray: '\x1b[90m',
+  white: '\x1b[97m',
 };
 
 function stylingEnabled(): boolean {
@@ -41,22 +41,21 @@ export function colorize(text: string, ...codes: string[]): string {
   if (!stylingEnabled() || codes.length === 0) {
     return text;
   }
-  return `${codes.join("")}${text}${ANSI.reset}`;
+  return `${codes.join('')}${text}${ANSI.reset}`;
 }
 
 export function toneColor(tone: Tone): string {
   switch (tone) {
-    case "info":
+    case 'info':
       return ANSI.cyan;
-    case "success":
+    case 'success':
       return ANSI.green;
-    case "warn":
+    case 'warn':
       return ANSI.yellow;
-    case "error":
+    case 'error':
       return ANSI.red;
-    case "muted":
+    case 'muted':
       return ANSI.gray;
-    case "neutral":
     default:
       return ANSI.white;
   }
@@ -71,18 +70,18 @@ export function terminalWidth(): number {
   return Math.max(70, Math.min(width, 140));
 }
 
-function hr(char = "-"): string {
+function hr(char = '-'): string {
   return char.repeat(Math.min(terminalWidth(), 100));
 }
 
 export function printSection(title: string): void {
-  console.log(colorize(hr("="), ANSI.gray));
-  console.log(`${badge("LOOP", "info")} ${colorize(title, ANSI.bold, ANSI.white)}`);
-  console.log(colorize(hr("-"), ANSI.gray));
+  console.log(colorize(hr('='), ANSI.gray));
+  console.log(`${badge('LOOP', 'info')} ${colorize(title, ANSI.bold, ANSI.white)}`);
+  console.log(colorize(hr('-'), ANSI.gray));
 }
 
 export function formatTokens(value: number): string {
-  return Math.max(0, Math.round(value)).toLocaleString("en-US");
+  return Math.max(0, Math.round(value)).toLocaleString('en-US');
 }
 
 export function progressBar(current: number, total: number): string {
@@ -90,25 +89,25 @@ export function progressBar(current: number, total: number): string {
   const safeTotal = Math.max(total, 1);
   const ratio = Math.max(0, Math.min(1, current / safeTotal));
   const filled = Math.round(width * ratio);
-  return `[${"#".repeat(filled)}${"-".repeat(width - filled)}] ${Math.round(ratio * 100)}%`;
+  return `[${'#'.repeat(filled)}${'-'.repeat(width - filled)}] ${Math.round(ratio * 100)}%`;
 }
 
 export function labelTone(label: string): Tone {
   const normalized = label.toLowerCase();
-  if (normalized.includes("error")) return "error";
-  if (normalized.includes("tool") || normalized.includes("command")) return "info";
-  if (normalized.includes("reasoning")) return "muted";
-  if (normalized.includes("assistant")) return "success";
-  if (normalized.includes("warn")) return "warn";
-  return "neutral";
+  if (normalized.includes('error')) return 'error';
+  if (normalized.includes('tool') || normalized.includes('command')) return 'info';
+  if (normalized.includes('reasoning')) return 'muted';
+  if (normalized.includes('assistant')) return 'success';
+  if (normalized.includes('warn')) return 'warn';
+  return 'neutral';
 }
 
 export function createSpinner(label: string): { stop: (message: string, tone?: Tone) => void } {
   if (!process.stdout.isTTY) {
-    console.log(`${badge("RUN", "info")} ${label}`);
+    console.log(`${badge('RUN', 'info')} ${label}`);
     return {
-      stop: (message: string, tone = "success") => {
-        console.log(`${badge("DONE", tone)} ${message}`);
+      stop: (message: string, tone = 'success') => {
+        console.log(`${badge('DONE', tone)} ${message}`);
       },
     };
   }
@@ -124,11 +123,11 @@ export function createSpinner(label: string): { stop: (message: string, tone?: T
   }, 100);
 
   return {
-    stop: (message: string, tone = "success") => {
+    stop: (message: string, tone = 'success') => {
       clearInterval(timer);
       const elapsed = ((Date.now() - start) / 1000).toFixed(1);
-      process.stdout.write("\r\x1b[2K");
-      console.log(`${badge("DONE", tone)} ${message} ${colorize(`(${elapsed}s)`, ANSI.dim)}`);
+      process.stdout.write('\r\x1b[2K');
+      console.log(`${badge('DONE', tone)} ${message} ${colorize(`(${elapsed}s)`, ANSI.dim)}`);
     },
   };
 }
@@ -142,8 +141,8 @@ export class LiveRunRenderer {
   private timer: NodeJS.Timeout | null = null;
   private renderedLineCount = 0;
   private running = true;
-  private statusMessage = "starting";
-  private statusTone: Tone = "info";
+  private statusMessage = 'starting';
+  private statusTone: Tone = 'info';
   private readonly agentState = new Map<number, LiveAgentSnapshot>();
   private readonly agentSpawnState = new Map<number, AgentSpawnState>();
   private beadsSnapshot: BeadsSnapshot | null = null;
@@ -153,7 +152,7 @@ export class LiveRunRenderer {
     private readonly iteration: number,
     private readonly maxIterations: number,
     agentIds: number[],
-    previewLines: number
+    previewLines: number,
   ) {
     this.enabled = Boolean(process.stdout.isTTY);
     this.agentIds = [...agentIds].sort((left, right) => left - right);
@@ -197,8 +196,8 @@ export class LiveRunRenderer {
       lines: nextLines,
     });
     this.agentSpawnState.delete(agentId);
-    this.statusMessage = "streaming events";
-    this.statusTone = "info";
+    this.statusMessage = 'streaming events';
+    this.statusTone = 'info';
     this.render();
   }
 
@@ -219,7 +218,7 @@ export class LiveRunRenderer {
   }
 
   setAgentQueued(agentId: number, message: string): void {
-    this.agentSpawnState.set(agentId, { phase: "queued", message });
+    this.agentSpawnState.set(agentId, { phase: 'queued', message });
     if (!this.enabled || !this.running) {
       return;
     }
@@ -227,20 +226,20 @@ export class LiveRunRenderer {
   }
 
   setAgentLaunching(agentId: number, message: string): void {
-    this.agentSpawnState.set(agentId, { phase: "launching", message });
+    this.agentSpawnState.set(agentId, { phase: 'launching', message });
     if (!this.enabled || !this.running) {
       return;
     }
     this.render();
   }
 
-  stop(message: string, tone: Tone = "success"): void {
+  stop(message: string, tone: Tone = 'success'): void {
     if (this.timer) {
       clearInterval(this.timer);
       this.timer = null;
     }
     if (!this.enabled) {
-      console.log(`${badge("DONE", tone)} ${message}`);
+      console.log(`${badge('DONE', tone)} ${message}`);
       return;
     }
     this.running = false;
@@ -251,8 +250,8 @@ export class LiveRunRenderer {
 
   private buildHeaderLine(): string {
     const elapsed = ((Date.now() - this.startedAt) / 1000).toFixed(1);
-    const frame = this.running ? SPINNER_FRAMES[this.frameIndex % SPINNER_FRAMES.length] : "";
-    const tone = this.running ? "info" : this.statusTone;
+    const frame = this.running ? SPINNER_FRAMES[this.frameIndex % SPINNER_FRAMES.length] : '';
+    const tone = this.running ? 'info' : this.statusTone;
     const bodyColor = this.running ? ANSI.cyan : toneColor(tone);
     const parts = [
       frame,
@@ -261,44 +260,55 @@ export class LiveRunRenderer {
       `${elapsed}s`,
     ]
       .filter(Boolean)
-      .join(" ");
-    return `${badge("LIVE", tone)} ${colorize(parts, bodyColor)}`;
+      .join(' ');
+    return `${badge('LIVE', tone)} ${colorize(parts, bodyColor)}`;
   }
 
   private buildAgentLines(agentId: number): string[] {
     const snapshot = this.agentState.get(agentId);
     const spawnState = this.agentSpawnState.get(agentId);
-    const prefix = badge(`A${agentId}`, "muted");
+    const prefix = badge(`A${agentId}`, 'muted');
     const picked = this.agentPickedBeads.get(agentId);
     const titleColor = picked ? ANSI.green : ANSI.dim;
-    const title = picked ? `${picked.id} ${picked.title}` : "no bead picked";
+    const title = picked ? `${picked.id} ${picked.title}` : 'no bead picked';
     const titleText = colorize(formatShort(title, Math.max(24, terminalWidth() - 54)), titleColor);
 
     if (!snapshot) {
       const statusTone: Tone =
-        spawnState?.phase === "launching" ? "info" : spawnState?.phase === "queued" ? "warn" : "muted";
+        spawnState?.phase === 'launching'
+          ? 'info'
+          : spawnState?.phase === 'queued'
+            ? 'warn'
+            : 'muted';
       const statusLabel =
-        spawnState?.phase === "launching" ? "SPAWN" : spawnState?.phase === "queued" ? "QUEUED" : "WAIT";
-      const statusText = spawnState?.message ?? "waiting for events";
+        spawnState?.phase === 'launching'
+          ? 'SPAWN'
+          : spawnState?.phase === 'queued'
+            ? 'QUEUED'
+            : 'WAIT';
+      const statusText = spawnState?.message ?? 'waiting for events';
       const headerStateText =
-        spawnState?.phase === "launching"
-          ? "launch in progress"
-          : spawnState?.phase === "queued"
-            ? "awaiting launch"
-            : "waiting for events";
+        spawnState?.phase === 'launching'
+          ? 'launch in progress'
+          : spawnState?.phase === 'queued'
+            ? 'awaiting launch'
+            : 'waiting for events';
       const emptyLines = Array.from({ length: this.previewLines }, (_, rowIndex) => {
         if (rowIndex === 0) {
-          return `  ${badge("STATE", statusTone)} ${colorize(formatShort(statusText, Math.max(36, terminalWidth() - 40)), ANSI.dim)}`;
+          return `  ${badge('STATE', statusTone)} ${colorize(formatShort(statusText, Math.max(36, terminalWidth() - 40)), ANSI.dim)}`;
         }
-        return `  ${badge("EMPTY", "muted")} ${colorize("no event yet", ANSI.dim)}`;
+        return `  ${badge('EMPTY', 'muted')} ${colorize('no event yet', ANSI.dim)}`;
       });
-      return [`${prefix} ${titleText} ${badge(statusLabel, statusTone)} ${colorize(headerStateText, ANSI.dim)}`, ...emptyLines];
+      return [
+        `${prefix} ${titleText} ${badge(statusLabel, statusTone)} ${colorize(headerStateText, ANSI.dim)}`,
+        ...emptyLines,
+      ];
     }
 
     const ageSeconds = Math.max(0, Math.floor((Date.now() - snapshot.lastUpdatedAt) / 1000));
-    const header = `${prefix} ${titleText} ${badge("EVENTS", "muted")} ${colorize(
+    const header = `${prefix} ${titleText} ${badge('EVENTS', 'muted')} ${colorize(
       String(snapshot.totalEvents),
-      ANSI.bold
+      ANSI.bold,
     )} ${colorize(`updated ${ageSeconds}s ago`, ANSI.dim)}`;
     const maxLength = Math.max(36, terminalWidth() - 30);
     const detailLines = snapshot.lines.map((line) => {
@@ -307,9 +317,7 @@ export class LiveRunRenderer {
       return `  ${lineLabel} ${text}`;
     });
     while (detailLines.length < this.previewLines) {
-      detailLines.unshift(
-        `  ${badge("EMPTY", "muted")} ${colorize("no event yet", ANSI.dim)}`
-      );
+      detailLines.unshift(`  ${badge('EMPTY', 'muted')} ${colorize('no event yet', ANSI.dim)}`);
     }
     return [header, ...detailLines];
   }
@@ -321,21 +329,21 @@ export class LiveRunRenderer {
     if (!this.beadsSnapshot.available) {
       const suffix = this.beadsSnapshot.error
         ? ` ${colorize(`(${formatShort(this.beadsSnapshot.error, 100)})`, ANSI.dim)}`
-        : "";
-      return [`${badge("BEADS", "warn")} unavailable${suffix}`];
+        : '';
+      return [`${badge('BEADS', 'warn')} unavailable${suffix}`];
     }
 
-    const summary = `${badge("BEADS", "info")} remaining ${colorize(
+    const summary = `${badge('BEADS', 'info')} remaining ${colorize(
       String(this.beadsSnapshot.remaining),
-      ANSI.bold
+      ANSI.bold,
     )} | in_progress ${this.beadsSnapshot.inProgress} | open ${this.beadsSnapshot.open} | blocked ${
       this.beadsSnapshot.blocked
     } | closed ${this.beadsSnapshot.closed}`;
     const topRemaining = this.beadsSnapshot.remainingIssues.slice(0, 3).map((issue, index) => {
-      const assignee = issue.assignee ? ` @${issue.assignee}` : "";
-      return `  ${colorize(String(index + 1).padStart(2, " "), ANSI.dim)} ${badge(
-        "REM",
-        "muted"
+      const assignee = issue.assignee ? ` @${issue.assignee}` : '';
+      return `  ${colorize(String(index + 1).padStart(2, ' '), ANSI.dim)} ${badge(
+        'REM',
+        'muted',
       )} ${colorize(`${issue.id} ${issue.title}${assignee}`, ANSI.white)}`;
     });
     return [summary, ...topRemaining];
@@ -366,7 +374,7 @@ function selectPreviewEntries(lines: PreviewEntry[], previewCount: number): Prev
   }
 
   const picked = new Set<number>();
-  const desiredOrder: PreviewEntry["kind"][] = ["assistant", "tool", "reasoning", "error"];
+  const desiredOrder: PreviewEntry['kind'][] = ['assistant', 'tool', 'reasoning', 'error'];
   for (const kind of desiredOrder) {
     for (let i = lines.length - 1; i >= 0; i--) {
       if (lines[i].kind === kind) {
@@ -389,14 +397,18 @@ function selectPreviewEntries(lines: PreviewEntry[], previewCount: number): Prev
     .slice(-previewCount);
 }
 
-export function printPreview(lines: PreviewEntry[], previewCount: number, contextLabel?: string): void {
+export function printPreview(
+  lines: PreviewEntry[],
+  previewCount: number,
+  contextLabel?: string,
+): void {
   const preview = selectPreviewEntries(lines, previewCount);
   if (preview.length === 0) {
-    console.log(`${badge("PREVIEW", "muted")} No message payloads found in this iteration.`);
+    console.log(`${badge('PREVIEW', 'muted')} No message payloads found in this iteration.`);
     return;
   }
-  const contextSuffix = contextLabel ? ` ${colorize(`(${contextLabel})`, ANSI.dim)}` : "";
-  console.log(`${badge("PREVIEW", "info")} Recent activity (${preview.length}):${contextSuffix}`);
+  const contextSuffix = contextLabel ? ` ${colorize(`(${contextLabel})`, ANSI.dim)}` : '';
+  console.log(`${badge('PREVIEW', 'info')} Recent activity (${preview.length}):${contextSuffix}`);
   const width = Math.max(40, terminalWidth() - 10);
   for (let i = 0; i < preview.length; i++) {
     const entry = preview[i];
@@ -411,10 +423,10 @@ export function printPreview(lines: PreviewEntry[], previewCount: number, contex
 }
 
 export function printUsageSummary(usage: UsageSummary, contextLabel?: string): void {
-  const contextSuffix = contextLabel ? ` ${colorize(`(${contextLabel})`, ANSI.dim)}` : "";
+  const contextSuffix = contextLabel ? ` ${colorize(`(${contextLabel})`, ANSI.dim)}` : '';
   console.log(
-    `${badge("TOKENS", "muted")} in ${formatTokens(usage.inputTokens)} | cached ${formatTokens(
-      usage.cachedInputTokens
-    )} | out ${formatTokens(usage.outputTokens)}${contextSuffix}`
+    `${badge('TOKENS', 'muted')} in ${formatTokens(usage.inputTokens)} | cached ${formatTokens(
+      usage.cachedInputTokens,
+    )} | out ${formatTokens(usage.outputTokens)}${contextSuffix}`,
   );
 }

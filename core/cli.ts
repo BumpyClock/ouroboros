@@ -1,6 +1,6 @@
-import type { CliOptions, ReasoningEffort } from "./types";
-import { getProviderAdapter, listProviderNames } from "../providers/registry";
-import { loadOuroborosConfig } from "./config";
+import type { CliOptions, ReasoningEffort } from './types';
+import { getProviderAdapter, listProviderNames } from '../providers/registry';
+import { loadOuroborosConfig } from './config';
 
 type CliOverrides = {
   provider?: string;
@@ -19,12 +19,12 @@ type CliOverrides = {
 };
 
 function parsePositiveInt(value: string | undefined, fallback: number): number {
-  const parsed = Number.parseInt(value ?? "", 10);
+  const parsed = Number.parseInt(value ?? '', 10);
   return Number.isNaN(parsed) || parsed <= 0 ? fallback : parsed;
 }
 
 function parseNonNegativeInt(value: string | undefined, fallback: number): number {
-  const parsed = Number.parseInt(value ?? "", 10);
+  const parsed = Number.parseInt(value ?? '', 10);
   return Number.isNaN(parsed) || parsed < 0 ? fallback : parsed;
 }
 
@@ -35,45 +35,45 @@ function parseCliOverrides(argv: string[]): CliOverrides {
 
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i];
-    if (arg === "--provider") {
-      overrides.provider = (argv[i + 1] ?? "").trim().toLowerCase();
+    if (arg === '--provider') {
+      overrides.provider = (argv[i + 1] ?? '').trim().toLowerCase();
       i += 1;
-    } else if (arg === "--prompt" || arg === "-p") {
+    } else if (arg === '--prompt' || arg === '-p') {
       overrides.promptPath = argv[i + 1];
       i += 1;
-    } else if (arg === "--iterations" || arg === "-n") {
+    } else if (arg === '--iterations' || arg === '-n') {
       overrides.iterationLimit = parsePositiveInt(argv[i + 1], 50);
       overrides.iterationsSet = true;
       i += 1;
-    } else if (arg === "--preview" || arg === "-l") {
+    } else if (arg === '--preview' || arg === '-l') {
       overrides.previewLines = parsePositiveInt(argv[i + 1], 3);
       i += 1;
-    } else if (arg === "--parallel" || arg === "-P") {
+    } else if (arg === '--parallel' || arg === '-P') {
       overrides.parallelAgents = parsePositiveInt(argv[i + 1], 1);
       i += 1;
-    } else if (arg === "--pause-ms") {
+    } else if (arg === '--pause-ms') {
       overrides.pauseMs = parseNonNegativeInt(argv[i + 1], 0);
       i += 1;
-    } else if (arg === "--command" || arg === "-c") {
+    } else if (arg === '--command' || arg === '-c') {
       overrides.command = argv[i + 1];
       i += 1;
-    } else if (arg === "--model" || arg === "-m") {
-      overrides.model = argv[i + 1] ?? "";
+    } else if (arg === '--model' || arg === '-m') {
+      overrides.model = argv[i + 1] ?? '';
       i += 1;
-    } else if (arg === "--reasoning-effort") {
-      const value = (argv[i + 1] ?? "").toLowerCase();
-      if (value === "low" || value === "medium" || value === "high") {
+    } else if (arg === '--reasoning-effort') {
+      const value = (argv[i + 1] ?? '').toLowerCase();
+      if (value === 'low' || value === 'medium' || value === 'high') {
         overrides.reasoningEffort = value;
       }
       i += 1;
-    } else if (arg === "--yolo") {
+    } else if (arg === '--yolo') {
       overrides.yolo = true;
-    } else if (arg === "--no-yolo") {
+    } else if (arg === '--no-yolo') {
       overrides.yolo = false;
-    } else if (arg === "--log-dir") {
+    } else if (arg === '--log-dir') {
       overrides.logDir = argv[i + 1];
       i += 1;
-    } else if (arg === "--show-raw") {
+    } else if (arg === '--show-raw') {
       overrides.showRaw = true;
     }
   }
@@ -82,7 +82,7 @@ function parseCliOverrides(argv: string[]): CliOverrides {
 }
 
 export function printUsage(): void {
-  const providers = listProviderNames().join(", ");
+  const providers = listProviderNames().join(', ');
   console.log(`Usage:
   ouroboros [options]
 
@@ -111,7 +111,7 @@ Config:
 }
 
 export function parseArgs(argv = process.argv.slice(2)): CliOptions {
-  if (argv.includes("--help") || argv.includes("-h")) {
+  if (argv.includes('--help') || argv.includes('-h')) {
     printUsage();
     process.exit(0);
   }
@@ -119,7 +119,7 @@ export function parseArgs(argv = process.argv.slice(2)): CliOptions {
   const config = loadOuroborosConfig(process.cwd());
   const cli = parseCliOverrides(argv);
   const providerName =
-    cli.provider ?? config.projectConfig.provider ?? config.globalConfig.provider ?? "codex";
+    cli.provider ?? config.projectConfig.provider ?? config.globalConfig.provider ?? 'codex';
   const provider = getProviderAdapter(providerName);
 
   const pick = <T>(...values: Array<T | undefined>): T | undefined => {
@@ -135,7 +135,7 @@ export function parseArgs(argv = process.argv.slice(2)): CliOptions {
     cli.iterationLimit,
     config.projectConfig.iterationLimit,
     config.globalConfig.iterationLimit,
-    50
+    50,
   ) as number;
   const iterationsSet =
     cli.iterationsSet ||
@@ -146,22 +146,67 @@ export function parseArgs(argv = process.argv.slice(2)): CliOptions {
     projectRoot: config.projectRoot,
     projectKey: config.projectKey,
     provider: provider.name,
-    promptPath: pick(cli.promptPath, config.projectConfig.promptPath, config.globalConfig.promptPath, ".ai_agents/prompt.md") as string,
+    promptPath: pick(
+      cli.promptPath,
+      config.projectConfig.promptPath,
+      config.globalConfig.promptPath,
+      '.ai_agents/prompt.md',
+    ) as string,
     iterationLimit,
     iterationsSet,
-    previewLines: pick(cli.previewLines, config.projectConfig.previewLines, config.globalConfig.previewLines, 3) as number,
-    parallelAgents: pick(cli.parallelAgents, config.projectConfig.parallelAgents, config.globalConfig.parallelAgents, 1) as number,
-    pauseMs: pick(cli.pauseMs, config.projectConfig.pauseMs, config.globalConfig.pauseMs, 0) as number,
-    command: pick(cli.command, config.projectConfig.command, config.globalConfig.command, provider.defaults.command) as string,
-    model: pick(cli.model, config.projectConfig.model, config.globalConfig.model, provider.defaults.model) as string,
+    previewLines: pick(
+      cli.previewLines,
+      config.projectConfig.previewLines,
+      config.globalConfig.previewLines,
+      3,
+    ) as number,
+    parallelAgents: pick(
+      cli.parallelAgents,
+      config.projectConfig.parallelAgents,
+      config.globalConfig.parallelAgents,
+      1,
+    ) as number,
+    pauseMs: pick(
+      cli.pauseMs,
+      config.projectConfig.pauseMs,
+      config.globalConfig.pauseMs,
+      0,
+    ) as number,
+    command: pick(
+      cli.command,
+      config.projectConfig.command,
+      config.globalConfig.command,
+      provider.defaults.command,
+    ) as string,
+    model: pick(
+      cli.model,
+      config.projectConfig.model,
+      config.globalConfig.model,
+      provider.defaults.model,
+    ) as string,
     reasoningEffort: pick(
       cli.reasoningEffort,
       config.projectConfig.reasoningEffort,
       config.globalConfig.reasoningEffort,
-      provider.defaults.reasoningEffort
+      provider.defaults.reasoningEffort,
     ) as ReasoningEffort,
-    yolo: pick(cli.yolo, config.projectConfig.yolo, config.globalConfig.yolo, provider.defaults.yolo) as boolean,
-    logDir: pick(cli.logDir, config.projectConfig.logDir, config.globalConfig.logDir, provider.defaults.logDir) as string,
-    showRaw: pick(cli.showRaw, config.projectConfig.showRaw, config.globalConfig.showRaw, false) as boolean,
+    yolo: pick(
+      cli.yolo,
+      config.projectConfig.yolo,
+      config.globalConfig.yolo,
+      provider.defaults.yolo,
+    ) as boolean,
+    logDir: pick(
+      cli.logDir,
+      config.projectConfig.logDir,
+      config.globalConfig.logDir,
+      provider.defaults.logDir,
+    ) as string,
+    showRaw: pick(
+      cli.showRaw,
+      config.projectConfig.showRaw,
+      config.globalConfig.showRaw,
+      false,
+    ) as boolean,
   };
 }

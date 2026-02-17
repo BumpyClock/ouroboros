@@ -1,4 +1,4 @@
-export type ReasoningEffort = "low" | "medium" | "high";
+export type ReasoningEffort = 'low' | 'medium' | 'high';
 
 export type CliOptions = {
   projectRoot: string;
@@ -30,7 +30,7 @@ export type StreamResult = {
 };
 
 export type PreviewEntry = {
-  kind: "assistant" | "tool" | "reasoning" | "error" | "message";
+  kind: 'assistant' | 'tool' | 'reasoning' | 'error' | 'message';
   label: string;
   text: string;
 };
@@ -41,7 +41,7 @@ export type UsageSummary = {
   outputTokens: number;
 };
 
-export type Tone = "neutral" | "info" | "success" | "warn" | "error" | "muted";
+export type Tone = 'neutral' | 'info' | 'success' | 'warn' | 'error' | 'muted';
 
 export type RunDefinition = {
   agentId: number;

@@ -1,7 +1,7 @@
-import { existsSync, readFileSync } from "node:fs";
-import { ChildProcess } from "node:child_process";
-import * as path from "node:path";
-import { formatShort } from "./text";
+import { existsSync, readFileSync } from 'node:fs';
+import type { ChildProcess } from 'node:child_process';
+import * as path from 'node:path';
+import { formatShort } from './text';
 import {
   ANSI,
   LiveRunRenderer,
@@ -13,13 +13,28 @@ import {
   printSection,
   printUsageSummary,
   progressBar,
-} from "./terminal-ui";
-import { InkLiveRunRenderer } from "../tui/tui";
-import { buildRunFileBase, isCircuitBroken, loadIterationState, resolveIterationStatePath, sleep, writeIterationState } from "./state";
-import { resolveRunnableCommand, runAgentProcess, terminateChildProcess } from "./process-runner";
-import { extractReferencedBeadIds, loadBeadsSnapshot } from "./beads";
-import type { BeadIssue, BeadsSnapshot, CliOptions, PreviewEntry, RunDefinition, RunResult, Tone } from "./types";
-import type { ProviderAdapter } from "../providers/types";
+} from './terminal-ui';
+import { InkLiveRunRenderer } from '../tui/tui';
+import {
+  buildRunFileBase,
+  isCircuitBroken,
+  loadIterationState,
+  resolveIterationStatePath,
+  sleep,
+  writeIterationState,
+} from './state';
+import { resolveRunnableCommand, runAgentProcess, terminateChildProcess } from './process-runner';
+import { extractReferencedBeadIds, loadBeadsSnapshot } from './beads';
+import type {
+  BeadIssue,
+  BeadsSnapshot,
+  CliOptions,
+  PreviewEntry,
+  RunDefinition,
+  RunResult,
+  Tone,
+} from './types';
+import type { ProviderAdapter } from '../providers/types';
 
 type IterationLiveRenderer = {
   isEnabled(): boolean;
@@ -35,7 +50,7 @@ function createLiveRenderer(
   options: CliOptions,
   iteration: number,
   stateMaxIterations: number,
-  agentIds: number[]
+  agentIds: number[],
 ): IterationLiveRenderer | null {
   if (options.showRaw) {
     return null;
@@ -46,8 +61,11 @@ function createLiveRenderer(
   try {
     return new InkLiveRunRenderer(iteration, stateMaxIterations, agentIds, options.previewLines);
   } catch (error) {
-    const fallbackReason = error instanceof Error ? formatShort(error.message, 120) : "unknown error";
-    console.log(`${badge("TUI", "warn")} Ink renderer unavailable, falling back (${fallbackReason})`);
+    const fallbackReason =
+      error instanceof Error ? formatShort(error.message, 120) : 'unknown error';
+    console.log(
+      `${badge('TUI', 'warn')} Ink renderer unavailable, falling back (${fallbackReason})`,
+    );
     return new LiveRunRenderer(iteration, stateMaxIterations, agentIds, options.previewLines);
   }
 }
@@ -57,11 +75,11 @@ function buildRuns(
   parallelAgents: number,
   logDir: string,
   provider: ProviderAdapter,
-  options: CliOptions
+  options: CliOptions,
 ): RunDefinition[] {
   return Array.from({ length: parallelAgents }, (_, index) => {
     const agentId = index + 1;
-    const runBase = `${buildRunFileBase(iteration)}-agent-${String(agentId).padStart(2, "0")}`;
+    const runBase = `${buildRunFileBase(iteration)}-agent-${String(agentId).padStart(2, '0')}`;
     const jsonlLogPath = path.join(logDir, `${runBase}.jsonl`);
     const lastMessagePath = path.join(logDir, `${runBase}.last-message.txt`);
     const args = provider.buildExecArgs(lastMessagePath, options);
@@ -75,25 +93,25 @@ function printInitialSummary(
   command: string,
   promptPath: string,
   logDir: string,
-  maxIterations: number
+  maxIterations: number,
 ): void {
   printSection(`${provider.displayName} Loop`);
-  console.log(`${badge("PROVIDER", "neutral")} ${provider.name}`);
-  console.log(`${badge("PROJECT", "neutral")} ${options.projectRoot}`);
-  console.log(`${badge("PROJECT_KEY", "neutral")} ${options.projectKey}`);
-  console.log(`${badge("COMMAND", "neutral")} ${colorize(command, ANSI.bold)}`);
-  console.log(`${badge("PROMPT", "neutral")} ${promptPath}`);
-  console.log(`${badge("LOGS", "neutral")} ${logDir}`);
-  console.log(`${badge("LIMIT", "neutral")} max iterations: ${maxIterations}`);
+  console.log(`${badge('PROVIDER', 'neutral')} ${provider.name}`);
+  console.log(`${badge('PROJECT', 'neutral')} ${options.projectRoot}`);
+  console.log(`${badge('PROJECT_KEY', 'neutral')} ${options.projectKey}`);
+  console.log(`${badge('COMMAND', 'neutral')} ${colorize(command, ANSI.bold)}`);
+  console.log(`${badge('PROMPT', 'neutral')} ${promptPath}`);
+  console.log(`${badge('LOGS', 'neutral')} ${logDir}`);
+  console.log(`${badge('LIMIT', 'neutral')} max iterations: ${maxIterations}`);
   if (options.model.trim()) {
-    console.log(`${badge("MODEL", "neutral")} ${options.model.trim()}`);
+    console.log(`${badge('MODEL', 'neutral')} ${options.model.trim()}`);
   }
-  console.log(`${badge("EFFORT", "neutral")} reasoning_effort=${options.reasoningEffort}`);
+  console.log(`${badge('EFFORT', 'neutral')} reasoning_effort=${options.reasoningEffort}`);
   console.log(
-    `${badge("PARALLEL", options.parallelAgents > 1 ? "warn" : "neutral")} ${options.parallelAgents}`
+    `${badge('PARALLEL', options.parallelAgents > 1 ? 'warn' : 'neutral')} ${options.parallelAgents}`,
   );
   console.log(
-    `${badge("YOLO", options.yolo ? "warn" : "muted")} ${options.yolo ? "enabled" : "disabled"}`
+    `${badge('YOLO', options.yolo ? 'warn' : 'muted')} ${options.yolo ? 'enabled' : 'disabled'}`,
   );
 }
 
@@ -107,14 +125,14 @@ async function runIteration(
   command: string,
   logDir: string,
   activeChildren: Set<ChildProcess>,
-  activeSpinnerStopRef: { value: ((message: string, tone?: Tone) => void) | null }
+  activeSpinnerStopRef: { value: ((message: string, tone?: Tone) => void) | null },
 ): Promise<{ results: RunResult[]; pickedByAgent: Map<number, BeadIssue> }> {
   const runs = buildRuns(iteration, options.parallelAgents, logDir, provider, options);
   const liveRenderer = createLiveRenderer(
     options,
     iteration,
     stateMaxIterations,
-    runs.map((run) => run.agentId)
+    runs.map((run) => run.agentId),
   );
   liveRenderer?.setBeadsSnapshot(beadsSnapshot);
   const liveRendererEnabled = Boolean(liveRenderer?.isEnabled());
@@ -122,31 +140,33 @@ async function runIteration(
   console.log();
   if (!liveRendererEnabled) {
     console.log(
-      `${badge("ITERATION", "info")} ${iteration}/${stateMaxIterations} ${colorize(
+      `${badge('ITERATION', 'info')} ${iteration}/${stateMaxIterations} ${colorize(
         progressBar(iteration, stateMaxIterations),
-        ANSI.cyan
-      )}`
+        ANSI.cyan,
+      )}`,
     );
   }
-  console.log(`${badge("START", "muted")} ${startedAt}`);
-  console.log(`${badge("RUN", "muted")} ${command} ${runs[0].args.join(" ")}`);
-  console.log(`${badge("BATCH", "muted")} target ${runs.length} parallel agent(s), staged startup`);
+  console.log(`${badge('START', 'muted')} ${startedAt}`);
+  console.log(`${badge('RUN', 'muted')} ${command} ${runs[0].args.join(' ')}`);
+  console.log(`${badge('BATCH', 'muted')} target ${runs.length} parallel agent(s), staged startup`);
   for (const run of runs) {
-    console.log(`${badge(`A${run.agentId}`, "muted")} ${run.jsonlLogPath}`);
+    console.log(`${badge(`A${run.agentId}`, 'muted')} ${run.jsonlLogPath}`);
   }
   if (options.showRaw) {
-    console.log(`${badge("STREAM", "warn")} raw event stream enabled`);
+    console.log(`${badge('STREAM', 'warn')} raw event stream enabled`);
   }
 
   const spinner =
     options.showRaw || liveRendererEnabled
       ? null
-      : createSpinner(`running ${runs.length} ${provider.name} agent(s) for iteration ${iteration}`);
+      : createSpinner(
+          `running ${runs.length} ${provider.name} agent(s) for iteration ${iteration}`,
+        );
   activeSpinnerStopRef.value = liveRendererEnabled
-    ? (message: string, tone: Tone = "success") => {
+    ? (message: string, tone: Tone = 'success') => {
         liveRenderer?.stop(message, tone);
       }
-    : spinner?.stop ?? null;
+    : (spinner?.stop ?? null);
 
   const liveSeen = new Set<string>();
   const liveCountByAgent = new Map<number, number>();
@@ -155,13 +175,13 @@ async function runIteration(
 
   for (const run of runs) {
     if (run.agentId === 1) {
-      liveRenderer?.setAgentLaunching(run.agentId, "launching now, waiting for first response");
+      liveRenderer?.setAgentLaunching(run.agentId, 'launching now, waiting for first response');
       continue;
     }
     const readinessGate = run.agentId - 1;
     liveRenderer?.setAgentQueued(
       run.agentId,
-      `waiting to spawn until readiness ${readinessGate}/${runs.length}`
+      `waiting to spawn until readiness ${readinessGate}/${runs.length}`,
     );
   }
 
@@ -200,11 +220,11 @@ async function runIteration(
       if (liveRendererEnabled) {
         liveRenderer?.setAgentLaunching(
           run.agentId,
-          `launching after readiness ${runIndex}/${runs.length}`
+          `launching after readiness ${runIndex}/${runs.length}`,
         );
       } else {
         console.log(
-          `${badge("SPAWN", "muted")} launching agent ${run.agentId} after readiness ${runIndex}/${runs.length}`
+          `${badge('SPAWN', 'muted')} launching agent ${run.agentId} after readiness ${runIndex}/${runs.length}`,
         );
       }
     }
@@ -241,13 +261,15 @@ async function runIteration(
             if (options.showRaw) {
               return;
             }
-            const liveEntries = provider.previewEntriesFromLine(line).filter(
-              (entry) =>
-                entry.kind === "reasoning" ||
-                entry.kind === "tool" ||
-                entry.kind === "assistant" ||
-                entry.kind === "error"
-            );
+            const liveEntries = provider
+              .previewEntriesFromLine(line)
+              .filter(
+                (entry) =>
+                  entry.kind === 'reasoning' ||
+                  entry.kind === 'tool' ||
+                  entry.kind === 'assistant' ||
+                  entry.kind === 'error',
+              );
             for (const entry of liveEntries) {
               const matchedIds = extractReferencedBeadIds(entry.text, knownBeadIds);
               if (matchedIds.length > 0) {
@@ -269,17 +291,17 @@ async function runIteration(
               liveSeen.add(key);
               const count = (liveCountByAgent.get(run.agentId) ?? 0) + 1;
               liveCountByAgent.set(run.agentId, count);
-              if (count > 20 && entry.kind !== "assistant" && entry.kind !== "error") {
+              if (count > 20 && entry.kind !== 'assistant' && entry.kind !== 'error') {
                 continue;
               }
 
               if (process.stdout.isTTY) {
-                process.stdout.write("\r\x1b[2K");
+                process.stdout.write('\r\x1b[2K');
               }
-              const agentPrefix = runs.length > 1 ? `${badge(`A${run.agentId}`, "muted")} ` : "";
+              const agentPrefix = runs.length > 1 ? `${badge(`A${run.agentId}`, 'muted')} ` : '';
               const entryBadge = badge(entry.label.toUpperCase(), labelTone(entry.label));
               console.log(
-                `${badge("LIVE", "info")} ${agentPrefix}${entryBadge} ${formatShort(entry.text, 180)}`
+                `${badge('LIVE', 'info')} ${agentPrefix}${entryBadge} ${formatShort(entry.text, 180)}`,
               );
             }
           },
@@ -309,15 +331,15 @@ async function runIteration(
 
 function printBeadsSnapshot(snapshot: BeadsSnapshot): void {
   if (!snapshot.available) {
-    const suffix = snapshot.error ? ` (${formatShort(snapshot.error, 120)})` : "";
-    console.log(`${badge("BEADS", "warn")} unavailable${suffix}`);
+    const suffix = snapshot.error ? ` (${formatShort(snapshot.error, 120)})` : '';
+    console.log(`${badge('BEADS', 'warn')} unavailable${suffix}`);
     return;
   }
   console.log(
-    `${badge("BEADS", "info")} remaining ${snapshot.remaining} | in_progress ${snapshot.inProgress} | open ${snapshot.open} | blocked ${snapshot.blocked} | closed ${snapshot.closed}`
+    `${badge('BEADS', 'info')} remaining ${snapshot.remaining} | in_progress ${snapshot.inProgress} | open ${snapshot.open} | blocked ${snapshot.blocked} | closed ${snapshot.closed}`,
   );
   for (const issue of snapshot.remainingIssues.slice(0, 3)) {
-    const assignee = issue.assignee ? ` @${issue.assignee}` : "";
+    const assignee = issue.assignee ? ` @${issue.assignee}` : '';
     console.log(`- ${issue.id} ${issue.title}${assignee}`);
   }
 }
@@ -339,24 +361,26 @@ export async function runLoop(options: CliOptions, provider: ProviderAdapter): P
     }
     shuttingDown = true;
     console.log();
-    console.log(`${badge("SHUTDOWN", "warn")} received ${signal}, cleaning up...`);
+    console.log(`${badge('SHUTDOWN', 'warn')} received ${signal}, cleaning up...`);
     void (async () => {
       if (activeSpinnerStopRef.value) {
-        activeSpinnerStopRef.value("cancelled", "warn");
+        activeSpinnerStopRef.value('cancelled', 'warn');
         activeSpinnerStopRef.value = null;
       }
       if (activeChildren.size > 0) {
         const count = activeChildren.size;
         await Promise.all([...activeChildren].map((child) => terminateChildProcess(child)));
         activeChildren.clear();
-        console.log(`${badge("CLEANUP", "success")} terminated ${count} running child process(es).`);
+        console.log(
+          `${badge('CLEANUP', 'success')} terminated ${count} running child process(es).`,
+        );
       }
-      process.exit(signal === "SIGINT" ? 130 : 143);
+      process.exit(signal === 'SIGINT' ? 130 : 143);
     })();
   };
 
-  process.on("SIGINT", onSignal);
-  process.on("SIGTERM", onSignal);
+  process.on('SIGINT', onSignal);
+  process.on('SIGTERM', onSignal);
 
   try {
     const state = loadIterationState(statePath, options.iterationLimit, options.iterationsSet);
@@ -376,7 +400,7 @@ export async function runLoop(options: CliOptions, provider: ProviderAdapter): P
         break;
       }
 
-      const prompt = readFileSync(promptPath, "utf8");
+      const prompt = readFileSync(promptPath, 'utf8');
       state.current_iteration += 1;
       writeIterationState(statePath, state);
 
@@ -396,19 +420,19 @@ export async function runLoop(options: CliOptions, provider: ProviderAdapter): P
           command,
           logDir,
           activeChildren,
-          activeSpinnerStopRef
+          activeSpinnerStopRef,
         );
         results = iterationRun.results;
         pickedByAgent = iterationRun.pickedByAgent;
 
         const allSuccess = results.every((entry) => entry.result.status === 0);
         activeSpinnerStopRef.value?.(
-          allSuccess ? "responses received" : "one or more processes exited",
-          allSuccess ? "success" : "warn"
+          allSuccess ? 'responses received' : 'one or more processes exited',
+          allSuccess ? 'success' : 'warn',
         );
         activeSpinnerStopRef.value = null;
       } catch (error) {
-        activeSpinnerStopRef.value?.("spawn failed", "error");
+        activeSpinnerStopRef.value?.('spawn failed', 'error');
         activeSpinnerStopRef.value = null;
         throw error;
       }
@@ -416,12 +440,14 @@ export async function runLoop(options: CliOptions, provider: ProviderAdapter): P
       const failed = results.filter((entry) => entry.result.status !== 0);
       if (failed.length > 0) {
         const retryDelays = failed
-          .map((entry) => provider.extractRetryDelaySeconds(`${entry.result.stdout}\n${entry.result.stderr}`))
+          .map((entry) =>
+            provider.extractRetryDelaySeconds(`${entry.result.stdout}\n${entry.result.stderr}`),
+          )
           .filter((value): value is number => value !== null);
         if (retryDelays.length === failed.length && iteration < state.max_iterations) {
           const retrySeconds = Math.max(...retryDelays);
           console.log(
-            `${badge("RETRY", "warn")} delay detected (${retrySeconds}s). Waiting before next iteration`
+            `${badge('RETRY', 'warn')} delay detected (${retrySeconds}s). Waiting before next iteration`,
           );
           await sleep(retrySeconds * 1000);
           continue;
@@ -429,7 +455,9 @@ export async function runLoop(options: CliOptions, provider: ProviderAdapter): P
 
         for (const entry of failed) {
           const combined = `${entry.result.stdout}\n${entry.result.stderr}`.trim();
-          console.log(`${badge(`A${entry.agentId}`, "error")} exited with status ${entry.result.status}`);
+          console.log(
+            `${badge(`A${entry.agentId}`, 'error')} exited with status ${entry.result.status}`,
+          );
           if (combined) {
             console.log(colorize(formatShort(combined, 600), ANSI.red));
           }
@@ -447,12 +475,12 @@ export async function runLoop(options: CliOptions, provider: ProviderAdapter): P
         if (preview.length > 0) {
           printPreview(preview, options.previewLines, context);
         } else if (existsSync(entry.lastMessagePath)) {
-          const lastMessage = readFileSync(entry.lastMessagePath, "utf8").trim();
+          const lastMessage = readFileSync(entry.lastMessagePath, 'utf8').trim();
           if (lastMessage) {
             printPreview(
-              [{ kind: "assistant", label: "assistant", text: formatShort(lastMessage) }],
+              [{ kind: 'assistant', label: 'assistant', text: formatShort(lastMessage) }],
               options.previewLines,
-              context
+              context,
             );
           } else {
             printPreview([], options.previewLines, context);
@@ -464,8 +492,10 @@ export async function runLoop(options: CliOptions, provider: ProviderAdapter): P
         if (preview.length === 0) {
           const rawPreview = provider.collectRawJsonLines(combined, options.previewLines);
           if (rawPreview.length > 0) {
-            const suffix = context ? ` (${context})` : "";
-            console.log(`${badge("FALLBACK", "warn")} JSONL preview fallback (raw lines):${suffix}`);
+            const suffix = context ? ` (${context})` : '';
+            console.log(
+              `${badge('FALLBACK', 'warn')} JSONL preview fallback (raw lines):${suffix}`,
+            );
             for (const rawLine of rawPreview) {
               console.log(`- ${colorize(formatShort(rawLine, 200), ANSI.dim)}`);
             }
@@ -478,8 +508,8 @@ export async function runLoop(options: CliOptions, provider: ProviderAdapter): P
         }
 
         const lastMessageOutput = existsSync(entry.lastMessagePath)
-          ? readFileSync(entry.lastMessagePath, "utf8")
-          : "";
+          ? readFileSync(entry.lastMessagePath, 'utf8')
+          : '';
         if (provider.hasStopMarker(combined) || provider.hasStopMarker(lastMessageOutput)) {
           stopDetected = true;
         }
@@ -494,34 +524,36 @@ export async function runLoop(options: CliOptions, provider: ProviderAdapter): P
         }
         const picked = pickedByAgent.get(entry.agentId);
         if (picked) {
-          console.log(`${badge(`A${entry.agentId}`, "muted")} picked bead ${picked.id}: ${picked.title}`);
+          console.log(
+            `${badge(`A${entry.agentId}`, 'muted')} picked bead ${picked.id}: ${picked.title}`,
+          );
         }
       }
 
       if (stopDetected) {
         stoppedByProviderMarker = true;
-        console.log(`${badge("STOP", "success")} provider stop marker detected`);
+        console.log(`${badge('STOP', 'success')} provider stop marker detected`);
         break;
       }
 
       if (state.current_iteration < state.max_iterations && options.pauseMs > 0) {
-        console.log(`${badge("PAUSE", "muted")} waiting ${options.pauseMs}ms`);
+        console.log(`${badge('PAUSE', 'muted')} waiting ${options.pauseMs}ms`);
         await sleep(options.pauseMs);
       }
     }
 
     if (!stoppedByProviderMarker && isCircuitBroken(state)) {
-      console.log(`${badge("CIRCUIT", "warn")} max_iterations (${state.max_iterations}) reached`);
+      console.log(`${badge('CIRCUIT', 'warn')} max_iterations (${state.max_iterations}) reached`);
     }
   } finally {
-    process.off("SIGINT", onSignal);
-    process.off("SIGTERM", onSignal);
+    process.off('SIGINT', onSignal);
+    process.off('SIGTERM', onSignal);
     if (activeChildren.size > 0) {
       await Promise.all([...activeChildren].map((child) => terminateChildProcess(child)));
       activeChildren.clear();
     }
     if (activeSpinnerStopRef.value) {
-      activeSpinnerStopRef.value("stopped", "warn");
+      activeSpinnerStopRef.value('stopped', 'warn');
       activeSpinnerStopRef.value = null;
     }
   }

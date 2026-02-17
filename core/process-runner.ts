@@ -1,8 +1,8 @@
-import { appendFileSync, existsSync, mkdirSync } from "node:fs";
-import { ChildProcess, spawn } from "node:child_process";
-import * as path from "node:path";
-import { sleep } from "./state";
-import type { StreamResult } from "./types";
+import { appendFileSync, existsSync, mkdirSync } from 'node:fs';
+import { spawn, type ChildProcess } from 'node:child_process';
+import * as path from 'node:path';
+import { sleep } from './state';
+import type { StreamResult } from './types';
 
 type RunProcessArgs = {
   prompt: string;
@@ -25,12 +25,12 @@ function ensureDirectory(dir: string): void {
 function appendLogChunk(logPath: string, text: string): void {
   ensureDirectory(path.dirname(logPath));
   try {
-    appendFileSync(logPath, text, "utf8");
+    appendFileSync(logPath, text, 'utf8');
   } catch (error) {
     const maybeErrno = error as NodeJS.ErrnoException;
-    if (maybeErrno.code === "ENOENT") {
+    if (maybeErrno.code === 'ENOENT') {
       ensureDirectory(path.dirname(logPath));
-      appendFileSync(logPath, text, "utf8");
+      appendFileSync(logPath, text, 'utf8');
       return;
     }
     throw error;
@@ -42,9 +42,9 @@ function resolveCommandExecutable(command: string): string | null {
     return null;
   }
 
-  const isWindows = process.platform === "win32";
-  const pathExtEntries = (process.env.PATHEXT ?? ".COM;.EXE;.BAT;.CMD")
-    .split(";")
+  const isWindows = process.platform === 'win32';
+  const pathExtEntries = (process.env.PATHEXT ?? '.COM;.EXE;.BAT;.CMD')
+    .split(';')
     .map((entry) => entry.toLowerCase())
     .filter(Boolean);
 
@@ -67,13 +67,13 @@ function resolveCommandExecutable(command: string): string | null {
     return isWindows ? resolveWindowsBase(absolute) : existsSync(absolute) ? absolute : null;
   }
 
-  const pathEntries = (process.env.PATH ?? "")
+  const pathEntries = (process.env.PATH ?? '')
     .split(path.delimiter)
     .map((entry) => entry.trim())
     .filter(Boolean);
 
   const ext = path.extname(command).toLowerCase();
-  const extensions = isWindows ? (ext ? [ext] : pathExtEntries) : [""];
+  const extensions = isWindows ? (ext ? [ext] : pathExtEntries) : [''];
 
   for (const dir of pathEntries) {
     const base = path.join(dir, command);
@@ -102,7 +102,7 @@ function resolveCommandExecutable(command: string): string | null {
 
 export function resolveRunnableCommand(
   command: string,
-  formatCommandHint: (command: string) => string
+  formatCommandHint: (command: string) => string,
 ): string {
   const resolved = resolveCommandExecutable(command);
   if (resolved) {
@@ -113,7 +113,7 @@ export function resolveRunnableCommand(
     throw new Error(`Command not found: "${command}"`);
   }
 
-  if (process.platform === "win32") {
+  if (process.platform === 'win32') {
     throw new Error(`Unable to find command "${command}". ${formatCommandHint(command)}.`);
   }
 
@@ -126,13 +126,13 @@ export async function terminateChildProcess(child: ChildProcess): Promise<void> 
     return;
   }
 
-  if (process.platform === "win32") {
+  if (process.platform === 'win32') {
     await new Promise<void>((resolve) => {
-      const killer = spawn("taskkill", ["/PID", String(pid), "/T", "/F"], {
-        stdio: "ignore",
+      const killer = spawn('taskkill', ['/PID', String(pid), '/T', '/F'], {
+        stdio: 'ignore',
       });
-      killer.on("close", () => resolve());
-      killer.on("error", () => {
+      killer.on('close', () => resolve());
+      killer.on('error', () => {
         try {
           child.kill();
         } catch {
@@ -145,7 +145,7 @@ export async function terminateChildProcess(child: ChildProcess): Promise<void> 
   }
 
   try {
-    child.kill("SIGTERM");
+    child.kill('SIGTERM');
   } catch {
     return;
   }
@@ -153,7 +153,7 @@ export async function terminateChildProcess(child: ChildProcess): Promise<void> 
   await sleep(300);
   if (!child.killed) {
     try {
-      child.kill("SIGKILL");
+      child.kill('SIGKILL');
     } catch {
       // no-op
     }
@@ -175,7 +175,7 @@ export function runAgentProcess({
     let child: ChildProcess;
     try {
       child = spawn(command, args, {
-        stdio: ["pipe", "pipe", "pipe"],
+        stdio: ['pipe', 'pipe', 'pipe'],
       });
       onChildChange?.(child);
     } catch (error) {
@@ -184,9 +184,9 @@ export function runAgentProcess({
       return;
     }
 
-    let stdout = "";
-    let stderr = "";
-    let stdoutBuffer = "";
+    let stdout = '';
+    let stderr = '';
+    let stdoutBuffer = '';
     let settled = false;
     let firstResponseSeen = false;
 
@@ -207,9 +207,9 @@ export function runAgentProcess({
       reject(error);
     };
 
-    child.on("error", (error) => {
+    child.on('error', (error) => {
       const maybeErrno = error as NodeJS.ErrnoException;
-      if (maybeErrno.code === "ENOENT") {
+      if (maybeErrno.code === 'ENOENT') {
         fail(new Error(`Unable to spawn "${command}". ${formatCommandHint(command)}.`));
         return;
       }
@@ -217,7 +217,7 @@ export function runAgentProcess({
     });
 
     if (child.stdout) {
-      child.stdout.on("data", (chunk) => {
+      child.stdout.on('data', (chunk) => {
         const text = chunk.toString();
         if (text.trim().length > 0) {
           notifyFirstResponse();
@@ -232,7 +232,7 @@ export function runAgentProcess({
         }
 
         const lines = stdoutBuffer.split(/\r?\n/);
-        stdoutBuffer = lines.pop() ?? "";
+        stdoutBuffer = lines.pop() ?? '';
         for (const line of lines) {
           onStdoutLine?.(line);
         }
@@ -241,17 +241,17 @@ export function runAgentProcess({
           process.stdout.write(text);
         }
       });
-      child.stdout.on("end", () => {
+      child.stdout.on('end', () => {
         if (stdoutBuffer.trim().length > 0) {
           notifyFirstResponse();
           onStdoutLine?.(stdoutBuffer);
         }
-        stdoutBuffer = "";
+        stdoutBuffer = '';
       });
     }
 
     if (child.stderr) {
-      child.stderr.on("data", (chunk) => {
+      child.stderr.on('data', (chunk) => {
         const text = chunk.toString();
         stderr += text;
         try {
@@ -266,7 +266,7 @@ export function runAgentProcess({
       });
     }
 
-    child.on("close", (status) => {
+    child.on('close', (status) => {
       if (settled) {
         return;
       }

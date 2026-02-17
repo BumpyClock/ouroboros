@@ -1,6 +1,6 @@
-import { parseArgs } from "./core/cli";
-import { runLoop } from "./core/loop-engine";
-import { getProviderAdapter } from "./providers/registry";
+import { parseArgs } from './core/cli';
+import { runLoop } from './core/loop-engine';
+import { getProviderAdapter } from './providers/registry';
 
 async function main(): Promise<void> {
   const options = parseArgs();
@@ -9,6 +9,6 @@ async function main(): Promise<void> {
 }
 
 main().catch((error) => {
-  console.error("ouroboros failed:", error);
+  console.error('ouroboros failed:', error);
   process.exit(1);
 });

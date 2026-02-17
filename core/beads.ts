@@ -1,5 +1,5 @@
-import { spawn } from "node:child_process";
-import type { BeadIssue, BeadsSnapshot } from "./types";
+import { spawn } from 'node:child_process';
+import type { BeadIssue, BeadsSnapshot } from './types';
 
 type ShellResult = {
   status: number | null;
@@ -11,18 +11,18 @@ function runCommand(command: string, args: string[], cwd: string): Promise<Shell
   return new Promise((resolve, reject) => {
     const child = spawn(command, args, {
       cwd,
-      stdio: ["ignore", "pipe", "pipe"],
+      stdio: ['ignore', 'pipe', 'pipe'],
     });
-    let stdout = "";
-    let stderr = "";
-    child.stdout?.on("data", (chunk) => {
+    let stdout = '';
+    let stderr = '';
+    child.stdout?.on('data', (chunk) => {
       stdout += chunk.toString();
     });
-    child.stderr?.on("data", (chunk) => {
+    child.stderr?.on('data', (chunk) => {
       stderr += chunk.toString();
     });
-    child.on("error", (error) => reject(error));
-    child.on("close", (status) => resolve({ status, stdout, stderr }));
+    child.on('error', (error) => reject(error));
+    child.on('close', (status) => resolve({ status, stdout, stderr }));
   });
 }
 
@@ -35,7 +35,7 @@ function safeJsonParse(input: string): unknown | null {
 }
 
 function asRecord(value: unknown): Record<string, unknown> | null {
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
     return null;
   }
   return value as Record<string, unknown>;
@@ -59,14 +59,14 @@ function extractIssueArray(payload: unknown): unknown[] {
 }
 
 function toStringValue(value: unknown): string {
-  return typeof value === "string" ? value.trim() : "";
+  return typeof value === 'string' ? value.trim() : '';
 }
 
 function toNumberValue(value: unknown): number | undefined {
-  if (typeof value === "number" && Number.isFinite(value)) {
+  if (typeof value === 'number' && Number.isFinite(value)) {
     return value;
   }
-  const parsed = Number.parseFloat(String(value ?? ""));
+  const parsed = Number.parseFloat(String(value ?? ''));
   return Number.isFinite(parsed) ? parsed : undefined;
 }
 
@@ -77,7 +77,7 @@ function normalizeIssue(raw: unknown): BeadIssue | null {
   }
   const id = toStringValue(record.id ?? record.issue_id ?? record.key);
   const title = toStringValue(record.title ?? record.summary ?? record.name);
-  const status = toStringValue(record.status ?? "open").toLowerCase() || "open";
+  const status = toStringValue(record.status ?? 'open').toLowerCase() || 'open';
   if (!id || !title) {
     return null;
   }
@@ -114,11 +114,11 @@ export function extractReferencedBeadIds(text: string, knownIds: Set<string>): s
 
 export async function loadBeadsSnapshot(projectRoot: string): Promise<BeadsSnapshot> {
   try {
-    const result = await runCommand("bd", ["list", "--json", "--all", "--limit", "0"], projectRoot);
+    const result = await runCommand('bd', ['list', '--json', '--all', '--limit', '0'], projectRoot);
     if (result.status !== 0) {
       return {
         available: false,
-        source: "bd list --json --all --limit 0",
+        source: 'bd list --json --all --limit 0',
         projectRoot,
         total: 0,
         remaining: 0,
@@ -129,25 +129,28 @@ export async function loadBeadsSnapshot(projectRoot: string): Promise<BeadsSnaps
         deferred: 0,
         remainingIssues: [],
         byId: new Map(),
-        error: result.stderr.trim() || result.stdout.trim() || `bd exited with status ${result.status}`,
+        error:
+          result.stderr.trim() || result.stdout.trim() || `bd exited with status ${result.status}`,
       };
     }
 
     const parsed = safeJsonParse(result.stdout);
     const rawIssues = extractIssueArray(parsed);
-    const issues = rawIssues.map(normalizeIssue).filter((issue): issue is BeadIssue => issue !== null);
+    const issues = rawIssues
+      .map(normalizeIssue)
+      .filter((issue): issue is BeadIssue => issue !== null);
     const byId = new Map(issues.map((issue) => [issue.id, issue]));
 
-    const closed = issues.filter((issue) => issue.status === "closed").length;
-    const open = issues.filter((issue) => issue.status === "open").length;
-    const inProgress = issues.filter((issue) => issue.status === "in_progress").length;
-    const blocked = issues.filter((issue) => issue.status === "blocked").length;
-    const deferred = issues.filter((issue) => issue.status === "deferred").length;
-    const remainingIssues = sortRemaining(issues.filter((issue) => issue.status !== "closed"));
+    const closed = issues.filter((issue) => issue.status === 'closed').length;
+    const open = issues.filter((issue) => issue.status === 'open').length;
+    const inProgress = issues.filter((issue) => issue.status === 'in_progress').length;
+    const blocked = issues.filter((issue) => issue.status === 'blocked').length;
+    const deferred = issues.filter((issue) => issue.status === 'deferred').length;
+    const remainingIssues = sortRemaining(issues.filter((issue) => issue.status !== 'closed'));
 
     return {
       available: true,
-      source: "bd list --json --all --limit 0",
+      source: 'bd list --json --all --limit 0',
       projectRoot,
       total: issues.length,
       remaining: remainingIssues.length,
@@ -163,7 +166,7 @@ export async function loadBeadsSnapshot(projectRoot: string): Promise<BeadsSnaps
     const message = error instanceof Error ? error.message : String(error);
     return {
       available: false,
-      source: "bd list --json --all --limit 0",
+      source: 'bd list --json --all --limit 0',
       projectRoot,
       total: 0,
       remaining: 0,

@@ -1,8 +1,8 @@
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import * as path from "node:path";
-import type { IterationState } from "./types";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import * as path from 'node:path';
+import type { IterationState } from './types';
 
-export const ITERATION_STATE_PATH = ".ai_agents/iteration.json";
+export const ITERATION_STATE_PATH = '.ai_agents/iteration.json';
 
 function ensureDirectory(dir: string): void {
   if (!existsSync(dir)) {
@@ -11,7 +11,7 @@ function ensureDirectory(dir: string): void {
 }
 
 function isObject(value: unknown): value is Record<string, unknown> {
-  return !!value && typeof value === "object" && !Array.isArray(value);
+  return !!value && typeof value === 'object' && !Array.isArray(value);
 }
 
 function safeJsonParse(text: string): unknown | null {
@@ -31,7 +31,7 @@ function normalizeIterationState(input: unknown, fallbackMax: number): Iteration
     return { current_iteration: 0, max_iterations: fallbackMax };
   }
 
-  const current = Number.parseInt(String(input.current_iteration ?? "0"), 10);
+  const current = Number.parseInt(String(input.current_iteration ?? '0'), 10);
   const max = Number.parseInt(String(input.max_iterations ?? fallbackMax), 10);
   return {
     current_iteration: Number.isNaN(current) || current < 0 ? 0 : current,
@@ -41,13 +41,13 @@ function normalizeIterationState(input: unknown, fallbackMax: number): Iteration
 
 export function writeIterationState(statePath: string, state: IterationState): void {
   ensureDirectory(path.dirname(statePath));
-  writeFileSync(statePath, `${JSON.stringify(state)}\n`, "utf8");
+  writeFileSync(statePath, `${JSON.stringify(state)}\n`, 'utf8');
 }
 
 export function loadIterationState(
   statePath: string,
   fallbackMax: number,
-  iterationsSet: boolean
+  iterationsSet: boolean,
 ): IterationState {
   if (!existsSync(statePath)) {
     const created: IterationState = { current_iteration: 0, max_iterations: fallbackMax };
@@ -55,7 +55,7 @@ export function loadIterationState(
     return created;
   }
 
-  const raw = readFileSync(statePath, "utf8");
+  const raw = readFileSync(statePath, 'utf8');
   const parsed = safeJsonParse(raw);
   const state = normalizeIterationState(parsed, fallbackMax);
   if (iterationsSet) {
@@ -75,6 +75,6 @@ export function isCircuitBroken(state: IterationState): boolean {
 export const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 
 export function buildRunFileBase(iteration: number): string {
-  const stamp = new Date().toISOString().replace(/[:.]/g, "-");
-  return `iter-${String(iteration).padStart(3, "0")}-${stamp}`;
+  const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+  return `iter-${String(iteration).padStart(3, '0')}-${stamp}`;
 }

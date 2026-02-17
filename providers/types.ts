@@ -1,10 +1,10 @@
-import type { CliOptions, PreviewEntry, UsageSummary } from "../core/types";
+import type { CliOptions, PreviewEntry, UsageSummary } from '../core/types';
 
 export type ProviderDefaults = {
   command: string;
   logDir: string;
   model: string;
-  reasoningEffort: "low" | "medium" | "high";
+  reasoningEffort: 'low' | 'medium' | 'high';
   yolo: boolean;
 };
 

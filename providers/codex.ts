@@ -1,9 +1,9 @@
-import type { CliOptions, PreviewEntry, UsageSummary } from "../core/types";
-import { formatShort } from "../core/text";
-import type { ProviderAdapter } from "./types";
+import type { CliOptions, PreviewEntry, UsageSummary } from '../core/types';
+import { formatShort } from '../core/text';
+import type { ProviderAdapter } from './types';
 
 function isObject(value: unknown): value is Record<string, unknown> {
-  return !!value && typeof value === "object" && !Array.isArray(value);
+  return !!value && typeof value === 'object' && !Array.isArray(value);
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -19,22 +19,22 @@ function safeJsonParse(text: string): unknown | null {
 }
 
 function firstStringValue(value: unknown): string {
-  if (typeof value === "string") {
+  if (typeof value === 'string') {
     return value.trim();
   }
   if (Array.isArray(value)) {
     const combined = value
       .map((entry) => firstStringValue(entry))
       .filter(Boolean)
-      .join("\n")
+      .join('\n')
       .trim();
     return combined;
   }
   if (!isRecord(value)) {
-    return "";
+    return '';
   }
 
-  const keyPriority = ["text", "content", "output", "message", "data", "summary"];
+  const keyPriority = ['text', 'content', 'output', 'message', 'data', 'summary'];
   for (const key of keyPriority) {
     const nested = firstStringValue(value[key]);
     if (nested) {
@@ -45,16 +45,16 @@ function firstStringValue(value: unknown): string {
   const merged = Object.values(value)
     .map((entry) => firstStringValue(entry))
     .filter(Boolean)
-    .join(" ")
+    .join(' ')
     .trim();
   return merged;
 }
 
 function summarizeCommand(command: string): string {
-  const compact = command.replace(/\s+/g, " ").trim();
+  const compact = command.replace(/\s+/g, ' ').trim();
   const commandMatch = compact.match(/-Command\s+(.+)$/i);
   if (commandMatch) {
-    const extracted = commandMatch[1].trim().replace(/^['"]|['"]$/g, "");
+    const extracted = commandMatch[1].trim().replace(/^['"]|['"]$/g, '');
     return formatShort(extracted, 140);
   }
   return formatShort(compact, 140);
@@ -68,8 +68,8 @@ function toJsonCandidates(line: string): unknown[] {
     return values;
   }
 
-  const start = line.indexOf("{");
-  const end = line.lastIndexOf("}");
+  const start = line.indexOf('{');
+  const end = line.lastIndexOf('}');
   if (start >= 0 && end > start) {
     const embedded = safeJsonParse(line.slice(start, end + 1));
     if (embedded !== null) {
@@ -81,42 +81,42 @@ function toJsonCandidates(line: string): unknown[] {
 }
 
 function extractCodexPreviewLine(event: Record<string, unknown>): PreviewEntry | null {
-  const type = typeof event.type === "string" ? event.type : "";
+  const type = typeof event.type === 'string' ? event.type : '';
 
-  if (type === "item.started" || type === "item.completed" || type === "item.delta") {
+  if (type === 'item.started' || type === 'item.completed' || type === 'item.delta') {
     const item = isRecord(event.item) ? event.item : null;
     if (!item) {
       return null;
     }
 
-    const itemType = typeof item.type === "string" ? item.type : "item";
-    if (itemType === "agent_message") {
+    const itemType = typeof item.type === 'string' ? item.type : 'item';
+    if (itemType === 'agent_message') {
       const payload = firstStringValue(item.text ?? item.content ?? item.message);
-      return payload ? { kind: "assistant", label: "assistant", text: formatShort(payload) } : null;
+      return payload ? { kind: 'assistant', label: 'assistant', text: formatShort(payload) } : null;
     }
-    if (itemType === "reasoning") {
+    if (itemType === 'reasoning') {
       const payload = firstStringValue(item.text ?? item.summary ?? item.content ?? item.message);
       return payload
-        ? { kind: "reasoning", label: "reasoning", text: formatShort(payload, 200) }
+        ? { kind: 'reasoning', label: 'reasoning', text: formatShort(payload, 200) }
         : null;
     }
     if (
-      itemType === "command_execution" ||
-      itemType.includes("tool") ||
-      itemType.includes("call")
+      itemType === 'command_execution' ||
+      itemType.includes('tool') ||
+      itemType.includes('call')
     ) {
       const commandText = firstStringValue(item.command ?? item.input ?? item.name);
-      const status = typeof item.status === "string" ? item.status : "";
-      const exitCode = typeof item.exit_code === "number" ? item.exit_code : null;
+      const status = typeof item.status === 'string' ? item.status : '';
+      const exitCode = typeof item.exit_code === 'number' ? item.exit_code : null;
       if (!commandText) {
         return null;
       }
       const summarized = summarizeCommand(commandText);
-      const statusPrefix = status ? `${status}: ` : type === "item.started" ? "in_progress: " : "";
-      const suffix = exitCode === null ? "" : ` (exit ${exitCode})`;
+      const statusPrefix = status ? `${status}: ` : type === 'item.started' ? 'in_progress: ' : '';
+      const suffix = exitCode === null ? '' : ` (exit ${exitCode})`;
       return {
-        kind: "tool",
-        label: "tool",
+        kind: 'tool',
+        label: 'tool',
         text: `${statusPrefix}${summarized}${suffix}`,
       };
     }
@@ -125,26 +125,26 @@ function extractCodexPreviewLine(event: Record<string, unknown>): PreviewEntry |
     if (!fallbackItemText) {
       return null;
     }
-    const fallbackKind: PreviewEntry["kind"] = itemType.includes("reason")
-      ? "reasoning"
-      : itemType.includes("error")
-        ? "error"
-        : "message";
+    const fallbackKind: PreviewEntry['kind'] = itemType.includes('reason')
+      ? 'reasoning'
+      : itemType.includes('error')
+        ? 'error'
+        : 'message';
     return { kind: fallbackKind, label: itemType, text: formatShort(fallbackItemText) };
   }
 
-  if (type === "error") {
+  if (type === 'error') {
     const payload = firstStringValue(event.error ?? event.message ?? event);
-    return payload ? { kind: "error", label: "error", text: formatShort(payload) } : null;
+    return payload ? { kind: 'error', label: 'error', text: formatShort(payload) } : null;
   }
 
   const genericPayload = firstStringValue(event.message ?? event.content ?? event.text);
   if (!genericPayload) {
     return null;
   }
-  const label = type || "message";
+  const label = type || 'message';
   return {
-    kind: label.includes("reason") ? "reasoning" : label.includes("error") ? "error" : "message",
+    kind: label.includes('reason') ? 'reasoning' : label.includes('error') ? 'error' : 'message',
     label,
     text: formatShort(genericPayload),
   };
@@ -193,12 +193,12 @@ function collectRawJsonLines(output: string, previewCount: number): string[] {
     .split(/\r?\n/)
     .map((line) => line.trim())
     .filter(Boolean)
-    .filter((line) => line.includes("{") || line.includes("}"));
+    .filter((line) => line.includes('{') || line.includes('}'));
   return lines.slice(-previewCount);
 }
 
 function toPositiveNumber(value: unknown): number | null {
-  const numeric = typeof value === "number" ? value : Number.parseFloat(String(value));
+  const numeric = typeof value === 'number' ? value : Number.parseFloat(String(value));
   if (!Number.isFinite(numeric) || numeric <= 0) {
     return null;
   }
@@ -215,7 +215,7 @@ function extractUsageSummary(output: string): UsageSummary | null {
     if (!isRecord(parsed)) {
       continue;
     }
-    if (parsed.type !== "turn.completed") {
+    if (parsed.type !== 'turn.completed') {
       continue;
     }
     if (!isRecord(parsed.usage)) {
@@ -245,7 +245,7 @@ function findRetrySeconds(value: unknown): number | null {
     return null;
   }
 
-  const numericKeys = ["resets_in_seconds", "reset_seconds", "retry_after_seconds"];
+  const numericKeys = ['resets_in_seconds', 'reset_seconds', 'retry_after_seconds'];
   for (const key of numericKeys) {
     const found = toPositiveNumber(value[key]);
     if (found !== null) {
@@ -288,37 +288,37 @@ function extractRetryDelaySeconds(output: string): number | null {
 
 function hasNoBeadsMarker(output: string): boolean {
   const normalized = output.toLowerCase();
-  return normalized.includes("no beads available") || normalized.includes("no_beads_available");
+  return normalized.includes('no beads available') || normalized.includes('no_beads_available');
 }
 
 function formatCommandHint(command: string): string {
-  if (process.platform !== "win32") {
+  if (process.platform !== 'win32') {
     return `make sure "${command}" is installed and available in PATH`;
   }
   return `on Windows, pass --command with a full path like "C:/Users/<user>/AppData/Local/pnpm/codex.CMD"`;
 }
 
 function buildCodexExecArgs(lastMessagePath: string, options: CliOptions): string[] {
-  const args = ["exec", "--json"];
+  const args = ['exec', '--json'];
   if (options.model.trim()) {
-    args.push("-m", options.model.trim());
+    args.push('-m', options.model.trim());
   }
-  args.push("-c", `reasoning_effort="${options.reasoningEffort}"`);
+  args.push('-c', `reasoning_effort="${options.reasoningEffort}"`);
   if (options.yolo) {
-    args.push("--yolo");
+    args.push('--yolo');
   }
-  args.push("--output-last-message", lastMessagePath, "-");
+  args.push('--output-last-message', lastMessagePath, '-');
   return args;
 }
 
 export const codexProvider: ProviderAdapter = {
-  name: "codex",
-  displayName: "Codex",
+  name: 'codex',
+  displayName: 'Codex',
   defaults: {
-    command: "codex",
-    logDir: ".ai_agents/logs/codex-loop",
-    model: "gpt-5.3-codex-spark",
-    reasoningEffort: "high",
+    command: 'codex',
+    logDir: '.ai_agents/logs/codex-loop',
+    model: 'gpt-5.3-codex-spark',
+    reasoningEffort: 'high',
     yolo: true,
   },
   buildExecArgs: buildCodexExecArgs,
