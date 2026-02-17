@@ -5,7 +5,7 @@ Project documentation index.
 - [`config.md`](./config.md): configuration model, load paths, merge order, platform rules, review loop config.
 - [`review-loop.md`](./review-loop.md): optional slot-local review/fix loop lifecycle, verdict contract, and prompt resolution.
 - [`prompt-contract.md`](./prompt-contract.md): canonical default developer/reviewer prompt content contract, provenance, and safety guardrails.
-- [`tui-refinement-spec.md`](./tui-refinement-spec.md): notch header, Dev/Review tabs, and responsive iteration strip contract for bead 10 implementation.
+- [`tui-refinement-spec.md`](./tui-refinement-spec.md): interaction model, keyboard/contracts, Dev/Review tabs, and responsive iteration strip.
 - [`tui-parity-plan.md`](./tui-parity-plan.md): feature gap matrix vs `ralph-tui` reference (RunApp and TUI guide), with Core/Enhanced/Advanced tiers.
 - [`testing.md`](./testing.md): test directory layout, naming convention, and exception policy.
 - [`provider-adapter-boundary.md`](./provider-adapter-boundary.md): provider boundary and shared parsing/retry ownership rules.

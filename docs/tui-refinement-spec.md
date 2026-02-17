@@ -129,6 +129,36 @@
   - badge text (`REVIEW`, `FIX`, `R`, `F`) must carry meaning without relying on color.
   - truncation always keeps bead id prefix when feasible for disambiguation.
 
+## Interaction model and state transitions
+
+`tui/tui.tsx` drives these transitions through `transitionTuiInteractionState` and view state.
+
+### Keyboard contract
+
+| Input | Scope | Effect |
+| --- | --- | --- |
+| `?` / `h` | global | Toggle help panel |
+| `d` | global | Toggle dashboard overlay |
+| `Tab` | `tasks` view | Toggle focused pane (`agents` ↔ `iterations`) |
+| `←` / `→` | global | Cycle to previous/next view (`tasks` → `iterations` → `iteration-detail` → `reviewer`) |
+| `1`/`2`/`3`/`4` | global | Jump to `tasks` / `iterations` / `iteration-detail` / `reviewer` |
+| `j` `k` `↑` `↓` | focus-aware | Move selected index in focused pane |
+| `[` `]` | iteration-pane | Adjust selected iteration cursor |
+| `Enter` | iteration-pane + non-detail view | Open `iteration-detail` |
+
+### Deterministic interaction snapshots
+
+- Rendered help strings are centralized in the TUI help text block; changes should update tests that assert this contract.
+- Navigation boundaries use clamp logic to avoid underflow/overflow in both agent and iteration selections.
+- `reviewer` and `iteration-detail` are stable, deterministic view states and can be exercised with unit transition tests.
+
+### TUI troubleshooting
+
+- If iteration cursor appears frozen, ensure focus is `iterations` (tasks view defaults to `agents` when agents exist).
+- If arrow/`jk` keys no-op, the focused pane/view likely clamps at its boundary.
+- If `Enter` appears ineffective, ensure the current pane is `iterations` and view is not already `iteration-detail`.
+- If help/dashboard text is out of date, update both `docs/tui-refinement-spec.md` and `tests/tui/tui.test.ts`.
+
 ## Empty/Error States
 - No picked bead: keep header copy `no bead picked`; tabs still render with `Dev` active.
 - No reviewer content yet: `Review` tab shows `pending review output`.

@@ -81,6 +81,20 @@ describe('Ink TUI rendering helpers', () => {
     expect(narrow.retryCount).toBe(11);
     expect(narrow.failedCount).toBe(1);
   });
+
+  it('handles zero-width timeline input with deterministic fallback', () => {
+    const timeline = makeTimeline(1, 0);
+    const tiny = buildIterationStripParts(timeline, 120);
+    expect(tiny).toEqual({
+      chips: [],
+      prevCount: 0,
+      compactLabels: true,
+      fallbackOnly: true,
+      retryCount: 11,
+      failedCount: 1,
+    });
+  });
+
 });
 
 describe('Ink TUI interaction state', () => {
@@ -99,6 +113,25 @@ describe('Ink TUI interaction state', () => {
     expect(direct.focusedPane).toBe('iterations');
     const reversed = transitionTuiInteractionState(direct, '', { leftArrow: true });
     expect(reversed.view).toBe('iterations');
+  });
+
+  it('cycles focus and view safely across boundary transitions', () => {
+    const state = buildInitialTuiInteractionState(2, 4);
+
+    const focusIterations = transitionTuiInteractionState(state, '', { rightArrow: true });
+    expect(focusIterations.focusedPane).toBe('iterations');
+    expect(focusIterations.view).toBe('tasks');
+
+    const nextView = transitionTuiInteractionState(focusIterations, '', { rightArrow: true });
+    expect(nextView.view).toBe('iterations');
+    expect(nextView.focusedPane).toBe('iterations');
+
+    const backToTasks = transitionTuiInteractionState(nextView, '', { leftArrow: true });
+    expect(backToTasks.view).toBe('tasks');
+    expect(backToTasks.focusedPane).toBe('iterations');
+
+    const backToAgents = transitionTuiInteractionState(backToTasks, '', { leftArrow: true });
+    expect(backToAgents.focusedPane).toBe('agents');
   });
 
   it('toggles help and tracks navigation selections', () => {
@@ -132,5 +165,38 @@ describe('Ink TUI interaction state', () => {
     const detail = transitionTuiInteractionState(moved, '', { return: true });
     expect(detail.view).toBe('iteration-detail');
     expect(detail.focusedPane).toBe('iterations');
+  });
+
+  it('keeps Enter scoped to iteration pane context', () => {
+    const base = buildInitialTuiInteractionState(2, 8);
+    const ignored = transitionTuiInteractionState(base, '', { return: true });
+    expect(ignored.view).toBe('tasks');
+    expect(ignored.focusedPane).toBe('agents');
+
+    const iterPane = transitionTuiInteractionState(base, '', { tab: true });
+    const detail = transitionTuiInteractionState(iterPane, '', { return: true });
+    expect(detail.view).toBe('iteration-detail');
+    expect(detail.focusedPane).toBe('iterations');
+  });
+
+  it('keeps direct view selectors bounded and ignore invalid input', () => {
+    const state = buildInitialTuiInteractionState(2, 8);
+    expect(transitionTuiInteractionState(state, '1', {}).view).toBe('tasks');
+    expect(transitionTuiInteractionState(state, '2', {}).view).toBe('iterations');
+    expect(transitionTuiInteractionState(state, '3', {}).view).toBe('iteration-detail');
+    expect(transitionTuiInteractionState(state, '4', {}).view).toBe('reviewer');
+    expect(transitionTuiInteractionState(state, '5', {})).toEqual(state);
+    expect(transitionTuiInteractionState(state, 'x', {})).toEqual(state);
+  });
+
+  it('toggles dashboard overlay without changing view state', () => {
+    const state = buildInitialTuiInteractionState(2, 8);
+    const dashboard = transitionTuiInteractionState(state, 'd', {});
+    expect(dashboard.dashboardVisible).toBeTrue();
+
+    const closed = transitionTuiInteractionState(dashboard, 'd', {});
+    expect(closed.dashboardVisible).toBeFalse();
+    expect(closed.view).toBe(state.view);
+    expect(closed.focusedPane).toBe(state.focusedPane);
   });
 });
