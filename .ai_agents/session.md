@@ -470,3 +470,11 @@ on-zero reviewer/fixer => slot fail, malformed JSONL invalidates snapshot, fallb
   - Reviewed `core/loop-engine.ts` and `core/loop-controller.ts` runtime wiring to keep implementation/fix on primary provider/command while review subprocess uses reviewer provider/command.
   - Learned: defaulting reviewer model to reviewer provider default in CLI path is the contract anchor for mixed-provider review loops.
   - Challenge: no end-to-end run performed in this iteration; coverage is via targeted tests and mixed-provider assertions.
+
+2026-02-17
+- Completed bead `ouroboros-12.2` (Built-in prompt assets implementation).
+  - Added `core/prompts.ts` built-in prompt asset support: `resolveBuiltinPromptPath()` and `readBuiltinPrompt()` wired to versioned `docs/prompts/developer.default.md` and `docs/prompts/reviewer.default.md`.
+  - Added `tests/core/prompts.test.ts` coverage for built-in asset existence/readability.
+  - Commit: `a04603c`.
+  - Learning: docs-backed prompt markdown is the safest maintainable location for defaults and avoids in-code string drift.
+  - Challenge: runtime fallback resolution is still pending in the next bead (`ouroboros-12.3`) to keep behavior split cleanly.
