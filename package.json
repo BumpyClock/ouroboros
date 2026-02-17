@@ -1,0 +1,10 @@
+{
+  "name": "ouroboros",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "ink": "^6.7.0",
+    "react": "^19.2.0",
+    "react-devtools-core": "^7.0.1"
+  }
+}
