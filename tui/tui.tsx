@@ -131,14 +131,14 @@ export function transitionTuiInteractionState(
     };
   }
 
-  if (key.leftArrow || normalized === 'p') {
+  if (key.leftArrow) {
     return {
       ...state,
       view: resolveNextView(state.view, true),
     };
   }
 
-  if (key.rightArrow || normalized === 'n') {
+  if (key.rightArrow) {
     return {
       ...state,
       view: resolveNextView(state.view, false),
