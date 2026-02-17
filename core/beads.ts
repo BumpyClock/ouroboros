@@ -8,22 +8,69 @@ type ShellResult = {
   stderr: string;
 };
 
-function runCommand(command: string, args: string[], cwd: string): Promise<ShellResult> {
+const BD_LIST_ARGS_READONLY = [
+  '--readonly',
+  'list',
+  '--json',
+  '--all',
+  '--limit',
+  '0',
+  '--no-pager',
+];
+const BD_LIST_ARGS = ['list', '--json', '--all', '--limit', '0', '--no-pager'];
+const BD_LIST_SOURCE_READONLY = 'bd --readonly list --json --all --limit 0 --no-pager';
+const BD_LIST_SOURCE = 'bd list --json --all --limit 0 --no-pager';
+const BD_LIST_TIMEOUT_MS = 5000;
+
+function runCommand(
+  command: string,
+  args: string[],
+  cwd: string,
+  timeoutMs: number,
+): Promise<ShellResult> {
   return new Promise((resolve, reject) => {
     const child = spawn(command, args, {
       cwd,
       stdio: ['ignore', 'pipe', 'pipe'],
     });
+    let settled = false;
     let stdout = '';
     let stderr = '';
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    const settle = (result: ShellResult) => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      if (timer) {
+        clearTimeout(timer);
+      }
+      resolve(result);
+    };
     child.stdout?.on('data', (chunk) => {
       stdout += chunk.toString();
     });
     child.stderr?.on('data', (chunk) => {
       stderr += chunk.toString();
     });
-    child.on('error', (error) => reject(error));
-    child.on('close', (status) => resolve({ status, stdout, stderr }));
+    child.on('error', (error) => {
+      if (settled) {
+        return;
+      }
+      if (timer) {
+        clearTimeout(timer);
+      }
+      reject(error);
+    });
+    child.on('close', (status) => settle({ status, stdout, stderr }));
+    timer = setTimeout(() => {
+      child.kill();
+      settle({
+        status: null,
+        stdout,
+        stderr: `${stderr}${stderr ? '\n' : ''}bd command timed out after ${timeoutMs}ms`,
+      });
+    }, timeoutMs);
   });
 }
 
@@ -154,26 +201,48 @@ export function extractReferencedBeadIds(text: string, knownIds: Set<string>): s
   return [];
 }
 
+function createUnavailableSnapshot(
+  projectRoot: string,
+  source: string,
+  error: string,
+): BeadsSnapshot {
+  return {
+    available: false,
+    source,
+    projectRoot,
+    total: 0,
+    remaining: 0,
+    open: 0,
+    inProgress: 0,
+    blocked: 0,
+    closed: 0,
+    deferred: 0,
+    remainingIssues: [],
+    byId: new Map(),
+    error,
+  };
+}
+
+function isReadonlyFlagUnsupported(stderr: string, stdout: string): boolean {
+  const combined = `${stderr}\n${stdout}`.toLowerCase();
+  return combined.includes('unknown flag: --readonly');
+}
+
 export async function loadBeadsSnapshot(projectRoot: string): Promise<BeadsSnapshot> {
   try {
-    const result = await runCommand('bd', ['list', '--json', '--all', '--limit', '0'], projectRoot);
+    let source = BD_LIST_SOURCE_READONLY;
+    let result = await runCommand('bd', BD_LIST_ARGS_READONLY, projectRoot, BD_LIST_TIMEOUT_MS);
+    if (result.status !== 0 && isReadonlyFlagUnsupported(result.stderr, result.stdout)) {
+      source = BD_LIST_SOURCE;
+      result = await runCommand('bd', BD_LIST_ARGS, projectRoot, BD_LIST_TIMEOUT_MS);
+    }
+
     if (result.status !== 0) {
-      return {
-        available: false,
-        source: 'bd list --json --all --limit 0',
+      return createUnavailableSnapshot(
         projectRoot,
-        total: 0,
-        remaining: 0,
-        open: 0,
-        inProgress: 0,
-        blocked: 0,
-        closed: 0,
-        deferred: 0,
-        remainingIssues: [],
-        byId: new Map(),
-        error:
-          result.stderr.trim() || result.stdout.trim() || `bd exited with status ${result.status}`,
-      };
+        source,
+        result.stderr.trim() || result.stdout.trim() || `bd exited with status ${result.status}`,
+      );
     }
 
     const parsed = safeJsonParse(result.stdout);
@@ -181,23 +250,9 @@ export async function loadBeadsSnapshot(projectRoot: string): Promise<BeadsSnaps
     const issues = rawIssues
       .map(normalizeIssue)
       .filter((issue): issue is BeadIssue => issue !== null);
-    return createSnapshot(projectRoot, 'bd list --json --all --limit 0', issues);
+    return createSnapshot(projectRoot, source, issues);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    return {
-      available: false,
-      source: 'bd list --json --all --limit 0',
-      projectRoot,
-      total: 0,
-      remaining: 0,
-      open: 0,
-      inProgress: 0,
-      blocked: 0,
-      closed: 0,
-      deferred: 0,
-      remainingIssues: [],
-      byId: new Map(),
-      error: message,
-    };
+    return createUnavailableSnapshot(projectRoot, BD_LIST_SOURCE_READONLY, message);
   }
 }

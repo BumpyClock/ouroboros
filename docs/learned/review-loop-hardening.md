@@ -21,11 +21,11 @@ Observed implementation:
 ## Bead snapshot validity
 
 Policy:
-- `.beads/issues.jsonl` is primary snapshot input, but is accepted only when it parses cleanly.
-- any malformed line or unparsable payload marks snapshot as unavailable.
-- when JSONL is unavailable, loop uses `bd list --json --all --limit 0` as fallback.
-- no-bead stop-marker suppression requires an available snapshot (`available: true`), so malformed JSONL cannot mask loop-stop logic.
+- snapshot input comes from `bd --readonly list --json --all --limit 0 --no-pager`.
+- when `--readonly` is unsupported by local `bd`, loop falls back to `bd list --json --all --limit 0 --no-pager`.
+- command execution is timeout-bounded to avoid blocking loop startup and prolonged lock contention.
+- no-bead stop-marker suppression requires an available snapshot (`available: true`).
 
 Observed implementation:
-- `loadBeadsSnapshotFromJsonl` returns `available: false` on malformed/partial JSONL and includes an error message.
+- `loadBeadsSnapshot` returns `available: false` when `bd` exits non-zero or times out and includes an error message.
 - `shouldIgnoreStopMarkerForNoBeads` returns `false` unless `beadsSnapshot.available === true`.

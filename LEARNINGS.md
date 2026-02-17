@@ -28,7 +28,7 @@
 - Claude stream-json tool calls can arrive as top-level `type: "assistant"` with nested `message.content[].type: "tool_use"`; classify by nested content type before top-level event type.
 - Prefer explicit bead-pick markers (`Updated issue: <id>` or `bd update <id>`) over generic id mentions; multi-id dumps should be treated as ambiguous.
 - Rich-mode empty agent cards are cleaner without `[EMPTY] no event yet` filler rows; show header only until real events arrive.
-- Reverted BEADS snapshot loading to `bd list --json --all --limit 0`; do not read `.beads/issues.jsonl` directly in runtime path.
+- BEADS snapshot loading now uses `bd --readonly list --json --all --limit 0 --no-pager` with a 5s timeout; fallback to non-readonly list only when `--readonly` is unsupported.
 
 ## Process
 - Add regression tests for bug fixes when scope permits.

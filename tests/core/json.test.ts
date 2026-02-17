@@ -70,7 +70,7 @@ describe('json helpers', () => {
     }
   });
 
-  it('uses bd list even when .beads/issues.jsonl exists', async () => {
+  it('uses readonly bd list even when .beads/issues.jsonl exists', async () => {
     const tempRoot = mkdtempSync(path.join(tmpdir(), 'ouroboros-beads-bd-source-'));
     const bdShim = path.join(tempRoot, process.platform === 'win32' ? 'bd.cmd' : 'bd');
     const oldPath = process.env.PATH ?? '';
@@ -99,9 +99,40 @@ describe('json helpers', () => {
       process.env.PATH = `${tempRoot}${pathSep}${oldPath}`;
       const snapshot = await loadBeadsSnapshot(tempRoot);
       expect(snapshot.available).toBeTrue();
-      expect(snapshot.source).toBe('bd list --json --all --limit 0');
+      expect(snapshot.source).toBe('bd --readonly list --json --all --limit 0 --no-pager');
       expect(snapshot.total).toBe(1);
       expect(snapshot.remainingIssues.map((issue) => issue.id)).toEqual(['ouroboros-42']);
+    } finally {
+      process.env.PATH = oldPath;
+      rmSync(tempRoot, { recursive: true, force: true });
+    }
+  });
+
+  it('falls back to non-readonly bd list when readonly flag is unsupported', async () => {
+    const tempRoot = mkdtempSync(path.join(tmpdir(), 'ouroboros-beads-readonly-fallback-'));
+    const bdShim = path.join(tempRoot, process.platform === 'win32' ? 'bd.cmd' : 'bd');
+    const oldPath = process.env.PATH ?? '';
+    const pathSep = process.platform === 'win32' ? ';' : ':';
+    try {
+      if (process.platform === 'win32') {
+        writeFileSync(
+          bdShim,
+          '@echo off\r\nif "%1"=="--readonly" (\r\n  1>&2 echo unknown flag: --readonly\r\n  exit /b 1\r\n)\r\necho [{"id":"ouroboros-77","title":"fallback","status":"open"}]\r\nexit /b 0\r\n',
+        );
+      } else {
+        writeFileSync(
+          bdShim,
+          '#!/usr/bin/env sh\nif [ "$1" = "--readonly" ]; then\n  echo "unknown flag: --readonly" >&2\n  exit 1\nfi\necho \'[{"id":"ouroboros-77","title":"fallback","status":"open"}]\'\n',
+        );
+        chmodSync(bdShim, 0o755);
+      }
+
+      process.env.PATH = `${tempRoot}${pathSep}${oldPath}`;
+      const snapshot = await loadBeadsSnapshot(tempRoot);
+      expect(snapshot.available).toBeTrue();
+      expect(snapshot.source).toBe('bd list --json --all --limit 0 --no-pager');
+      expect(snapshot.total).toBe(1);
+      expect(snapshot.remainingIssues.map((issue) => issue.id)).toEqual(['ouroboros-77']);
     } finally {
       process.env.PATH = oldPath;
       rmSync(tempRoot, { recursive: true, force: true });
