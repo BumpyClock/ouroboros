@@ -533,3 +533,9 @@ on-zero reviewer/fixer => slot fail, malformed JSONL invalidates snapshot, fallb
   - Added commit 2538838bec4163008660b29ded5afb4afe80ff94.
   - Learned: ANSI fallback still needs a manual terminal render smoke to verify visual alignment and width behavior since tests don’t cover terminal-frame output yet.
 
+
+- Completed bead ouroboros-11.5 (Docs and usage examples for reviewer provider/model overrides).
+  - Added mixed-provider and reviewer-model-only invocation examples to docs/config.md and docs/review-loop.md to satisfy docs coverage gaps.
+  - Commit: 21cac15`r
+  - Challenge: none
+
