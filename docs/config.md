@@ -69,19 +69,18 @@ Values are normalized into runtime types. Invalid keys are ignored.
 
 ## Review loop
 
-Current runtime behavior:
-
-- `reviewEnabled` and `reviewMaxFixAttempts` are parsed and available in runtime options.
-- Reviewer/developer prompt paths are resolved and validated at startup when review is enabled.
-- The implement->review->fix execution loop is not wired yet (planned in follow-up beads).
-
-Planned behavior (not yet active):
+When `--review` is enabled, each agent slot runs a review/fix cycle after implementation:
 
 1. Implementation runs as normal.
-2. A reviewer agent evaluates the output (using `reviewerPromptPath` if set).
-3. If the reviewer reports drift, a fix agent runs with the reviewer's follow-up prompt.
+2. Reviewer agent evaluates the output and git diff, emitting a strict JSON verdict.
+3. On `pass`, the slot succeeds. On `drift`, a fix agent runs with the reviewer's follow-up prompt.
 4. Steps 2-3 repeat up to `reviewMaxFixAttempts` (default `5`) times.
-5. Unresolved drift after max attempts fails the iteration.
+5. Unresolved drift after max attempts fails the slot and the iteration.
+6. Malformed reviewer output (non-JSON, invalid verdict) fails the slot immediately.
+
+Review is skipped when `reviewEnabled` is false (default), no reviewer prompt exists, no bead was picked, or implementation exited non-zero.
+
+For full lifecycle details and verdict contract, see [`review-loop.md`](./review-loop.md).
 
 Prompt paths use the standard prompt resolution fallback (see below).
 

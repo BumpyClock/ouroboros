@@ -2,7 +2,8 @@
 
 Project documentation index.
 
-- [`config.md`](./config.md): configuration model, load paths, merge order, platform rules.
+- [`config.md`](./config.md): configuration model, load paths, merge order, platform rules, review loop config.
+- [`review-loop.md`](./review-loop.md): optional slot-local review/fix loop lifecycle, verdict contract, and prompt resolution.
 - [`testing.md`](./testing.md): test directory layout, naming convention, and exception policy.
 - [`provider-adapter-boundary.md`](./provider-adapter-boundary.md): provider boundary and shared parsing/retry ownership rules.
 - [`learned/rich-tui-iteration-lifecycle.md`](./learned/rich-tui-iteration-lifecycle.md): loop lifecycle rendering decisions.

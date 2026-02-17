@@ -102,7 +102,7 @@ function captureGitDiff(): string {
   }
 }
 
-type SlotReviewInput = {
+export type SlotReviewInput = {
   agentId: number;
   iteration: number;
   implementResult: RunResult;
@@ -117,7 +117,7 @@ type SlotReviewInput = {
   liveRenderer: IterationLiveRenderer | null;
 };
 
-async function runSlotReviewLoop(input: SlotReviewInput): Promise<SlotReviewOutcome> {
+export async function runSlotReviewLoop(input: SlotReviewInput): Promise<SlotReviewOutcome> {
   const {
     agentId,
     iteration,
