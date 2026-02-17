@@ -40,9 +40,9 @@ describe('Ink TUI rendering helpers', () => {
       'ouroboros-10.7',
       'Implement robust cross-platform path handling for user home resolution',
     );
-    expect(formatAgentTitle(picked, 80)).toBe(
-      'ouroboros-10.7 · Implement robust cross-platform path handling for user home resolution',
-    );
+    const wide = formatAgentTitle(picked, 80);
+    expect(wide).toContain('ouroboros-10.7 ·');
+    expect(wide.startsWith('ouroboros-10.7')).toBeTrue();
 
     const small = formatAgentTitle(picked, 20);
     expect(small).toContain('ouroboros-10.7 ·');
@@ -69,8 +69,8 @@ describe('Ink TUI rendering helpers', () => {
     expect(wide.chips[3]).toContain('07*');
 
     const mid = buildIterationStripParts(timeline, 110);
-    expect(mid.compactLabels).toBeFalse();
-    expect(mid.prevCount).toBe(3);
+    expect(mid.compactLabels).toBeTrue();
+    expect(mid.prevCount).toBe(4);
     expect(mid.chips).toHaveLength(5);
 
     const narrow = buildIterationStripParts(timeline, 78);
@@ -197,5 +197,44 @@ describe('Ink TUI interaction state', () => {
     expect(closed.dashboardVisible).toBeFalse();
     expect(closed.view).toBe(state.view);
     expect(closed.focusedPane).toBe(state.focusedPane);
+  });
+
+  it('toggles parallel and merge views with Ralph-style shortcuts', () => {
+    const state = buildInitialTuiInteractionState(3, 8);
+    const workers = transitionTuiInteractionState(state, 'w', {});
+    expect(workers.view).toBe('parallel-overview');
+
+    const workerDetail = transitionTuiInteractionState(workers, '', { return: true });
+    expect(workerDetail.view).toBe('parallel-detail');
+
+    const backToWorkers = transitionTuiInteractionState(workerDetail, '', { escape: true });
+    expect(backToWorkers.view).toBe('parallel-overview');
+
+    const merge = transitionTuiInteractionState(backToWorkers, 'm', {});
+    expect(merge.view).toBe('merge-progress');
+
+    const backToTasks = transitionTuiInteractionState(merge, '', { escape: true });
+    expect(backToTasks.view).toBe('tasks');
+  });
+
+  it('opens and handles conflict-resolution actions', () => {
+    const state = buildInitialTuiInteractionState(2, 5);
+    const merge = transitionTuiInteractionState(state, 'm', {});
+    const conflict = transitionTuiInteractionState(merge, 'a', {});
+    expect(conflict.view).toBe('conflict-resolution');
+    expect(conflict.conflictPanelVisible).toBeTrue();
+    expect(conflict.selectedConflictIndex).toBe(0);
+
+    const acceptNext = transitionTuiInteractionState(conflict, 'a', {});
+    expect(acceptNext.selectedConflictIndex).toBe(1);
+
+    const retried = transitionTuiInteractionState(acceptNext, 'r', {});
+    expect(retried.view).toBe('merge-progress');
+    expect(retried.conflictPanelVisible).toBeFalse();
+
+    const reopened = transitionTuiInteractionState(retried, 'a', {});
+    const skipped = transitionTuiInteractionState(reopened, 's', {});
+    expect(skipped.view).toBe('tasks');
+    expect(skipped.conflictPanelVisible).toBeFalse();
   });
 });

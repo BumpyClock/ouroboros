@@ -139,12 +139,20 @@
 | --- | --- | --- |
 | `?` / `h` | global | Toggle help panel |
 | `d` | global | Toggle dashboard overlay |
+| `w` | global | Toggle parallel workers overview (`tasks` ↔ `parallel-overview`) |
+| `m` | global | Toggle merge progress view (`tasks` ↔ `merge-progress`) |
 | `Tab` | `tasks` view | Toggle focused pane (`agents` ↔ `iterations`) |
-| `←` / `→` | global | Cycle to previous/next view (`tasks` → `iterations` → `iteration-detail` → `reviewer`) |
+| `←` / `→` | global | Cycle to previous/next view (`tasks` → `iterations` → `iteration-detail` → `reviewer` → `parallel-overview` → `merge-progress`) |
 | `1`/`2`/`3`/`4` | global | Jump to `tasks` / `iterations` / `iteration-detail` / `reviewer` |
 | `j` `k` `↑` `↓` | focus-aware | Move selected index in focused pane |
 | `[` `]` | iteration-pane | Adjust selected iteration cursor |
 | `Enter` | iteration-pane + non-detail view | Open `iteration-detail` |
+| `Enter` | `parallel-overview` | Open `parallel-detail` |
+| `a` | `merge-progress` | Open `conflict-resolution` |
+| `a` | `conflict-resolution` | Accept selected conflict item (advance selection) |
+| `r` | `conflict-resolution` | Retry AI conflict action and return to `merge-progress` |
+| `s` | `conflict-resolution` | Skip conflicted item and return to `tasks` |
+| `Esc` | detail/overlay views | Back navigation (`parallel-detail`→`parallel-overview`; `merge/conflict`→`tasks`) |
 
 ### Deterministic interaction snapshots
 

@@ -25,16 +25,35 @@ type Toast = {
 };
 
 type Listener = () => void;
-export type TuiView = 'tasks' | 'iterations' | 'iteration-detail' | 'reviewer';
+export type TuiView =
+  | 'tasks'
+  | 'iterations'
+  | 'iteration-detail'
+  | 'reviewer'
+  | 'parallel-overview'
+  | 'parallel-detail'
+  | 'merge-progress'
+  | 'conflict-resolution';
 type TuiPane = 'agents' | 'iterations';
-const VIEW_SEQUENCE: TuiView[] = ['tasks', 'iterations', 'iteration-detail', 'reviewer'];
+const VIEW_SEQUENCE: TuiView[] = [
+  'tasks',
+  'iterations',
+  'iteration-detail',
+  'reviewer',
+  'parallel-overview',
+  'merge-progress',
+];
 const DEFAULT_HELP_TEXT = [
   '? / h: help',
   'Tab: next focus (tasks view)',
   '←/→: prev/next view',
   'j/k/↑/↓: move selection in focused pane',
   'Enter: open selected iteration detail',
-  '[ ]: iteration cursor (iteration detail)',
+  '[ ]: iteration cursor',
+  'w: workers view, m: merge view',
+  'a: open/accept conflict resolution',
+  'r/s: retry/skip conflict action',
+  'Esc: close detail/overlay view',
   '1/2/3/4: direct view selection',
   'd: dashboard overlay',
 ];
@@ -55,13 +74,17 @@ export type InkInputKey = {
   upArrow?: boolean;
   downArrow?: boolean;
   return?: boolean;
+  escape?: boolean;
 };
 
 export type TuiInteractionState = {
   view: TuiView;
   focusedPane: TuiPane;
   selectedAgentIndex: number;
+  selectedWorkerIndex: number;
   selectedIteration: number;
+  selectedConflictIndex: number;
+  conflictPanelVisible: boolean;
   helpVisible: boolean;
   dashboardVisible: boolean;
   agentCount: number;
@@ -85,7 +108,10 @@ export function buildInitialTuiInteractionState(
     view: 'tasks',
     focusedPane: safeAgentCount > 0 ? 'agents' : 'iterations',
     selectedAgentIndex: safeAgentCount > 0 ? 0 : -1,
+    selectedWorkerIndex: safeAgentCount > 0 ? 0 : 0,
     selectedIteration: safeMaxIterations > 0 ? 1 : 1,
+    selectedConflictIndex: 0,
+    conflictPanelVisible: false,
     helpVisible: false,
     dashboardVisible: false,
     agentCount: safeAgentCount,
@@ -117,6 +143,18 @@ function withAgentDelta(state: TuiInteractionState, delta: number): TuiInteracti
   };
 }
 
+function withWorkerDelta(state: TuiInteractionState, delta: number): TuiInteractionState {
+  const max = Math.max(0, state.agentCount - 1);
+  const nextIndex = clampIndex(state.selectedWorkerIndex + delta, 0, max);
+  if (nextIndex === state.selectedWorkerIndex) {
+    return state;
+  }
+  return {
+    ...state,
+    selectedWorkerIndex: nextIndex,
+  };
+}
+
 function withIterationDelta(state: TuiInteractionState, delta: number): TuiInteractionState {
   const max = Math.max(1, state.maxIterations);
   const next = clampIndex(state.selectedIteration + delta, 1, max);
@@ -129,16 +167,155 @@ function withIterationDelta(state: TuiInteractionState, delta: number): TuiInter
   };
 }
 
+function withConflictDelta(state: TuiInteractionState, delta: number): TuiInteractionState {
+  const max = Math.max(0, state.maxIterations - 1);
+  const next = clampIndex(state.selectedConflictIndex + delta, 0, max);
+  if (next === state.selectedConflictIndex) {
+    return state;
+  }
+  return {
+    ...state,
+    selectedConflictIndex: next,
+  };
+}
+
+function syncTuiInteractionState(
+  state: TuiInteractionState,
+  agentCount: number,
+  maxIterations: number,
+): TuiInteractionState {
+  const safeAgentCount = Math.max(0, agentCount);
+  const safeMaxIterations = Math.max(1, maxIterations);
+  const selectedAgentIndex =
+    safeAgentCount > 0 ? clampIndex(state.selectedAgentIndex, 0, safeAgentCount - 1) : -1;
+  const selectedWorkerIndex = clampIndex(
+    state.selectedWorkerIndex,
+    0,
+    Math.max(0, safeAgentCount - 1),
+  );
+  const selectedIteration = clampIndex(state.selectedIteration, 1, safeMaxIterations);
+  const selectedConflictIndex = clampIndex(
+    state.selectedConflictIndex,
+    0,
+    Math.max(0, safeMaxIterations - 1),
+  );
+  const focusedPane =
+    safeAgentCount === 0 && state.focusedPane === 'agents' ? 'iterations' : state.focusedPane;
+  if (
+    state.agentCount === safeAgentCount &&
+    state.maxIterations === safeMaxIterations &&
+    state.selectedAgentIndex === selectedAgentIndex &&
+    state.selectedWorkerIndex === selectedWorkerIndex &&
+    state.selectedIteration === selectedIteration &&
+    state.selectedConflictIndex === selectedConflictIndex &&
+    state.focusedPane === focusedPane
+  ) {
+    return state;
+  }
+  return {
+    ...state,
+    focusedPane,
+    selectedAgentIndex,
+    selectedWorkerIndex,
+    selectedIteration,
+    selectedConflictIndex,
+    agentCount: safeAgentCount,
+    maxIterations: safeMaxIterations,
+  };
+}
+
 export function transitionTuiInteractionState(
   state: TuiInteractionState,
   input: string,
   key: InkInputKey,
 ): TuiInteractionState {
   const normalized = input.toLowerCase();
+  if (key.escape) {
+    if (state.helpVisible || state.dashboardVisible) {
+      return {
+        ...state,
+        helpVisible: false,
+        dashboardVisible: false,
+      };
+    }
+    if (state.view === 'conflict-resolution') {
+      return {
+        ...state,
+        view: 'merge-progress',
+        conflictPanelVisible: false,
+      };
+    }
+    if (state.view === 'parallel-detail') {
+      return {
+        ...state,
+        view: 'parallel-overview',
+      };
+    }
+    if (state.view === 'parallel-overview' || state.view === 'merge-progress') {
+      return {
+        ...state,
+        view: 'tasks',
+      };
+    }
+    if (state.view === 'iteration-detail') {
+      return {
+        ...state,
+        view: 'iterations',
+      };
+    }
+  }
+
+  if (normalized === 'w') {
+    return {
+      ...state,
+      view: state.view === 'parallel-overview' ? 'tasks' : 'parallel-overview',
+      conflictPanelVisible: false,
+    };
+  }
+
+  if (normalized === 'm') {
+    return {
+      ...state,
+      view: state.view === 'merge-progress' ? 'tasks' : 'merge-progress',
+      conflictPanelVisible: false,
+    };
+  }
+
+  if (state.view === 'merge-progress' && normalized === 'a') {
+    return {
+      ...state,
+      view: 'conflict-resolution',
+      conflictPanelVisible: true,
+      selectedConflictIndex: 0,
+    };
+  }
+
+  if (state.view === 'conflict-resolution' && normalized === 'a') {
+    return withConflictDelta(state, 1);
+  }
+
+  if (state.view === 'conflict-resolution' && normalized === 'r') {
+    return {
+      ...state,
+      view: 'merge-progress',
+      conflictPanelVisible: false,
+    };
+  }
+
+  if (state.view === 'conflict-resolution' && normalized === 's') {
+    return {
+      ...state,
+      view: 'tasks',
+      conflictPanelVisible: false,
+    };
+  }
+
   const iterationPaneActive =
     state.view === 'iterations' ||
     state.view === 'iteration-detail' ||
     state.focusedPane === 'iterations';
+  const workerPaneActive = state.view === 'parallel-overview' || state.view === 'parallel-detail';
+  const conflictPaneActive = state.view === 'conflict-resolution' || state.conflictPanelVisible;
   if (normalized === '?' || normalized === 'h') {
     return {
       ...state,
@@ -188,14 +365,22 @@ export function transitionTuiInteractionState(
 
   if (normalized === '1' || normalized === '2' || normalized === '3' || normalized === '4') {
     const target = Number.parseInt(normalized, 10) - 1;
+    const targetView = VIEW_SEQUENCE[target];
     return {
       ...state,
-      view: VIEW_SEQUENCE[target],
-      focusedPane: VIEW_SEQUENCE[target] === 'iterations' ? 'iterations' : 'agents',
+      view: targetView,
+      focusedPane:
+        targetView === 'iterations' || targetView === 'iteration-detail' ? 'iterations' : 'agents',
     };
   }
 
   if (key.upArrow || normalized === 'k') {
+    if (conflictPaneActive) {
+      return withConflictDelta(state, -1);
+    }
+    if (workerPaneActive) {
+      return withWorkerDelta(state, -1);
+    }
     if (iterationPaneActive) {
       return withIterationDelta(state, -1);
     }
@@ -203,6 +388,12 @@ export function transitionTuiInteractionState(
   }
 
   if (key.downArrow || normalized === 'j') {
+    if (conflictPaneActive) {
+      return withConflictDelta(state, 1);
+    }
+    if (workerPaneActive) {
+      return withWorkerDelta(state, 1);
+    }
     if (iterationPaneActive) {
       return withIterationDelta(state, 1);
     }
@@ -222,6 +413,13 @@ export function transitionTuiInteractionState(
       ...state,
       view: 'iteration-detail',
       focusedPane: 'iterations',
+    };
+  }
+
+  if (key.return && state.view === 'parallel-overview') {
+    return {
+      ...state,
+      view: 'parallel-detail',
     };
   }
 
@@ -791,6 +989,8 @@ function renderViewHelp(helpVisible: boolean): React.JSX.Element | null {
 }
 
 function renderIterationDetail(
+  liveState: LiveRunState,
+  renderer: InkLiveRunRenderer,
   state: TuiInteractionState,
   timeline: LiveRunIterationTimeline,
   columns: number,
@@ -803,6 +1003,58 @@ function renderIterationDetail(
   const statusLine = marker
     ? `${marker.isCurrent ? 'current' : 'history'} ${marker.succeeded ? 'success' : marker.failed ? 'failed' : 'pending'}`
     : 'pending';
+  const selectedAgentId =
+    liveState.agentIds.length === 0
+      ? null
+      : liveState.agentIds[clampIndex(state.selectedAgentIndex, 0, liveState.agentIds.length - 1)];
+  const selectedAgentSelector =
+    selectedAgentId === null ? null : renderer.getAgentSelector(selectedAgentId);
+  const selectedAgentSnapshot =
+    selectedAgentId === null ? null : (liveState.agentState.get(selectedAgentId) ?? null);
+  const startTime = liveState.runContext
+    ? new Date(liveState.runContext.startedAt).toLocaleTimeString()
+    : 'n/a';
+  const loopNotice = liveState.loopNotice ?? 'none';
+  const timelineRows: React.JSX.Element[] = [
+    <Text key="iter-event-start">
+      <StatusText tone="info" text={`▶ ${startTime}`} />{' '}
+      <StatusText tone="muted" text="iteration scope started" />
+    </Text>,
+    <Text key="iter-event-phase">
+      <StatusText tone="neutral" text={`⚙ ${liveState.loopPhase}`} />{' '}
+      <StatusText tone="muted" text="loop phase" />
+    </Text>,
+    <Text key="iter-event-notice">
+      <StatusText tone={liveState.loopNoticeTone} text={`• ${loopNotice}`} />
+    </Text>,
+  ];
+  if (marker?.failed) {
+    timelineRows.push(
+      <Text key="iter-event-failed">
+        <StatusText tone="error" text="✗ iteration marked failed" />
+      </Text>,
+    );
+  } else if (marker?.succeeded) {
+    timelineRows.push(
+      <Text key="iter-event-ok">
+        <StatusText tone="success" text="✓ iteration marked success" />
+      </Text>,
+    );
+  } else {
+    timelineRows.push(
+      <Text key="iter-event-pending">
+        <StatusText tone="muted" text="○ iteration pending outcome" />
+      </Text>,
+    );
+  }
+  if (marker && marker.retryCount > 0) {
+    timelineRows.push(
+      <Text key="iter-event-retry">
+        <StatusText tone="warn" text={`↻ retry count ${marker.retryCount}`} />
+      </Text>,
+    );
+  }
+
   return (
     <Box
       marginTop={1}
@@ -818,7 +1070,342 @@ function renderIterationDetail(
       <Text>
         <StatusText tone="muted" text={`${statusLine} · ${retryText}`} />
       </Text>
+      <Text>
+        {renderStatusBadge('TASK', 'muted')}{' '}
+        <StatusText
+          tone="neutral"
+          text={`iter ${state.selectedIteration}/${timeline.maxIterations}`}
+        />
+      </Text>
+      <Box
+        marginTop={1}
+        borderStyle="round"
+        borderColor={toneToColor('info')}
+        flexDirection="column"
+        paddingX={1}
+      >
+        <Text>
+          {renderStatusBadge('TIMELINE', 'info')} <StatusText tone="muted" text="event stream" />
+        </Text>
+        {timelineRows}
+      </Box>
+      <Box
+        marginTop={1}
+        borderStyle="round"
+        borderColor={toneToColor('muted')}
+        flexDirection="column"
+        paddingX={1}
+      >
+        <Text>
+          {renderStatusBadge('AGENT', selectedAgentSelector?.statusTone ?? 'muted')}{' '}
+          <StatusText
+            tone="neutral"
+            text={
+              selectedAgentId === null
+                ? 'no agent selected'
+                : `A${selectedAgentId} ${selectedAgentSelector?.statusLabel ?? 'WAIT'}`
+            }
+          />
+        </Text>
+        {selectedAgentSelector?.pickedBead ? (
+          <Text>
+            <StatusText
+              tone="success"
+              text={`${selectedAgentSelector.pickedBead.id} · ${formatShort(selectedAgentSelector.pickedBead.title, Math.max(20, columns - 36))}`}
+            />
+          </Text>
+        ) : (
+          <Text>
+            <StatusText tone="muted" text="no picked bead metadata" />
+          </Text>
+        )}
+        {selectedAgentSnapshot?.lines.length ? (
+          selectedAgentSnapshot.lines.map((line, index) => (
+            <Text key={buildPreviewRowKey(selectedAgentId ?? 0, index)}>
+              <StatusText
+                tone={line.tone}
+                text={`${line.label.toUpperCase()}: ${formatShort(line.text, Math.max(20, columns - 30))}`}
+              />
+            </Text>
+          ))
+        ) : (
+          <Text>
+            <StatusText tone="muted" text="no agent output lines for this slot yet" />
+          </Text>
+        )}
+      </Box>
       {renderIterationStrip(timeline, columns)}
+    </Box>
+  );
+}
+
+function buildMergeQueueRows(timeline: LiveRunIterationTimeline): IterationQueueMarker[] {
+  return timeline.markers
+    .filter(
+      (marker) =>
+        marker.iteration <= timeline.currentIteration || marker.retryCount > 0 || marker.failed,
+    )
+    .map((marker) => ({
+      iteration: marker.iteration,
+      retryCount: marker.retryCount,
+      failed: marker.failed,
+    }));
+}
+
+function renderParallelOverview(
+  state: LiveRunState,
+  renderer: InkLiveRunRenderer,
+  uiState: TuiInteractionState,
+  timeline: LiveRunIterationTimeline,
+  columns: number,
+): React.JSX.Element {
+  const selectedWorker = clampIndex(
+    uiState.selectedWorkerIndex,
+    0,
+    Math.max(0, state.agentIds.length - 1),
+  );
+  const mergeQueueRows = buildMergeQueueRows(timeline);
+  return (
+    <Box key="parallel-overview" marginTop={1} flexDirection="column">
+      <Text>
+        {renderStatusBadge('WORKERS', 'info')}{' '}
+        <StatusText tone="neutral" text={`(${state.agentIds.length}) group 1/1`} />
+      </Text>
+      {state.agentIds.length === 0 ? (
+        <Text>
+          <StatusText tone="muted" text="no workers yet" />
+        </Text>
+      ) : (
+        state.agentIds.map((agentId, index) => {
+          const selector = renderer.getAgentSelector(agentId);
+          const selected = index === selectedWorker;
+          const indicator =
+            selector.statusLabel === 'WAIT' ||
+            selector.statusLabel === 'QUEUED' ||
+            selector.statusLabel === 'SPAWN'
+              ? '○'
+              : selector.statusLabel === 'FIX'
+                ? '⚠'
+                : '▶';
+          const taskText = selector.pickedBead
+            ? `${selector.pickedBead.id} · ${formatShort(selector.pickedBead.title, Math.max(16, columns - 40))}`
+            : 'no bead picked';
+          return (
+            <Text key={`worker-${agentId}`}>
+              <StatusText tone={selected ? 'info' : 'muted'} text={selected ? '▸' : ' '} />{' '}
+              <StatusText tone={selector.statusTone} text={`${indicator} W${index + 1}`} />{' '}
+              <StatusText tone="muted" text={`[${state.iteration}/${state.maxIterations}]`} />{' '}
+              <StatusText tone="neutral" text={taskText} />
+            </Text>
+          );
+        })
+      )}
+      <Box
+        marginTop={1}
+        borderStyle="round"
+        borderColor={toneToColor('muted')}
+        flexDirection="column"
+        paddingX={1}
+      >
+        <Text>
+          <StatusText tone="muted" text="─── Merge Queue ───" />
+        </Text>
+        {mergeQueueRows.length === 0 ? (
+          <Text>
+            <StatusText tone="muted" text="queue empty" />
+          </Text>
+        ) : (
+          mergeQueueRows.slice(-6).map((row) => (
+            <Text key={`merge-queue-${row.iteration}`}>
+              <StatusText tone={row.failed ? 'warn' : 'muted'} text={row.failed ? '⚡' : '⋯'} />{' '}
+              <StatusText
+                tone="neutral"
+                text={`I${String(row.iteration).padStart(2, '0')} → main`}
+              />{' '}
+              <StatusText
+                tone={row.failed ? 'warn' : 'muted'}
+                text={
+                  row.failed
+                    ? 'conflicted'
+                    : row.retryCount > 0
+                      ? `queued R${row.retryCount}`
+                      : 'queued'
+                }
+              />
+            </Text>
+          ))
+        )}
+      </Box>
+    </Box>
+  );
+}
+
+function renderParallelDetail(
+  state: LiveRunState,
+  renderer: InkLiveRunRenderer,
+  uiState: TuiInteractionState,
+  columns: number,
+): React.JSX.Element {
+  if (state.agentIds.length === 0) {
+    return (
+      <Box key="parallel-detail-empty" marginTop={1}>
+        <Text>
+          <StatusText tone="muted" text="no worker selected" />
+        </Text>
+      </Box>
+    );
+  }
+  const workerIndex = clampIndex(uiState.selectedWorkerIndex, 0, state.agentIds.length - 1);
+  const workerAgentId = state.agentIds[workerIndex];
+  const selector = renderer.getAgentSelector(workerAgentId);
+  const snapshot = state.agentState.get(workerAgentId);
+  const title = selector.pickedBead
+    ? `${selector.pickedBead.id} · ${formatShort(selector.pickedBead.title, Math.max(20, columns - 24))}`
+    : 'no bead picked';
+  return (
+    <Box key="parallel-detail" marginTop={1} flexDirection="column">
+      <Text>
+        {renderStatusBadge('WORKER', 'info')}{' '}
+        <StatusText tone="neutral" text={`W${workerIndex + 1} A${workerAgentId}`} />{' '}
+        <StatusText tone={selector.statusTone} text={selector.statusLabel} />
+      </Text>
+      <Text>
+        <StatusText tone="muted" text={`task ${title}`} />
+      </Text>
+      <Text>
+        <StatusText tone="muted" text={`iteration ${state.iteration}/${state.maxIterations}`} />
+      </Text>
+      <Box
+        marginTop={1}
+        borderStyle="round"
+        borderColor={toneToColor('info')}
+        flexDirection="column"
+        paddingX={1}
+      >
+        <Text>
+          <StatusText tone="info" text="worker output" />
+        </Text>
+        {snapshot?.lines.length ? (
+          snapshot.lines.map((line, index) => (
+            <Text key={buildPreviewRowKey(workerAgentId, index)}>
+              <StatusText
+                tone={line.tone}
+                text={`${line.label.toUpperCase()}: ${formatShort(line.text, Math.max(20, columns - 30))}`}
+              />
+            </Text>
+          ))
+        ) : (
+          <Text>
+            <StatusText tone="muted" text="no output lines yet" />
+          </Text>
+        )}
+      </Box>
+    </Box>
+  );
+}
+
+function renderMergeProgress(
+  timeline: LiveRunIterationTimeline,
+  _uiState: TuiInteractionState,
+): React.JSX.Element {
+  const mergeQueueRows = buildMergeQueueRows(timeline);
+  const merged = timeline.markers.filter((marker) => marker.succeeded).length;
+  return (
+    <Box key="merge-progress" marginTop={1} flexDirection="column">
+      <Text>
+        {renderStatusBadge('MERGE', 'info')}{' '}
+        <StatusText tone="neutral" text={`queue (${merged}/${timeline.maxIterations} merged)`} />
+      </Text>
+      <Text>
+        <StatusText tone="muted" text="Backup: ouroboros/session-start/current" />
+      </Text>
+      <Box
+        marginTop={1}
+        borderStyle="round"
+        borderColor={toneToColor('muted')}
+        flexDirection="column"
+        paddingX={1}
+      >
+        {mergeQueueRows.length === 0 ? (
+          <Text>
+            <StatusText tone="muted" text="no merge activity yet" />
+          </Text>
+        ) : (
+          mergeQueueRows.map((row) => (
+            <Text key={`merge-row-${row.iteration}`}>
+              <StatusText
+                tone={row.failed ? 'warn' : row.retryCount > 0 ? 'info' : 'success'}
+                text={row.failed ? '⚡' : row.retryCount > 0 ? '⟳' : '✓'}
+              />{' '}
+              <StatusText
+                tone="neutral"
+                text={`task-${String(row.iteration).padStart(3, '0')} → main`}
+              />{' '}
+              <StatusText
+                tone={row.failed ? 'warn' : row.retryCount > 0 ? 'info' : 'success'}
+                text={
+                  row.failed
+                    ? 'conflicted'
+                    : row.retryCount > 0
+                      ? `merging R${row.retryCount}`
+                      : 'merged'
+                }
+              />
+            </Text>
+          ))
+        )}
+      </Box>
+      <Text>
+        <StatusText tone="muted" text="Press a to open conflict panel when conflicts are present" />
+      </Text>
+    </Box>
+  );
+}
+
+function renderConflictResolutionPanel(
+  timeline: LiveRunIterationTimeline,
+  uiState: TuiInteractionState,
+): React.JSX.Element {
+  const conflicts = timeline.markers.filter((marker) => marker.failed);
+  const selected = clampIndex(uiState.selectedConflictIndex, 0, Math.max(0, conflicts.length - 1));
+  return (
+    <Box
+      key="conflict-resolution"
+      marginTop={1}
+      borderStyle="round"
+      borderColor={toneToColor('warn')}
+      flexDirection="column"
+      paddingX={1}
+    >
+      <Text>
+        {renderStatusBadge('CONFLICT', 'warn')}{' '}
+        <StatusText
+          tone="neutral"
+          text={`resolution ${conflicts.length ? `${selected + 1}/${conflicts.length}` : '0/0'}`}
+        />
+      </Text>
+      {conflicts.length === 0 ? (
+        <Text>
+          <StatusText tone="muted" text="no conflicted merges detected" />
+        </Text>
+      ) : (
+        conflicts.map((marker, index) => (
+          <Text key={`conflict-row-${marker.iteration}`}>
+            <StatusText
+              tone={index === selected ? 'info' : 'muted'}
+              text={index === selected ? '▸' : ' '}
+            />{' '}
+            <StatusText
+              tone="warn"
+              text={`⚡ iteration-${String(marker.iteration).padStart(2, '0')}.patch`}
+            />{' '}
+            <StatusText tone="muted" text="unresolved" />
+          </Text>
+        ))
+      )}
+      <Text>
+        <StatusText tone="muted" text="a accept · r retry AI · s skip task · Esc close" />
+      </Text>
     </Box>
   );
 }
@@ -915,9 +1502,25 @@ function renderViewContent(
         <Text>
           {renderStatusBadge('DETAIL', 'info')} selected iteration {uiState.selectedIteration}
         </Text>
-        {renderIterationDetail(uiState, timeline, columns)}
+        {renderIterationDetail(state, renderer, uiState, timeline, columns)}
       </Box>,
     ];
+  }
+
+  if (view === 'parallel-overview') {
+    return [renderParallelOverview(state, renderer, uiState, timeline, columns)];
+  }
+
+  if (view === 'parallel-detail') {
+    return [renderParallelDetail(state, renderer, uiState, columns)];
+  }
+
+  if (view === 'merge-progress') {
+    return [renderMergeProgress(timeline, uiState)];
+  }
+
+  if (view === 'conflict-resolution') {
+    return [renderConflictResolutionPanel(timeline, uiState)];
   }
 
   if (view === 'reviewer') {
@@ -1122,6 +1725,8 @@ function LiveView({ renderer }: { renderer: InkLiveRunRenderer }): React.JSX.Ele
   const [, setViewTick] = useState(0);
   const uiState = renderer.getUiState();
   const toasts = renderer.getToasts();
+  const columns = process.stdout.columns ?? 120;
+  const rows = process.stdout.rows ?? 40;
 
   useInput((input, key) => {
     const next = renderer.transition(input, key);
@@ -1131,7 +1736,7 @@ function LiveView({ renderer }: { renderer: InkLiveRunRenderer }): React.JSX.Ele
     }
   });
   return (
-    <Box flexDirection="column">
+    <Box flexDirection="column" width={columns} minHeight={Math.max(20, rows - 1)}>
       {renderHeader(headerState)}
       <Box marginTop={1} flexDirection="column">
         <Text>
@@ -1143,16 +1748,10 @@ function LiveView({ renderer }: { renderer: InkLiveRunRenderer }): React.JSX.Ele
       </Box>
       {renderViewHelp(uiState.helpVisible)}
       {uiState.dashboardVisible
-        ? renderDashboard(state, renderer.getIterationTimeline(), process.stdout.columns ?? 120)
+        ? renderDashboard(state, renderer.getIterationTimeline(), columns)
         : null}
       {renderToastNotifications(toasts)}
-      {renderViewContent(
-        state,
-        renderer,
-        uiState,
-        renderer.getIterationTimeline(),
-        process.stdout.columns ?? 120,
-      )}
+      {renderViewContent(state, renderer, uiState, renderer.getIterationTimeline(), columns)}
     </Box>
   );
 }
@@ -1173,7 +1772,11 @@ export class InkLiveRunRenderer {
     this.enabled = Boolean(process.stdout.isTTY);
     this.stateStore = new LiveRunStateStore(iteration, maxIterations, agentIds, previewLines);
     this.state = this.stateStore.getSnapshot();
-    this.uiState = buildInitialTuiInteractionState(agentIds.length, maxIterations);
+    this.uiState = syncTuiInteractionState(
+      buildInitialTuiInteractionState(agentIds.length, maxIterations),
+      this.state.agentIds.length,
+      this.state.maxIterations,
+    );
 
     if (!this.enabled) {
       return;
@@ -1208,14 +1811,30 @@ export class InkLiveRunRenderer {
   getAgentSelector = (agentId: number): LiveRunAgentSelector =>
     this.stateStore.getAgentSelector(agentId);
   getIterationTimeline = (): LiveRunIterationTimeline => this.stateStore.getIterationTimeline();
-  getUiState = (): TuiInteractionState => this.uiState;
+  getUiState = (): TuiInteractionState => {
+    this.uiState = syncTuiInteractionState(
+      this.uiState,
+      this.state.agentIds.length,
+      this.state.maxIterations,
+    );
+    return this.uiState;
+  };
   getToasts = (): Toast[] => {
     this.pruneExpiredToasts();
     return [...this.toasts];
   };
 
   transition(input: string, key: InkInputKey): TuiInteractionState | null {
-    const next = transitionTuiInteractionState(this.uiState, input, key);
+    const base = syncTuiInteractionState(
+      this.uiState,
+      this.state.agentIds.length,
+      this.state.maxIterations,
+    );
+    const next = syncTuiInteractionState(
+      transitionTuiInteractionState(base, input, key),
+      this.state.agentIds.length,
+      this.state.maxIterations,
+    );
     if (next === this.uiState) {
       return null;
     }

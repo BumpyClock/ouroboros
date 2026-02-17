@@ -43,3 +43,4 @@
 - 2026-02-17: In top-level mode, loadBeadsSnapshot now applies --parent <topLevelBeadId> on both readonly and fallback bd list calls so remaining counts are scoped to direct child beads.
 - Bead mode semantics are mode-driven: top-level scope and snapshot loading are applied first, while provider stop-marker handling still controls continuation in auto mode.
 - 2026-02-17: For `ouroboros-11`, added config-string normalization so blank/whitespace reviewer settings are treated as unset; added CLI/config regression tests to preserve reviewer provider/model fallback and prevent mixed-provider regressions from empty overrides.
+- 2026-02-17: Ink TUI full-screen parity improved by adding explicit `parallel-overview`/`parallel-detail`/`merge-progress`/`conflict-resolution` views plus `w`/`m`/`Esc`/`a`/`r`/`s` routing; keep view bounds synced to live agent count/iteration max to avoid stale selection indices.

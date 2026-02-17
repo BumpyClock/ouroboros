@@ -81,3 +81,6 @@ Date: 2026-02-17
 
 - `ouroboros-13.3` now has Ink TUI multi-pane shell behavior with left live/task panel and right iteration history panel.
 - Focused pane navigation is explicit (`Tab` / `←` / `→`), with iteration detail drilldown via `Enter` from history focus.
+- `ouroboros-18i` adds Ralph-style full-screen view routing for `parallel-overview`, `parallel-detail`, `merge-progress`, and `conflict-resolution` in `tui/tui.tsx`.
+- `ouroboros-18i` extends keyboard parity with `w`/`m` toggles, `Esc` hierarchical back navigation, and conflict actions (`a`/`r`/`s`) with help text updates.
+- `ouroboros-18i` enriches iteration detail with timeline, loop phase/notice, selected-agent context, and output snippets to reduce context switching from the live pane.
