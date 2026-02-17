@@ -81,6 +81,37 @@ When `--review` is enabled, each agent slot runs a review/fix cycle after implem
 
 Review is skipped when `reviewEnabled` is false (default), no reviewer prompt exists, no bead was picked, or implementation exited non-zero.
 
+## Reviewer provider/model resolution contract (bead 11 source of truth)
+
+Status: contract defined in `ouroboros-11.1`; runtime wiring lands in `ouroboros-11.2+`.
+
+Terms:
+
+- Primary provider/model/command: resolved from existing `provider`/`model`/`command` paths.
+- Reviewer provider/model/command: resolved for reviewer subprocesses only.
+
+Resolution rules:
+
+1. `reviewerProvider` defaults to resolved primary provider when unset.
+2. `reviewerModel` resolution:
+   - explicit `reviewerModel` wins when set;
+   - else if reviewer provider equals primary provider, use resolved primary model;
+   - else use reviewer provider default model from adapter defaults.
+3. Reviewer command resolution:
+   - if reviewer provider equals primary provider, reviewer command follows primary command resolution;
+   - if reviewer provider differs, reviewer subprocess uses the reviewer provider command resolution path (provider-specific default path), not the resolved primary `command`.
+4. Implementation and fix subprocesses remain on the primary provider/model/command path for now; only reviewer may diverge.
+
+Matrix (normative for `ouroboros-11.2` to `ouroboros-11.5`):
+
+| Primary (`provider`,`model`,`command`) | Reviewer overrides | Reviewer provider | Reviewer model | Reviewer command |
+| --- | --- | --- | --- | --- |
+| `codex`,`gpt-5.3`,`codex` | none | `codex` | `gpt-5.3` | `codex` |
+| `codex`,`gpt-5.3`,`codex` | `reviewerModel=o3-mini` | `codex` | `o3-mini` | `codex` |
+| `codex`,`gpt-5.3`,`codex` | `reviewerProvider=claude` | `claude` | claude default model | claude command path |
+| `codex`,`gpt-5.3`,`codex` | `reviewerProvider=claude`, `reviewerModel=sonnet` | `claude` | `sonnet` | claude command path |
+| `claude`,`(empty)`,`claude` | `reviewerProvider=copilot` | `copilot` | copilot default model | copilot command path |
+
 ## Bead snapshot trust model
 
 - Primary bead source is `.beads/issues.jsonl`.

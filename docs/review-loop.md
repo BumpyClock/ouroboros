@@ -82,6 +82,15 @@ These phases are surfaced via `setAgentReviewPhase`/`clearAgentReviewPhase` on `
 
 See [config.md](./config.md#prompt-resolution) for developer and reviewer prompt fallback chains.
 
+## Provider/model resolution contract
+
+Source of truth: [config.md](./config.md#reviewer-providermodel-resolution-contract-bead-11-source-of-truth).
+
+- `reviewerProvider` defaults to primary `provider` when unset.
+- `reviewerModel` defaults to primary `model` when reviewer provider matches primary; otherwise to the reviewer provider's default model.
+- When reviewer provider differs, reviewer subprocess command resolution follows reviewer provider defaults/path (not primary `command`).
+- Implementation and fix subprocesses stay on primary provider/model/command for now.
+
 ## CLI flags
 
 ```
