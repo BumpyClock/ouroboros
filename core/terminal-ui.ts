@@ -1,14 +1,15 @@
 import { formatShort, wrapText } from './text';
 import {
-  AgentSpawnState,
-  LiveAgentSnapshot,
-  LivePreviewLine,
+  LIVE_SPINNER_FRAMES,
   LiveRunStateStore,
   labelTone,
 } from './live-run-state';
+import type { LiveRunState } from './live-run-state';
 import type { BeadIssue, BeadsSnapshot, PreviewEntry, Tone, UsageSummary } from './types';
 
-const SPINNER_FRAMES = ['-', '\\', '|', '/'];
+const SPINNER_FRAMES = LIVE_SPINNER_FRAMES;
+
+export { labelTone };
 
 export const ANSI = {
   reset: '\x1b[0m',
@@ -120,8 +121,8 @@ export class LiveRunRenderer {
   private readonly stateStore: LiveRunStateStore;
 
   constructor(
-    private readonly iteration: number,
-    private readonly maxIterations: number,
+    iteration: number,
+    maxIterations: number,
     agentIds: number[],
     previewLines: number,
   ) {
@@ -138,7 +139,7 @@ export class LiveRunRenderer {
     }
     this.render();
     this.timer = setInterval(() => {
-      this.frameIndex += 1;
+      this.stateStore.tickFrame();
       this.render();
     }, 100);
   }
@@ -177,7 +178,7 @@ export class LiveRunRenderer {
 
   setAgentQueued(agentId: number, message: string): void {
     this.stateStore.setAgentQueued(agentId, message);
-    if (!this.enabled || !this.running) {
+    if (!this.enabled || !this.stateStore.isRunning()) {
       return;
     }
     this.render();
@@ -185,7 +186,7 @@ export class LiveRunRenderer {
 
   setAgentLaunching(agentId: number, message: string): void {
     this.stateStore.setAgentLaunching(agentId, message);
-    if (!this.enabled || !this.running) {
+    if (!this.enabled || !this.stateStore.isRunning()) {
       return;
     }
     this.render();
@@ -204,15 +205,17 @@ export class LiveRunRenderer {
     this.render();
   }
 
-  private buildHeaderLine(): string {
-    const elapsed = ((Date.now() - this.startedAt) / 1000).toFixed(1);
-    const frame = this.running ? SPINNER_FRAMES[this.frameIndex % SPINNER_FRAMES.length] : '';
-    const tone = this.running ? 'info' : this.statusTone;
-    const bodyColor = this.running ? ANSI.cyan : toneColor(tone);
+  private buildHeaderLine(state: LiveRunState): string {
+    const elapsed = ((Date.now() - state.startedAt) / 1000).toFixed(1);
+    const frame = state.running
+      ? SPINNER_FRAMES[state.frameIndex % SPINNER_FRAMES.length]
+      : '';
+    const tone = state.running ? 'info' : state.statusTone;
+    const bodyColor = state.running ? ANSI.cyan : toneColor(tone);
     const parts = [
       frame,
-      `iteration ${this.iteration}/${this.maxIterations}`,
-      this.statusMessage,
+      `iteration ${state.iteration}/${state.maxIterations}`,
+      state.statusMessage,
       `${elapsed}s`,
     ]
       .filter(Boolean)
@@ -220,11 +223,11 @@ export class LiveRunRenderer {
     return `${badge('LIVE', tone)} ${colorize(parts, bodyColor)}`;
   }
 
-  private buildAgentLines(agentId: number): string[] {
-    const snapshot = this.agentState.get(agentId);
-    const spawnState = this.agentSpawnState.get(agentId);
+  private buildAgentLines(agentId: number, state: LiveRunState): string[] {
+    const snapshot = state.agentState.get(agentId);
+    const spawnState = state.agentSpawnState.get(agentId);
     const prefix = badge(`A${agentId}`, 'muted');
-    const picked = this.agentPickedBeads.get(agentId);
+    const picked = state.agentPickedBeads.get(agentId);
     const titleColor = picked ? ANSI.green : ANSI.dim;
     const title = picked ? `${picked.id} ${picked.title}` : 'no bead picked';
     const titleText = colorize(formatShort(title, Math.max(24, terminalWidth() - 54)), titleColor);
@@ -249,7 +252,7 @@ export class LiveRunRenderer {
           : spawnState?.phase === 'queued'
             ? 'awaiting launch'
             : 'waiting for events';
-      const emptyLines = Array.from({ length: this.previewLines }, (_, rowIndex) => {
+      const emptyLines = Array.from({ length: state.previewLines }, (_, rowIndex) => {
         if (rowIndex === 0) {
           return `  ${badge('STATE', statusTone)} ${colorize(formatShort(statusText, Math.max(36, terminalWidth() - 40)), ANSI.dim)}`;
         }
@@ -272,30 +275,30 @@ export class LiveRunRenderer {
       const text = colorize(formatShort(line.text, maxLength), toneColor(line.tone));
       return `  ${lineLabel} ${text}`;
     });
-    while (detailLines.length < this.previewLines) {
+    while (detailLines.length < state.previewLines) {
       detailLines.unshift(`  ${badge('EMPTY', 'muted')} ${colorize('no event yet', ANSI.dim)}`);
     }
     return [header, ...detailLines];
   }
 
-  private buildBeadsLines(): string[] {
-    if (!this.beadsSnapshot) {
+  private buildBeadsLines(state: LiveRunState): string[] {
+    if (!state.beadsSnapshot) {
       return [];
     }
-    if (!this.beadsSnapshot.available) {
-      const suffix = this.beadsSnapshot.error
-        ? ` ${colorize(`(${formatShort(this.beadsSnapshot.error, 100)})`, ANSI.dim)}`
+    if (!state.beadsSnapshot.available) {
+      const suffix = state.beadsSnapshot.error
+        ? ` ${colorize(`(${formatShort(state.beadsSnapshot.error, 100)})`, ANSI.dim)}`
         : '';
       return [`${badge('BEADS', 'warn')} unavailable${suffix}`];
     }
 
     const summary = `${badge('BEADS', 'info')} remaining ${colorize(
-      String(this.beadsSnapshot.remaining),
+      String(state.beadsSnapshot.remaining),
       ANSI.bold,
-    )} | in_progress ${this.beadsSnapshot.inProgress} | open ${this.beadsSnapshot.open} | blocked ${
-      this.beadsSnapshot.blocked
-    } | closed ${this.beadsSnapshot.closed}`;
-    const topRemaining = this.beadsSnapshot.remainingIssues.slice(0, 3).map((issue, index) => {
+    )} | in_progress ${state.beadsSnapshot.inProgress} | open ${state.beadsSnapshot.open} | blocked ${
+      state.beadsSnapshot.blocked
+    } | closed ${state.beadsSnapshot.closed}`;
+    const topRemaining = state.beadsSnapshot.remainingIssues.slice(0, 3).map((issue, index) => {
       const assignee = issue.assignee ? ` @${issue.assignee}` : '';
       return `  ${colorize(String(index + 1).padStart(2, ' '), ANSI.dim)} ${badge(
         'REM',
@@ -309,10 +312,11 @@ export class LiveRunRenderer {
     if (!this.enabled) {
       return;
     }
+    const state = this.stateStore.getSnapshot();
     const lines = [
-      this.buildHeaderLine(),
-      ...this.buildBeadsLines(),
-      ...this.agentIds.flatMap((agentId) => this.buildAgentLines(agentId)),
+      this.buildHeaderLine(state),
+      ...this.buildBeadsLines(state),
+      ...state.agentIds.flatMap((agentId) => this.buildAgentLines(agentId, state)),
     ];
     if (this.renderedLineCount > 0) {
       process.stdout.write(`\x1b[${this.renderedLineCount}A`);

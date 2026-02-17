@@ -1,47 +1,17 @@
 import { Box, render, Text } from 'ink';
 import React, { useSyncExternalStore } from 'react';
-import { badge, labelTone } from '../core/terminal-ui';
+import { badge } from '../core/terminal-ui';
 import { formatShort } from '../core/text';
+import {
+  LIVE_SPINNER_FRAMES,
+  type LiveRunState,
+  LiveRunStateStore,
+  labelTone,
+} from '../core/live-run-state';
 import type { BeadIssue, BeadsSnapshot, PreviewEntry, Tone } from '../core/types';
 import { buildPreviewRowKey } from './preview-row-key';
 
-const SPINNER_FRAMES = ['-', '\\', '|', '/'];
-
-type LivePreviewLine = {
-  label: string;
-  tone: Tone;
-  text: string;
-};
-
-type LiveAgentSnapshot = {
-  totalEvents: number;
-  lastUpdatedAt: number;
-  lines: LivePreviewLine[];
-};
-
-type AgentSpawnPhase = 'queued' | 'launching';
-
-type AgentSpawnState = {
-  phase: AgentSpawnPhase;
-  message: string;
-};
-
-type LiveViewState = {
-  startedAt: number;
-  frameIndex: number;
-  running: boolean;
-  statusMessage: string;
-  statusTone: Tone;
-  iteration: number;
-  maxIterations: number;
-  previewLines: number;
-  agentIds: number[];
-  agentState: Map<number, LiveAgentSnapshot>;
-  agentSpawnState: Map<number, AgentSpawnState>;
-  beadsSnapshot: BeadsSnapshot | null;
-  agentPickedBeads: Map<number, BeadIssue>;
-};
-
+const SPINNER_FRAMES = LIVE_SPINNER_FRAMES;
 type Listener = () => void;
 
 function toneToColor(tone: Tone): 'white' | 'cyan' | 'green' | 'yellow' | 'red' | 'gray' {
@@ -81,7 +51,7 @@ function renderStatusBadge(label: string, tone: Tone): React.JSX.Element {
   return <StatusText tone={tone} text={`[${label}]`} />;
 }
 
-function renderHeader(state: LiveViewState): React.JSX.Element {
+function renderHeader(state: LiveRunState): React.JSX.Element {
   const elapsedSeconds = ((Date.now() - state.startedAt) / 1000).toFixed(1);
   const spinner = state.running ? SPINNER_FRAMES[state.frameIndex % SPINNER_FRAMES.length] : ' ';
   const tone = state.running ? 'info' : state.statusTone;
@@ -110,7 +80,7 @@ function renderHeader(state: LiveViewState): React.JSX.Element {
   );
 }
 
-function renderBeads(state: LiveViewState): React.JSX.Element | null {
+function renderBeads(state: LiveRunState): React.JSX.Element | null {
   const beads = state.beadsSnapshot;
   if (!beads) {
     return null;
@@ -151,7 +121,7 @@ function renderBeads(state: LiveViewState): React.JSX.Element | null {
   );
 }
 
-function renderAgentCard(state: LiveViewState, agentId: number): React.JSX.Element {
+function renderAgentCard(state: LiveRunState, agentId: number): React.JSX.Element {
   const snapshot = state.agentState.get(agentId);
   const spawnState = state.agentSpawnState.get(agentId);
   const picked = state.agentPickedBeads.get(agentId);
@@ -298,28 +268,16 @@ function LiveView({ renderer }: { renderer: InkLiveRunRenderer }): React.JSX.Ele
 
 export class InkLiveRunRenderer {
   private readonly enabled: boolean;
-  private state: LiveViewState;
+  private state: LiveRunState;
+  private readonly stateStore: LiveRunStateStore;
   private timer: NodeJS.Timeout | null = null;
   private app: ReturnType<typeof render> | null = null;
   private readonly listeners = new Set<Listener>();
 
   constructor(iteration: number, maxIterations: number, agentIds: number[], previewLines: number) {
     this.enabled = Boolean(process.stdout.isTTY);
-    this.state = {
-      startedAt: Date.now(),
-      frameIndex: 0,
-      running: true,
-      statusMessage: 'starting',
-      statusTone: 'info',
-      iteration,
-      maxIterations,
-      previewLines: Math.max(1, previewLines),
-      agentIds: [...agentIds].sort((left, right) => left - right),
-      agentState: new Map<number, LiveAgentSnapshot>(),
-      agentSpawnState: new Map<number, AgentSpawnState>(),
-      beadsSnapshot: null,
-      agentPickedBeads: new Map<number, BeadIssue>(),
-    };
+    this.stateStore = new LiveRunStateStore(iteration, maxIterations, agentIds, previewLines);
+    this.state = this.stateStore.getSnapshot();
 
     if (!this.enabled) {
       return;
@@ -330,10 +288,8 @@ export class InkLiveRunRenderer {
       if (!this.state.running) {
         return;
       }
-      this.state = {
-        ...this.state,
-        frameIndex: this.state.frameIndex + 1,
-      };
+      this.stateStore.tickFrame();
+      this.state = this.stateStore.getSnapshot();
       this.emit();
     }, 120);
   }
@@ -345,7 +301,7 @@ export class InkLiveRunRenderer {
     };
   };
 
-  getSnapshot = (): LiveViewState => this.state;
+  getSnapshot = (): LiveRunState => this.state;
 
   isEnabled(): boolean {
     return this.enabled;
@@ -355,75 +311,32 @@ export class InkLiveRunRenderer {
     if (!this.enabled || !this.state.running) {
       return;
     }
-
-    const previous = this.state.agentState.get(agentId) ?? {
-      totalEvents: 0,
-      lastUpdatedAt: Date.now(),
-      lines: [],
-    };
-    const nextLine: LivePreviewLine = {
-      label: entry.label,
-      tone: labelTone(entry.label),
-      text: formatShort(entry.text, 220),
-    };
-    const last = previous.lines[previous.lines.length - 1];
-    const nextLines =
-      last && last.label === nextLine.label && last.text === nextLine.text
-        ? previous.lines
-        : [...previous.lines, nextLine].slice(-this.state.previewLines);
-    const nextAgentState = new Map(this.state.agentState);
-    nextAgentState.set(agentId, {
-      totalEvents: previous.totalEvents + 1,
-      lastUpdatedAt: Date.now(),
-      lines: nextLines,
-    });
-    const nextSpawnState = new Map(this.state.agentSpawnState);
-    nextSpawnState.delete(agentId);
-    this.state = {
-      ...this.state,
-      agentState: nextAgentState,
-      agentSpawnState: nextSpawnState,
-      statusMessage: 'streaming events',
-      statusTone: 'info',
-    };
+    this.stateStore.update(agentId, entry);
+    this.state = this.stateStore.getSnapshot();
     this.emit();
   }
 
   setAgentQueued(agentId: number, message: string): void {
-    const nextSpawnState = new Map(this.state.agentSpawnState);
-    nextSpawnState.set(agentId, { phase: 'queued', message });
-    this.state = {
-      ...this.state,
-      agentSpawnState: nextSpawnState,
-    };
+    this.stateStore.setAgentQueued(agentId, message);
+    this.state = this.stateStore.getSnapshot();
     this.emit();
   }
 
   setAgentLaunching(agentId: number, message: string): void {
-    const nextSpawnState = new Map(this.state.agentSpawnState);
-    nextSpawnState.set(agentId, { phase: 'launching', message });
-    this.state = {
-      ...this.state,
-      agentSpawnState: nextSpawnState,
-    };
+    this.stateStore.setAgentLaunching(agentId, message);
+    this.state = this.stateStore.getSnapshot();
     this.emit();
   }
 
   setBeadsSnapshot(snapshot: BeadsSnapshot | null): void {
-    this.state = {
-      ...this.state,
-      beadsSnapshot: snapshot,
-    };
+    this.stateStore.setBeadsSnapshot(snapshot);
+    this.state = this.stateStore.getSnapshot();
     this.emit();
   }
 
   setAgentPickedBead(agentId: number, issue: BeadIssue): void {
-    const nextPicked = new Map(this.state.agentPickedBeads);
-    nextPicked.set(agentId, issue);
-    this.state = {
-      ...this.state,
-      agentPickedBeads: nextPicked,
-    };
+    this.stateStore.setAgentPickedBead(agentId, issue);
+    this.state = this.stateStore.getSnapshot();
     this.emit();
   }
 
@@ -438,12 +351,8 @@ export class InkLiveRunRenderer {
       return;
     }
 
-    this.state = {
-      ...this.state,
-      running: false,
-      statusMessage: message,
-      statusTone: tone,
-    };
+    this.stateStore.stop(message, tone);
+    this.state = this.stateStore.getSnapshot();
     this.emit();
 
     if (this.app) {
