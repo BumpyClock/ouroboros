@@ -401,3 +401,18 @@ on-zero reviewer/fixer => slot fail, malformed JSONL invalidates snapshot, fallb
   - Verification: `bun run doctor` clean.
   - Learning: explicit provider/model/command matrix removes ambiguity for mixed-provider runtime wiring in follow-up beads.
   - Challenge: `.beads/issues.jsonl` was already staged from tracker updates and was unintentionally included in the docs commit; completed remaining tracker updates in follow-up bead-state commit.
+2026-02-17
+- Completed bead `ouroboros-10.2` (state contract: agent active tab + iteration timeline metadata).
+  - Extended `core/live-run-state.ts` with:
+    - per-agent tab state (`dev`/`review`) plus restore memory for review auto-switch/clear,
+    - selector fields (`activeTab`, `restoreTab`) in `getAgentSelector`,
+    - iteration marker timeline state and selector (`getIterationTimeline`) with retry counts and success/failure flags.
+  - Wired lifecycle updates in `core/loop-controller.ts`:
+    - `markIterationRetry(iteration)` on retry-delay branch,
+    - `setIterationOutcome(iteration, 'failed'|'success')` on failure/success stop paths.
+  - Added renderer pass-through APIs in `core/terminal-ui.ts` and `tui/tui.tsx` to keep state model renderer-agnostic.
+  - Added tests in `tests/core/live-run-state.test.ts` for review tab auto-switch/restore and retry/failure marker transitions.
+  - Updated `tests/core/loop-engine.rich-mode.test.ts` mock renderer with new state API methods.
+  - Verification: `bun test tests/core/live-run-state.test.ts tests/core/loop-engine.rich-mode.test.ts` and `bun run doctor` passed.
+  - Learning: keeping tab auto-switch memory in shared state avoids renderer-specific branch duplication and aligns with follow-up tab UI bead work.
+  - Challenge: repository had unrelated dirty files; staged and committed only bead-specific code changes plus bead metadata updates.
