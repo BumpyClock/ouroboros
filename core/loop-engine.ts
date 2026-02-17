@@ -1,4 +1,5 @@
 import type { ChildProcess } from 'node:child_process';
+import { existsSync } from 'node:fs';
 import { getProviderAdapter } from '../providers/registry';
 import type { ProviderAdapter } from '../providers/types';
 import {
@@ -31,10 +32,15 @@ export async function runLoop(options: CliOptions, provider: ProviderAdapter): P
   const reviewerPromptPath = options.reviewEnabled
     ? resolveReviewerPromptPath(cwd, options.reviewerPromptPath)
     : undefined;
-  if (options.reviewEnabled && !reviewerPromptPath) {
-    throw new Error(
-      'Reviewer prompt file not found. Provide --reviewer-prompt or create .ai_agents/prompts/reviewer.md',
-    );
+  if (options.reviewEnabled) {
+    if (!reviewerPromptPath) {
+      throw new Error(
+        'Reviewer prompt file not found. Provide --reviewer-prompt or create .ai_agents/prompts/reviewer.md',
+      );
+    }
+    if (options.reviewerPromptPath && !existsSync(reviewerPromptPath)) {
+      throw new Error(`Reviewer prompt file not found: ${reviewerPromptPath}`);
+    }
   }
   const statePath = resolveIterationStatePath(cwd);
   const logDir = resolveRunLogDirectory(cwd, options.logDir);

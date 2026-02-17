@@ -1,5 +1,14 @@
 # session log
 
+## 2026-02-17
+- Completed bead `ouroboros-12.4` (Regression tests for no-file prompt fallback and explicit-path errors).
+  - Added `tests/core/loop-engine.prompt-resolution.test.ts` with regression coverage for:
+    - fallback to built-in developer and reviewer prompts when no local prompt files exist (review-enabled),
+    - explicit missing developer prompt path throwing `No developer prompt found`,
+    - explicit missing reviewer prompt path throwing `Reviewer prompt file not found`.
+  - Updated `core/loop-engine.ts` so explicit missing reviewer prompt paths now fail fast during startup with a clear error instead of silently disabling review.
+  - Learned: explicit reviewer-path errors were silently degraded in loop execution and needed run-loop-level guard coverage.
+
 2026-02-17
 - Completed bead `ouroboros-11.4` (Regression tests and mixed-provider reviewer execution wiring).
   - Added `tests/core/config.test.ts` to verify `loadOuroborosConfig` preserves project-over-global reviewer override semantics.
