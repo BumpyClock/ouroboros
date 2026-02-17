@@ -10,7 +10,7 @@ import {
 } from './iteration-execution';
 import type { IterationSummary } from './live-run-state';
 import { isCircuitBroken, loadIterationState, sleep, writeIterationState } from './state';
-import { ANSI, badge, colorize, LiveRunRenderer, printSection, progressBar } from './terminal-ui';
+import { ANSI, badge, colorize, LiveRunRenderer, printSection } from './terminal-ui';
 import { formatShort } from './text';
 import type { BeadIssue, BeadsSnapshot, CliOptions, RunResult, Tone } from './types';
 
@@ -26,6 +26,7 @@ type LoopControllerInput = {
   options: CliOptions;
   provider: ProviderAdapter;
   promptPath: string;
+  reviewerPromptPath?: string;
   statePath: string;
   logDir: string;
   command: string;

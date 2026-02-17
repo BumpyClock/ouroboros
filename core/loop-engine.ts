@@ -1,5 +1,4 @@
 import type { ChildProcess } from 'node:child_process';
-import path from 'node:path';
 import type { ProviderAdapter } from '../providers/types';
 import {
   type IterationLiveRenderer,
@@ -8,6 +7,7 @@ import {
 import { runLoopController } from './loop-controller';
 import { resolveRunLogDirectory } from './loop-runs';
 import { resolveRunnableCommand } from './process-runner';
+import { resolveDeveloperPromptPath, resolveReviewerPromptPath } from './prompts';
 import { installLoopShutdownGuard } from './shutdown';
 import { resolveIterationStatePath } from './state';
 import type { CliOptions, PreviewEntry, Tone } from './types';
@@ -25,9 +25,18 @@ export function shouldStopFromProviderOutput(
 }
 
 export async function runLoop(options: CliOptions, provider: ProviderAdapter): Promise<void> {
-  const promptPath = path.resolve(process.cwd(), options.promptPath);
-  const statePath = resolveIterationStatePath(process.cwd());
-  const logDir = resolveRunLogDirectory(process.cwd(), options.logDir);
+  const cwd = process.cwd();
+  const promptPath = resolveDeveloperPromptPath(cwd, options.developerPromptPath);
+  const reviewerPromptPath = options.reviewEnabled
+    ? resolveReviewerPromptPath(cwd, options.reviewerPromptPath)
+    : undefined;
+  if (options.reviewEnabled && !reviewerPromptPath) {
+    throw new Error(
+      'Reviewer prompt file not found. Provide --reviewer-prompt or create .ai_agents/prompts/reviewer.md',
+    );
+  }
+  const statePath = resolveIterationStatePath(cwd);
+  const logDir = resolveRunLogDirectory(cwd, options.logDir);
   const command = resolveRunnableCommand(options.command, provider.formatCommandHint);
   const activeChildren = new Set<ChildProcess>();
   const activeSpinnerStopRef: ActiveSpinnerStopRef = {
@@ -44,6 +53,7 @@ export async function runLoop(options: CliOptions, provider: ProviderAdapter): P
       options,
       provider,
       promptPath,
+      reviewerPromptPath,
       statePath,
       logDir,
       command,
