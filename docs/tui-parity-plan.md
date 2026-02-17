@@ -55,6 +55,7 @@ Date: 2026-02-17
 
 ## Bead status snapshot (source of truth)
 - `ouroboros-13.1` status: this planning document is live and tracks current parity targets as loop implementation shifts. Last parity refresh: 2026-02-17.
+- `ouroboros-13.1` action completed: documented session-level ownership and tracking assumptions used by the parity roadmap.
 - `ouroboros-13.2`: in progress per active parity work on view-state and interaction routing.
 - `ouroboros-13.3`-`ouroboros-13.5`: partially complete in prior sessions; remaining work should re-use this document before implementation.
 
