@@ -91,3 +91,8 @@
 - Learning: explicit acceptance checks made the roadmap easier to act on from next-bead planning.
 - Challenge: existing working tree already had unrelated modified files; this bead kept scope doc-only to avoid overlap and preserve stability.
 
+
+### ouroboros-11.2 (completed this iteration)
+- Added missing regression test for config-provided eviewerProvider validation in 	ests/core/cli.test.ts (unsupported provider should fail).
+- Existing CLI/config implementation already resolved reviewer provider/model precedence correctly; this commit closes the validation gap and confirms behavior.  
+- Challenge: working tree had pre-existing modified files (core/loop-engine.ts, core/terminal-ui.ts, 	ui/tui.tsx, core/theme.ts), so this bead stayed scoped to a single focused test change only.

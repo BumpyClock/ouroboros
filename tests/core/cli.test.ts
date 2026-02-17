@@ -152,6 +152,15 @@ describe('parseArgs reviewer provider/model resolution', () => {
     ).toThrow(/Unsupported provider "not-a-provider"/);
   });
 
+  it('throws for unsupported reviewer provider from config', () => {
+    expect(() =>
+      parseWithConfig([], {
+        provider: 'codex',
+        reviewerProvider: 'not-a-provider',
+      }),
+    ).toThrow(/Unsupported provider "not-a-provider"/);
+  });
+
   it('uses CLI theme override with config and default', () => {
     const withConfig = parseWithConfig(['--theme', 'matrix'], {
       provider: 'codex',
