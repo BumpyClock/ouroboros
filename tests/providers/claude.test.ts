@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'bun:test';
-import type { CliOptions } from '../core/types';
-import { claudeProvider } from './claude';
+import type { CliOptions } from '../../core/types';
+import { claudeProvider } from '../../providers/claude';
 
 function createOptions(overrides: Partial<CliOptions> = {}): CliOptions {
   return {

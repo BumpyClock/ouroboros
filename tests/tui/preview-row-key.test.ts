@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'bun:test';
-import { buildPreviewRowKey } from './preview-row-key';
+import { buildPreviewRowKey } from '../../tui/preview-row-key';
 
 describe('buildPreviewRowKey', () => {
   it('is unique for duplicate placeholder rows by slot index', () => {
