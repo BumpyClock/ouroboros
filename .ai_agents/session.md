@@ -389,3 +389,15 @@ on-zero reviewer/fixer => slot fail, malformed JSONL invalidates snapshot, fallb
   - No additional code edits were needed in this bead because all child work is already merged.
   - Learned: for hardening criteria, validating child-bead closure plus behavior parity was sufficient to close parent safely.
   - Challenge: no extra runtime verification run was performed in this bead iteration.
+
+2026-02-17
+- Completed bead `ouroboros-11.1` (reviewer provider/model resolution contract).
+  - Added source-of-truth contract in `docs/config.md`:
+    - `reviewerProvider` default fallback to primary provider,
+    - `reviewerModel` fallback matrix (same-provider uses primary model, mixed-provider uses reviewer adapter default model),
+    - reviewer command resolution rule for mixed providers (reviewer path, not primary command),
+    - explicit scope that implementation/fix remain primary provider/model/command.
+  - Added contract summary and cross-link in `docs/review-loop.md`.
+  - Verification: `bun run doctor` clean.
+  - Learning: explicit provider/model/command matrix removes ambiguity for mixed-provider runtime wiring in follow-up beads.
+  - Challenge: `.beads/issues.jsonl` was already staged from tracker updates and was unintentionally included in the docs commit; completed remaining tracker updates in follow-up bead-state commit.
