@@ -3,8 +3,8 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync
 import * as os from 'node:os';
 import * as path from 'node:path';
 import {
-  readBuiltinPrompt,
   initializeBuiltinPrompts,
+  readBuiltinPrompt,
   resolveBuiltinPromptPath,
   resolveDeveloperPromptPath,
   resolvePromptPath,
@@ -152,8 +152,12 @@ describe('initializeBuiltinPrompts', () => {
     const developerTarget = path.join(tmpDir, '.ai_agents', 'prompts', 'developer.md');
     const reviewerTarget = path.join(tmpDir, '.ai_agents', 'prompts', 'reviewer.md');
     expect(results).toHaveLength(2);
-    expect(results.some((entry) => entry.role === 'developer' && entry.action === 'written')).toBe(true);
-    expect(results.some((entry) => entry.role === 'reviewer' && entry.action === 'written')).toBe(true);
+    expect(results.some((entry) => entry.role === 'developer' && entry.action === 'written')).toBe(
+      true,
+    );
+    expect(results.some((entry) => entry.role === 'reviewer' && entry.action === 'written')).toBe(
+      true,
+    );
     expect(existsSync(developerTarget)).toBe(true);
     expect(existsSync(reviewerTarget)).toBe(true);
     expect(readFileSync(developerTarget, 'utf8')).toBe(readBuiltinPrompt('developer'));

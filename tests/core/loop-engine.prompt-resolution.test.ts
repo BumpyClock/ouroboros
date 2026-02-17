@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, test, mock } from 'bun:test';
+import { afterEach, beforeEach, describe, expect, mock, test } from 'bun:test';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import * as path from 'node:path';
@@ -150,4 +150,3 @@ describe('runLoop prompt-resolution regression coverage', () => {
     ).rejects.toThrow(/Reviewer prompt file not found/);
   });
 });
-

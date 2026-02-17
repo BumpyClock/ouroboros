@@ -1,6 +1,6 @@
 import { parseArgs } from './core/cli';
-import { initializeBuiltinPrompts } from './core/prompts';
 import { runLoop } from './core/loop-engine';
+import { initializeBuiltinPrompts } from './core/prompts';
 import { getProviderAdapter } from './providers/registry';
 
 async function main(): Promise<void> {
@@ -22,9 +22,7 @@ async function main(): Promise<void> {
       }
     }
     if (written === 0 && skipped > 0 && !options.forceInitPrompts) {
-      console.log(
-        'Use --force-init-prompts to overwrite existing prompt files.',
-      );
+      console.log('Use --force-init-prompts to overwrite existing prompt files.');
     }
     return;
   }

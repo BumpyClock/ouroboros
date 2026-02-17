@@ -130,7 +130,10 @@ describe('runLoop mixed-review-provider wiring', () => {
       reviewMaxFixAttempts: 5,
     };
 
-    await loopEngineModule!.runLoop(baseOptions, mockPrimaryProvider);
+    if (!loopEngineModule) {
+      throw new Error('loopEngineModule did not initialize');
+    }
+    await loopEngineModule.runLoop(baseOptions, mockPrimaryProvider);
 
     expect(capturedInput.providerName).toBe('primary');
     expect(capturedInput.reviewerProviderName).toBe('reviewer');
@@ -163,7 +166,10 @@ describe('runLoop mixed-review-provider wiring', () => {
       reviewMaxFixAttempts: 5,
     };
 
-    await loopEngineModule!.runLoop(sameProviderOptions, mockPrimaryProvider);
+    if (!loopEngineModule) {
+      throw new Error('loopEngineModule did not initialize');
+    }
+    await loopEngineModule.runLoop(sameProviderOptions, mockPrimaryProvider);
 
     expect(capturedInput.command).toBe('resolved:primary run command');
     expect(capturedInput.reviewerCommand).toBe('resolved:primary run command');

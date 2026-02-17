@@ -2,7 +2,10 @@ import { describe, expect, it } from 'bun:test';
 import type { BeadIssue } from '../../core/types';
 import { buildAgentNotchLine, buildIterationStripParts, formatAgentTitle } from '../../tui/tui';
 
-const makeIssue = (id: string, title = 'Implement robust cross-platform path handling for user home resolution'): BeadIssue => ({
+const makeIssue = (
+  id: string,
+  title = 'Implement robust cross-platform path handling for user home resolution',
+): BeadIssue => ({
   id,
   title,
   status: 'open',
@@ -27,7 +30,10 @@ const makeTimeline = (currentIteration: number, maxIterations: number) => ({
 
 describe('Ink TUI rendering helpers', () => {
   it('formats agent title as <id> · <title> and removes [A#] inline prefix pattern', () => {
-    const picked = makeIssue('ouroboros-10.7', 'Implement robust cross-platform path handling for user home resolution');
+    const picked = makeIssue(
+      'ouroboros-10.7',
+      'Implement robust cross-platform path handling for user home resolution',
+    );
     expect(formatAgentTitle(picked, 80)).toBe(
       'ouroboros-10.7 · Implement robust cross-platform path handling for user home resolution',
     );

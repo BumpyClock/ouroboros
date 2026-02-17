@@ -121,7 +121,7 @@ function buildIterationSummaryLines(
       );
     }
   } else {
-      lines.push(`${badge('A', 'muted')} no picked beads`);
+    lines.push(`${badge('A', 'muted')} no picked beads`);
   }
 
   if (summary.notice) {
@@ -458,7 +458,7 @@ export class LiveRunRenderer {
     }
     if (!state.beadsSnapshot.available) {
       const suffix = state.beadsSnapshot.error
-        ? ` ${colorize(`(${formatShort(state.beadsSnapshot.error, 100)})`, ANSI.dim)`
+        ? ` ${colorize(`(${formatShort(state.beadsSnapshot.error, 100)})`, ANSI.dim)}`
         : '';
       return [`${badge('BEADS', 'warn')} unavailable${suffix}`];
     }
@@ -618,10 +618,7 @@ function formatIterationChip(
   return `[${base}-${markerBits.join('/')}]`;
 }
 
-function buildIterationStripText(
-  timeline: LiveRunIterationTimeline,
-  columns: number,
-): string[] {
+function buildIterationStripText(timeline: LiveRunIterationTimeline, columns: number): string[] {
   if (timeline.maxIterations <= 0) {
     return [
       `${badge('ITER', 'muted')} ${badge('CURRENT', 'info')} ${String(
@@ -636,7 +633,7 @@ function buildIterationStripText(
   const markers = timeline.markers.filter((marker) => marker.iteration >= 1);
   const compactLabels = columns < 120;
   const current = Math.min(Math.max(1, timeline.currentIteration), timeline.maxIterations);
-  let visible: typeof markers = [];
+  const visible: typeof markers = [];
   let prevCount = 0;
   if (columns >= 120) {
     const radius = 3;
