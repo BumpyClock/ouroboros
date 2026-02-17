@@ -5,6 +5,7 @@ import {
   type IterationSummary,
   type LiveRunAgentSelector,
   type LiveRunAgentTab,
+  type LiveRunIterationTimeline,
   type LiveRunHeaderState,
   type LiveRunState,
   LiveRunStateStore,
@@ -249,6 +250,135 @@ function renderBeads(state: LiveRunState): React.JSX.Element | null {
   );
 }
 
+function formatIterationChip(marker: LiveRunIterationTimeline['markers'][number]): string {
+  const base = marker.isCurrent ? `${String(marker.iteration).padStart(2, '0')}*` : String(marker.iteration).padStart(2, '0');
+  const markerBits: string[] = [];
+  if (marker.retryCount > 0) {
+    markerBits.push(`R${marker.retryCount}`);
+  }
+  if (marker.failed) {
+    markerBits.push('F');
+  }
+  return markerBits.length > 0 ? `[${base}-${markerBits.join('/')}]` : `[${base}]`;
+}
+
+function buildIterationStripParts(
+  timeline: LiveRunIterationTimeline,
+  columns: number,
+): {
+  chips: string[];
+  prevCount: number;
+  compactLabels: boolean;
+  fallbackOnly: boolean;
+  retryCount: number;
+  failedCount: number;
+} {
+  if (timeline.maxIterations <= 0) {
+    return {
+      chips: [],
+      prevCount: 0,
+      compactLabels: true,
+      fallbackOnly: true,
+      retryCount: timeline.totalRetries,
+      failedCount: timeline.totalFailed,
+    };
+  }
+
+  const markers = timeline.markers.filter((marker) => marker.iteration >= 1);
+  const current = Math.min(Math.max(1, timeline.currentIteration), timeline.maxIterations);
+  const visible: typeof markers = [];
+  let prevCount = 0;
+
+  if (columns >= 120) {
+    const radius = 3;
+    const start = Math.max(1, current - radius);
+    const end = Math.min(timeline.maxIterations, current + radius);
+    for (let iteration = start; iteration <= end; iteration += 1) {
+      const marker = markers[iteration - 1];
+      if (marker) {
+        visible.push(marker);
+      }
+    }
+    prevCount = Math.max(0, start - 1);
+  } else if (columns >= 100) {
+    const radius = 2;
+    const start = Math.max(1, current - radius);
+    const end = Math.min(timeline.maxIterations, current + radius);
+    for (let iteration = start; iteration <= end; iteration += 1) {
+      const marker = markers[iteration - 1];
+      if (marker) {
+        visible.push(marker);
+      }
+    }
+    prevCount = Math.max(0, start - 1);
+  } else if (columns >= 80) {
+    const visibleCount = Math.min(3, timeline.maxIterations - current + 1);
+    const end = Math.min(timeline.maxIterations, current + visibleCount - 1);
+    for (let iteration = current; iteration <= end; iteration += 1) {
+      const marker = markers[iteration - 1];
+      if (marker) {
+        visible.push(marker);
+      }
+    }
+    prevCount = Math.max(0, current - 1);
+  } else {
+    prevCount = Math.max(0, current - 1);
+  }
+
+  return {
+    chips: visible.map((marker) => formatIterationChip(marker)),
+    prevCount,
+    compactLabels: columns < 120,
+    fallbackOnly: columns < 80,
+    retryCount: timeline.totalRetries,
+    failedCount: timeline.totalFailed,
+  };
+}
+
+function renderIterationStrip(timeline: LiveRunIterationTimeline, columns: number): React.JSX.Element {
+  const { chips, prevCount, compactLabels, fallbackOnly, retryCount, failedCount } =
+    buildIterationStripParts(timeline, columns);
+
+  const prefix = compactLabels ? 'R' : 'Retry:';
+  const failedLabelPrefix = compactLabels ? 'F' : 'Failed:';
+  const retryText = `${prefix}${retryCount}`;
+  const failedText = `${failedLabelPrefix}${failedCount}`;
+
+  if (fallbackOnly) {
+    const pieces = [
+      `Iter ${timeline.currentIteration}/${timeline.maxIterations}`,
+      `Prev:${prevCount}`,
+      retryText,
+      failedText,
+    ];
+    return (
+      <Box marginTop={1} borderStyle="round" borderColor="yellow" paddingX={1}>
+        <Text>
+          {pieces.join(' | ')}
+        </Text>
+      </Box>
+    );
+  }
+
+  return (
+    <Box marginTop={1} borderStyle="round" borderColor="yellow" paddingX={1}>
+      <Text>
+        {prevCount > 0 ? (
+          <>
+            <StatusText tone="muted" text={`Prev: ${prevCount} `} />
+          </>
+        ) : null}
+        {chips.map((chip, index) => (
+          <Text key={`iter-chip-${index}`}>
+            <StatusText tone="neutral" text={`${chip}${index + 1 < chips.length ? ' ' : ''}`} />
+          </Text>
+        ))}
+        <StatusText tone="muted" text={` ${retryText}   ${failedText}`} />
+      </Text>
+    </Box>
+  );
+}
+
 function buildAgentNotchLine(agentId: number, cardWidth: number): string {
   const width = Math.max(20, cardWidth);
   const innerWidth = Math.max(12, width - 2);
@@ -400,6 +530,7 @@ function LiveView({ renderer }: { renderer: InkLiveRunRenderer }): React.JSX.Ele
           {renderAgentCard(state, renderer.getAgentSelector(agentId), agentId)}
         </React.Fragment>
       ))}
+      {renderIterationStrip(renderer.getIterationTimeline(), process.stdout.columns ?? 120)}
     </Box>
   );
 }
@@ -443,6 +574,7 @@ export class InkLiveRunRenderer {
   getHeaderState = (): LiveRunHeaderState => this.stateStore.getHeaderState();
   getAgentSelector = (agentId: number): LiveRunAgentSelector =>
     this.stateStore.getAgentSelector(agentId);
+  getIterationTimeline = (): LiveRunIterationTimeline => this.stateStore.getIterationTimeline();
 
   isEnabled(): boolean {
     return this.enabled;

@@ -429,3 +429,11 @@ on-zero reviewer/fixer => slot fail, malformed JSONL invalidates snapshot, fallb
   - No API changes; tabs render as compact status affordance and preserve existing dev event rows.
   - Challenge: review-loop textual output remains shared with dev event stream (no separate capture hook in current TUI event feed).
 
+
+2026-02-17
+- Completed bead ouroboros-10.5 (Ink bottom iteration strip responsive collapse).
+  - Implemented bottom iteration strip in 	ui/tui.tsx using LiveRunIterationTimeline from InkLiveRunRenderer with breakpoint-aware rendering: >=120 (7 chips), 100-119 (5 chips), 80-99 (Prev: + current/near-future), <80 compact single-row summary.
+  - Added per-mode marker formatting using aggregate Retry/Failed counts and current/failed/retry indicators on chips.
+  - Kept strip at render tail after agent cards, with empty-state fallback when iteration metadata is missing or unavailable.
+  - Learnings: centralized timeline selector is the right source of truth for rendering parity with terminal mode; narrow-mode collapse needs both current context and history count to preserve continuity under width pressure.
+  - Challenges: no runtime smoke due request constraints; width behavior should be visually sampled in real terminals before final trim.
