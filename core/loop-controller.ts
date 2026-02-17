@@ -49,6 +49,27 @@ export function shouldIgnoreStopMarkerForNoBeads(params: {
   return params.pickedCount === 0 || params.beadsSnapshot.remaining <= params.pickedCount;
 }
 
+export function buildTopLevelScopePrompt(prompt: string, topLevelBeadId?: string): string {
+  if (!topLevelBeadId) {
+    return prompt;
+  }
+  const topLevelGuidance = `\n\n## Top-level scope\n- Work only on beads that are direct children of ${topLevelBeadId}.\n- If no remaining scoped beads exist, emit \`no_beads_available\` and stop.\n`;
+  return `${prompt}${topLevelGuidance}`;
+}
+
+export function shouldStopFromTopLevelExhaustion(params: {
+  beadMode?: CliOptions['beadMode'];
+  topLevelBeadId?: string;
+  beadsSnapshot: Pick<BeadsSnapshot, 'available' | 'remaining'>;
+}): boolean {
+  return (
+    params.beadMode === 'top-level' &&
+    Boolean(params.topLevelBeadId) &&
+    params.beadsSnapshot.available &&
+    params.beadsSnapshot.remaining <= 0
+  );
+}
+
 function createLiveRenderer(
   options: CliOptions,
   iteration: number,
@@ -146,6 +167,7 @@ export async function runLoopController(
   let reachedCircuit = false;
   let terminalLoopPhase: 'completed' | 'stopped' | 'failed' | null = null;
   const agentIds = Array.from({ length: options.parallelAgents }, (_, index) => index + 1);
+  const topLevelBeadId = options.beadMode === 'top-level' ? options.topLevelBeadId : undefined;
   const liveRenderer = createLiveRenderer(
     options,
     state.current_iteration + 1,
@@ -157,7 +179,8 @@ export async function runLoopController(
       break;
     }
 
-    const prompt = readFileSync(promptPath, 'utf8');
+    const basePrompt = readFileSync(promptPath, 'utf8');
+    const prompt = buildTopLevelScopePrompt(basePrompt, topLevelBeadId);
     state.current_iteration += 1;
     writeIterationState(statePath, state);
 
@@ -166,8 +189,26 @@ export async function runLoopController(
     let results: RunResult[];
     let pickedByAgent = new Map<number, BeadIssue>();
     let iterationReviewOutcomes = new Map<number, SlotReviewOutcome>();
-    const topLevelBeadId = options.beadMode === 'top-level' ? options.topLevelBeadId : undefined;
     const beadsSnapshot = await loadBeadsSnapshot(options.projectRoot, topLevelBeadId);
+    if (
+      shouldStopFromTopLevelExhaustion({
+        beadMode: options.beadMode,
+        topLevelBeadId,
+        beadsSnapshot,
+      })
+    ) {
+      if (liveRenderer?.isEnabled()) {
+        liveRenderer.setLoopNotice(
+          `top-level scope exhausted: ${topLevelBeadId ?? 'unavailable'}`,
+          'success',
+        );
+      } else {
+        const topLevelHint = topLevelBeadId ? ` for ${topLevelBeadId}` : '';
+        console.log(`${badge('BEADS', 'success')} top-level scoped work exhausted${topLevelHint}`);
+      }
+      terminalLoopPhase = 'completed';
+      break;
+    }
     if (!liveRenderer?.isEnabled()) {
       printBeadsSnapshot(beadsSnapshot);
     }

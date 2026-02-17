@@ -87,6 +87,8 @@ Values are normalized into runtime types. Invalid keys are ignored.
 
 - `auto` (default): existing default bead selection behavior.
 - `top-level`: Ouroboros targets the configured bead id only. Use `topLevelBeadId` to pin execution.
+- In top-level mode, loop exits cleanly when no remaining direct child beads remain in scope.
+- Runtime prompt injection enforces top-level scope boundaries for developer agent prompts at run time; auto mode retains existing behavior.
 
 `top-level` mode requires both:
 

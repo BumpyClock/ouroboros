@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'bun:test';
-import { shouldIgnoreStopMarkerForNoBeads } from '../../core/loop-controller';
+import {
+  buildTopLevelScopePrompt,
+  shouldIgnoreStopMarkerForNoBeads,
+  shouldStopFromTopLevelExhaustion,
+} from '../../core/loop-controller';
 import type { BeadsSnapshot } from '../../core/types';
 
 function makeSnapshot(available: boolean, remaining: number): BeadsSnapshot {
@@ -60,6 +64,53 @@ describe('loop controller stop-marker behavior', () => {
         stopDetected: true,
         beadsSnapshot: snapshot,
         pickedCount: 1,
+      }),
+    ).toBeFalse();
+  });
+
+  it('injects top-level scope constraints into prompt', () => {
+    const basePrompt = 'Base prompt body';
+    const scopedPrompt = buildTopLevelScopePrompt(basePrompt, 'ouroboros-13');
+    expect(scopedPrompt).toContain('Base prompt body');
+    expect(scopedPrompt).toContain('Top-level scope');
+    expect(scopedPrompt).toContain('ouroboros-13');
+    expect(scopedPrompt).toContain('no_beads_available');
+  });
+
+  it('does not modify developer prompt when top-level bead is not provided', () => {
+    const basePrompt = 'Base prompt body';
+    expect(buildTopLevelScopePrompt(basePrompt, undefined)).toBe(basePrompt);
+  });
+
+  it('stops when top-level work is exhausted in available snapshot', () => {
+    const snapshot = makeSnapshot(true, 0);
+    expect(
+      shouldStopFromTopLevelExhaustion({
+        beadMode: 'top-level',
+        topLevelBeadId: 'ouroboros-13',
+        beadsSnapshot: snapshot,
+      }),
+    ).toBeTrue();
+  });
+
+  it('does not stop for exhaustion in auto mode', () => {
+    const snapshot = makeSnapshot(true, 0);
+    expect(
+      shouldStopFromTopLevelExhaustion({
+        beadMode: 'auto',
+        topLevelBeadId: 'ouroboros-13',
+        beadsSnapshot: snapshot,
+      }),
+    ).toBeFalse();
+  });
+
+  it('does not stop when top-level snapshot is unavailable', () => {
+    const snapshot = makeSnapshot(false, 0);
+    expect(
+      shouldStopFromTopLevelExhaustion({
+        beadMode: 'top-level',
+        topLevelBeadId: 'ouroboros-13',
+        beadsSnapshot: snapshot,
       }),
     ).toBeFalse();
   });
