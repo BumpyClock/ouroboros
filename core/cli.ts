@@ -22,6 +22,8 @@ type CliOverrides = {
   reviewMaxFixAttempts?: number;
   developerPromptPath?: string;
   reviewerPromptPath?: string;
+  initPrompts?: boolean;
+  forceInitPrompts?: boolean;
 };
 
 function parsePositiveInt(value: string | undefined, fallback: number): number {
@@ -100,6 +102,10 @@ function parseCliOverrides(argv: string[]): CliOverrides {
     } else if (arg === '--reviewer-prompt') {
       overrides.reviewerPromptPath = argv[i + 1];
       i += 1;
+    } else if (arg === '--init-prompts') {
+      overrides.initPrompts = true;
+    } else if (arg === '--force-init-prompts') {
+      overrides.forceInitPrompts = true;
     }
   }
 
@@ -136,7 +142,9 @@ Review loop:
       --no-review                Disable review loop
       --review-max-fix-attempts <n>  Max fix attempts per review cycle. default: 5
       --developer-prompt <path>  Developer prompt (fallback: .ai_agents/prompts/developer.md, .ai_agents/prompt.md, docs/prompts/developer.default.md)
-      --reviewer-prompt <path>   Reviewer prompt (fallback: .ai_agents/prompts/reviewer.md, docs/prompts/reviewer.default.md)
+  --reviewer-prompt <path>   Reviewer prompt (fallback: .ai_agents/prompts/reviewer.md, docs/prompts/reviewer.default.md)
+      --init-prompts            Write built-in prompts to .ai_agents/prompts/{developer,reviewer}.md when missing
+      --force-init-prompts      Overwrite .ai_agents/prompts/{developer,reviewer}.md when running --init-prompts
 
 Config:
   - Global config: ~/.ouroboros/config.toml
@@ -222,5 +230,7 @@ export function parseArgs(argv = process.argv.slice(2)): CliOptions {
       config.runtimeConfig.promptPath,
     ),
     reviewerPromptPath: pick(cli.reviewerPromptPath, config.runtimeConfig.reviewerPromptPath),
+    initPrompts: cli.initPrompts,
+    forceInitPrompts: cli.forceInitPrompts,
   };
 }

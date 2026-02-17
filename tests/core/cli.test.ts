@@ -118,6 +118,20 @@ describe('parseArgs reviewer provider/model resolution', () => {
     expect(options.reviewerModel).toBe('opus');
   });
 
+  it('parses init prompts flag', () => {
+    const options = parseWithConfig(['--init-prompts']);
+
+    expect(options.initPrompts).toBe(true);
+    expect(options.forceInitPrompts).toBe(undefined);
+  });
+
+  it('parses init prompts with force flag', () => {
+    const options = parseWithConfig(['--init-prompts', '--force-init-prompts']);
+
+    expect(options.initPrompts).toBe(true);
+    expect(options.forceInitPrompts).toBe(true);
+  });
+
   it('throws for unsupported reviewer provider names', () => {
     expect(() =>
       parseWithConfig(['--reviewer-provider', 'not-a-provider'], {

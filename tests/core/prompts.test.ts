@@ -1,9 +1,10 @@
 import { afterEach, describe, expect, test } from 'bun:test';
-import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import {
   readBuiltinPrompt,
+  initializeBuiltinPrompts,
   resolveBuiltinPromptPath,
   resolveDeveloperPromptPath,
   resolvePromptPath,
@@ -139,6 +140,60 @@ describe('resolveDeveloperPromptPath', () => {
     expect(() => resolveDeveloperPromptPath(tmpDir, 'missing/developer.md')).toThrow(
       /No developer prompt found/,
     );
+  });
+});
+
+describe('initializeBuiltinPrompts', () => {
+  afterEach(teardown);
+
+  test('writes built-in prompts when missing', () => {
+    setup();
+    const results = initializeBuiltinPrompts(tmpDir);
+    const developerTarget = path.join(tmpDir, '.ai_agents', 'prompts', 'developer.md');
+    const reviewerTarget = path.join(tmpDir, '.ai_agents', 'prompts', 'reviewer.md');
+    expect(results).toHaveLength(2);
+    expect(results.some((entry) => entry.role === 'developer' && entry.action === 'written')).toBe(true);
+    expect(results.some((entry) => entry.role === 'reviewer' && entry.action === 'written')).toBe(true);
+    expect(existsSync(developerTarget)).toBe(true);
+    expect(existsSync(reviewerTarget)).toBe(true);
+    expect(readFileSync(developerTarget, 'utf8')).toBe(readBuiltinPrompt('developer'));
+    expect(readFileSync(reviewerTarget, 'utf8')).toBe(readBuiltinPrompt('reviewer'));
+  });
+
+  test('skips existing prompts without force', () => {
+    setup();
+    const promptsDir = path.join(tmpDir, '.ai_agents', 'prompts');
+    mkdirSync(promptsDir, { recursive: true });
+    const developerTarget = path.join(promptsDir, 'developer.md');
+    const reviewerTarget = path.join(promptsDir, 'reviewer.md');
+    writeFileSync(developerTarget, '# custom developer');
+    writeFileSync(reviewerTarget, '# custom reviewer');
+
+    const results = initializeBuiltinPrompts(tmpDir);
+    expect(results).toEqual([
+      { role: 'developer', path: developerTarget, action: 'skipped' },
+      { role: 'reviewer', path: reviewerTarget, action: 'skipped' },
+    ]);
+    expect(readFileSync(developerTarget, 'utf8')).toBe('# custom developer');
+    expect(readFileSync(reviewerTarget, 'utf8')).toBe('# custom reviewer');
+  });
+
+  test('overwrites prompts when force is enabled', () => {
+    setup();
+    const promptsDir = path.join(tmpDir, '.ai_agents', 'prompts');
+    mkdirSync(promptsDir, { recursive: true });
+    const developerTarget = path.join(promptsDir, 'developer.md');
+    const reviewerTarget = path.join(promptsDir, 'reviewer.md');
+    writeFileSync(developerTarget, '# custom developer');
+    writeFileSync(reviewerTarget, '# custom reviewer');
+
+    const results = initializeBuiltinPrompts(tmpDir, { force: true });
+    expect(results).toEqual([
+      { role: 'developer', path: developerTarget, action: 'written' },
+      { role: 'reviewer', path: reviewerTarget, action: 'written' },
+    ]);
+    expect(readFileSync(developerTarget, 'utf8')).toBe(readBuiltinPrompt('developer'));
+    expect(readFileSync(reviewerTarget, 'utf8')).toBe(readBuiltinPrompt('reviewer'));
   });
 });
 

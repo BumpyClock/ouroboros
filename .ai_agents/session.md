@@ -1,6 +1,17 @@
 # session log
 
 ## 2026-02-17
+- Completed bead `ouroboros-12.6` (Prompt bootstrap helper).
+  - Added `core/prompts.ts` initializer `initializeBuiltinPrompts` with role-based, non-destructive materialization and `--force` support.
+  - Added CLI surface in `core/cli.ts`: `--init-prompts` and `--force-init-prompts`; wired into usage and parsed options.
+  - Wired `ouroboros.ts` execution path to perform prompt init and exit before loop startup.
+  - Added regression tests in:
+    - `tests/core/prompts.test.ts` (writes/skip/overwrite behavior for initializer),
+    - `tests/core/cli.test.ts` (`--init-prompts` parsing),
+  - Documented command behavior in `docs/config.md`.
+  - No runtime execution done in this bead; touched files limited to prompt init UX path.
+
+## 2026-02-17
 - Completed bead `ouroboros-10.7` (Verification + docs for TUI refinement rollout).
   - Added `tests/tui/tui.test.ts` with focused helper assertions for:
     - `<id> · <title>` rendering and no `[A#]` inline body prefix

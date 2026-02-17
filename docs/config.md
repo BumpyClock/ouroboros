@@ -146,6 +146,21 @@ If none of the project-level defaults exist, Ouroboros falls back to built-in de
 
 When review is enabled (`--review`) and no project prompt or explicit path is found, the loop falls back to `docs/prompts/reviewer.default.md`.
 
+### Materializing defaults
+
+Use `--init-prompts` to write bundled defaults into the project prompt directory:
+
+```bash
+ouroboros --init-prompts
+```
+
+Behavior:
+
+- Writes `.ai_agents/prompts/developer.md` from `docs/prompts/developer.default.md`.
+- Writes `.ai_agents/prompts/reviewer.md` from `docs/prompts/reviewer.default.md`.
+- Existing files are skipped by default to avoid overwrites.
+- Add `--force-init-prompts` to overwrite existing files.
+
 ### Directory layout
 
 ```

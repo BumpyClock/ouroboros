@@ -21,6 +21,8 @@ export type CliOptions = {
   reviewMaxFixAttempts: number;
   developerPromptPath?: string;
   reviewerPromptPath?: string;
+  initPrompts?: boolean;
+  forceInitPrompts?: boolean;
 };
 
 export type IterationState = {

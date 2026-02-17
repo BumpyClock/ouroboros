@@ -1,4 +1,4 @@
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import * as path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -21,6 +21,39 @@ export function resolveBuiltinPromptPath(role: PromptRole): string {
 
 export function readBuiltinPrompt(role: PromptRole): string {
   return readFileSync(resolveBuiltinPromptPath(role), 'utf8');
+}
+
+export type PromptInitResult = {
+  role: PromptRole;
+  path: string;
+  action: 'written' | 'skipped';
+};
+
+export function resolvePromptFilePath(cwd: string, role: PromptRole): string {
+  return path.resolve(cwd, PROMPTS_DIR, `${role}.md`);
+}
+
+export function initializeBuiltinPrompts(
+  cwd: string,
+  options: {
+    force?: boolean;
+    roles?: PromptRole[];
+  } = {},
+): PromptInitResult[] {
+  const roles = options.roles ?? ['developer', 'reviewer'];
+  const force = options.force ?? false;
+
+  return roles.map((role) => {
+    const target = resolvePromptFilePath(cwd, role);
+    const source = resolveBuiltinPromptPath(role);
+    if (!force && existsSync(target)) {
+      return { role, path: target, action: 'skipped' };
+    }
+
+    mkdirSync(path.dirname(target), { recursive: true });
+    writeFileSync(target, readFileSync(source, 'utf8'));
+    return { role, path: target, action: 'written' };
+  });
 }
 
 /**
