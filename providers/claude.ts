@@ -136,7 +136,7 @@ function buildClaudeExecArgs(
   _lastMessagePath: string,
   options: CliOptions,
 ): string[] {
-  const args = ['-p', prompt, '--output-format', 'stream-json'];
+  const args = ['-p', prompt, '--output-format', 'stream-json', '--verbose'];
   if (options.model.trim()) {
     args.push('--model', options.model.trim());
   }

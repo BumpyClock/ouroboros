@@ -22,6 +22,7 @@
 - Keep render throttling and log throttling as separate controls.
 - Use deterministic, stable list-row keys (slot identity), never content-derived placeholders or array index keys.
 - Route rich TTY lifecycle updates through renderer state and preserve non-TTY fallback behavior.
+- Claude print mode with `--output-format stream-json` now requires `--verbose`; keep both flags together in provider args.
 
 ## Process
 - Add regression tests for bug fixes when scope permits.
