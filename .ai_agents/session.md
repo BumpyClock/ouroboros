@@ -344,3 +344,10 @@
   - Learnings: explicit status checks before JSON parsing are necessary to avoid trusting failed subprocess output; tests should assert call-count/attempt semantics as well as failure reason. 
   - Challenge: tests not executed in-session by policy.
 
+- 2026-02-17
+- Completed bead `ouroboros-9.2` (`Harden JSONL-first bead snapshot semantics under transient partial writes`).
+  - Behavior change in `core/beads.ts`: `loadBeadsSnapshotFromJsonl` now counts malformed JSONL lines; any malformed line makes JSONL snapshots unavailable (instead of being silently ignored) so partial/truncated writes cannot appear as valid empty state.
+  - `core/loop-controller.ts`: no-bead stop condition now requires `beadsSnapshot.available` so unknown/untrusted snapshots do not trigger early stop.
+  - `tests/core/json.test.ts`: added regressions for malformed JSONL invalidation and malformed-to-`bd` fallback, plus removed malformed fixture from strict-valid JSONL happy-path test.
+  - Learnings: strict JSONL validity should be fail-closed; unknown snapshot states are safe to treat as non-authoritative.
+  - Challenge: no runtime verification run in this bead (policy); change is behavioral hardening only.
