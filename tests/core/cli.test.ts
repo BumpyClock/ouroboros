@@ -161,6 +161,15 @@ describe('parseArgs reviewer provider/model resolution', () => {
     ).toThrow(/Unsupported provider "not-a-provider"/);
   });
 
+  it('normalizes reviewerProvider from config to lowercase', () => {
+    const options = parseWithConfig([], {
+      provider: 'codex',
+      reviewerProvider: 'CLAUDE',
+    });
+
+    expect(options.reviewerProvider).toBe('claude');
+  });
+
   it('uses CLI theme override with config and default', () => {
     const withConfig = parseWithConfig(['--theme', 'matrix'], {
       provider: 'codex',
