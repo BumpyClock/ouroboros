@@ -76,3 +76,18 @@
 - Added loop-controller mode-semantics coverage for early top-level exhaustion, auto-mode stop-marker behavior, and prompt scope injection by mode.
 - Added CLI validation for empty `--top-level-bead` in top-level mode.
 - Updated docs/config and LEARNINGS with termination-order semantics.
+
+### `ouroboros-13.7` (done)
+- Added `tests/tui/tui.test.ts` regression coverage for keyboard routing/view transitions: focus movement across pane/view boundaries, enter-context gating, direct selector clamping, and dashboard toggle stability.
+- Added zero-iteration deterministic fallback assertion for `buildIterationStripParts` to lock compact/fallback behavior.
+- Updated `docs/tui-refinement-spec.md` with interaction model, keyboard contract, deterministic state checks, and troubleshooting.
+- Updated `docs/README.md` pointer to reflect expanded TUI docs scope.
+- Commit: `37880d0`
+- Learnings: deterministic transition tests at helper level catch view-state regressions quickly; `enter` behavior depends on both pane and view, not just current key.
+- Open challenge: did not run `bun run doctor`/tests in this bead due timebox.
+
+### ouroboros-13 (2026-02-17) [slice complete]
+- Completed bead task: ouroboros-13 now has an explicit prioritized-open-gap matrix for the TUI parity roadmap in docs/tui-parity-plan.md (P0/P1/P2 entries with measurable acceptance checks).
+- Learning: explicit acceptance checks made the roadmap easier to act on from next-bead planning.
+- Challenge: existing working tree already had unrelated modified files; this bead kept scope doc-only to avoid overlap and preserve stability.
+

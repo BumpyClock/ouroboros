@@ -53,6 +53,24 @@ Date: 2026-02-17
 5. `ouroboros-13.4`: conflict/merge operational overlays.
 6. `ouroboros-13.5`+: UX overlays/theme once interaction is stable.
 
+## Prioritized open-gap matrix (top 5)
+- P0 | Keyboard interaction model (`ouroboros-13.2`)
+  - Open gap: no parser-safe view-aware key router for task/iteration/parallel panes.
+  - Acceptance check: each reference shortcut path (`Tab`, `w`, `m`, `a`, `Enter`, `Esc`, `?`) has deterministic handling and no uncaught key exceptions in interactive mode.
+  - Measurable outcome: visible help text and one deterministic route per mode.
+- P0 | View-state model (`ouroboros-13.2`)
+  - Open gap: no first-class, user-selectable view states beyond live stream + compact strip.
+  - Acceptance check: user can switch between tasks, iteration list, and iteration detail from keyboard and return to live mode without lost iteration cursor.
+- P1 | Iteration history pane (`ouroboros-13.3`)
+  - Open gap: missing persistent iteration list and pending/failure entries in list mode.
+  - Acceptance check: backlog and failure markers are visible in a list model and can be cursor-selected.
+- P1 | Iteration detail drilldown (`ouroboros-13.3`)
+  - Open gap: no per-iteration timeline or output slice in detail view.
+  - Acceptance check: selected history entry opens detail view with deterministic fields (status, timing, summary, failure reason).
+- P2 | Conflict merge/worker conflict surface (`ouroboros-13.4`)
+  - Open gap: no conflict-resolution overlay or retry/skip actions for failed units.
+  - Acceptance check: failure entries can open a conflict/merge surface and expose user actions as enabled/disabled state only by data availability.
+
 ## Implementation notes (current session)
 
 - `ouroboros-13.3` now has Ink TUI multi-pane shell behavior with left live/task panel and right iteration history panel.
