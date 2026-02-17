@@ -231,7 +231,9 @@ export function parseArgs(argv = process.argv.slice(2)): CliOptions {
   ) as string;
   const reviewerCommand = pick(cli.reviewerCommand, config.runtimeConfig.reviewerCommand);
   const beadMode = parseBeadMode(pick(cli.beadMode, config.runtimeConfig.beadMode, 'auto'));
-  const topLevelBeadId = parseTopLevelBeadId(pick(cli.topLevelBeadId, config.runtimeConfig.topLevelBeadId));
+  const topLevelBeadId = parseTopLevelBeadId(
+    pick(cli.topLevelBeadId, config.runtimeConfig.topLevelBeadId),
+  );
   if (beadMode === 'top-level' && !topLevelBeadId) {
     throw new Error('Top-level mode requires --top-level-bead');
   }

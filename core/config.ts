@@ -70,7 +70,11 @@ function parseTomlFile(configPath: string): Record<string, unknown> {
 }
 
 function parseString(value: unknown): string | undefined {
-  return typeof value === 'string' ? value : undefined;
+  if (typeof value !== 'string') {
+    return undefined;
+  }
+  const normalized = value.trim();
+  return normalized === '' ? undefined : normalized;
 }
 
 function toBoolean(value: unknown): boolean | undefined {

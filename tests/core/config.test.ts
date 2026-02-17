@@ -104,6 +104,30 @@ reviewerModel = "global-model"
     expect(loaded.runtimeConfig.reviewerModel).toBe('global-model');
   });
 
+  it('ignores blank reviewer fields from project config and keeps global values', async () => {
+    writeConfig(
+      path.join(tempHome, '.ouroboros', 'config.toml'),
+      `
+reviewerProvider = "global-rev"
+reviewerModel = "global-model"
+`,
+    );
+
+    writeConfig(
+      path.join(projectRoot, '.ouroboros', 'config.toml'),
+      `
+reviewerProvider = ""
+reviewerModel = ""
+reviewerCommand = ""
+`,
+    );
+
+    const loaded = loadOuroborosConfig(projectRoot);
+    expect(loaded.runtimeConfig.reviewerProvider).toBe('global-rev');
+    expect(loaded.runtimeConfig.reviewerModel).toBe('global-model');
+    expect(loaded.runtimeConfig.reviewerCommand).toBeUndefined();
+  });
+
   it('merges theme setting with project config taking precedence', async () => {
     writeConfig(
       path.join(tempHome, '.ouroboros', 'config.toml'),

@@ -94,7 +94,6 @@ describe('Ink TUI rendering helpers', () => {
       failedCount: 1,
     });
   });
-
 });
 
 describe('Ink TUI interaction state', () => {

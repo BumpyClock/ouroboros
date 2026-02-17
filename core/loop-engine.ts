@@ -12,6 +12,8 @@ import { resolveRunnableCommand } from './process-runner';
 import { resolveDeveloperPromptPath, resolveReviewerPromptPath } from './prompts';
 import { installLoopShutdownGuard } from './shutdown';
 import { resolveIterationStatePath } from './state';
+import { setTheme } from './terminal-ui';
+import { resolveTheme } from './theme';
 import type { CliOptions, PreviewEntry, Tone } from './types';
 
 type ActiveSpinnerStopRef = {
@@ -28,6 +30,8 @@ export function shouldStopFromProviderOutput(
 
 export async function runLoop(options: CliOptions, provider: ProviderAdapter): Promise<void> {
   const cwd = process.cwd();
+  setTheme(resolveTheme(options.theme ?? 'default', cwd));
+
   const promptPath = resolveDeveloperPromptPath(cwd, options.developerPromptPath);
   const reviewerPromptPath = options.reviewEnabled
     ? resolveReviewerPromptPath(cwd, options.reviewerPromptPath)

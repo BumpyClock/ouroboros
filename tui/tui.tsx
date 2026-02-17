@@ -12,10 +12,17 @@ import {
   type LoopPhase,
   type RunContext,
 } from '../core/live-run-state';
-import { badge } from '../core/terminal-ui';
+import { badge, toneInkColor } from '../core/terminal-ui';
 import { formatShort } from '../core/text';
 import type { BeadIssue, BeadsSnapshot, PreviewEntry, Tone, UsageSummary } from '../core/types';
 import { buildPreviewRowKey } from './preview-row-key';
+
+type Toast = {
+  id: number;
+  message: string;
+  tone: Tone;
+  expiresAt: number;
+};
 
 type Listener = () => void;
 export type TuiView = 'tasks' | 'iterations' | 'iteration-detail' | 'reviewer';
@@ -29,7 +36,17 @@ const DEFAULT_HELP_TEXT = [
   'Enter: open selected iteration detail',
   '[ ]: iteration cursor (iteration detail)',
   '1/2/3/4: direct view selection',
+  'd: dashboard overlay',
 ];
+const TOAST_TTL_MS_BY_TONE: Record<Tone, number> = {
+  info: 2200,
+  success: 2400,
+  warn: 3000,
+  error: 3500,
+  muted: 1800,
+  neutral: 2200,
+};
+const TOAST_REPEAT_GUARD_MS = 1500;
 
 export type InkInputKey = {
   tab?: boolean;
@@ -46,6 +63,7 @@ export type TuiInteractionState = {
   selectedAgentIndex: number;
   selectedIteration: number;
   helpVisible: boolean;
+  dashboardVisible: boolean;
   agentCount: number;
   maxIterations: number;
 };
@@ -69,6 +87,7 @@ export function buildInitialTuiInteractionState(
     selectedAgentIndex: safeAgentCount > 0 ? 0 : -1,
     selectedIteration: safeMaxIterations > 0 ? 1 : 1,
     helpVisible: false,
+    dashboardVisible: false,
     agentCount: safeAgentCount,
     maxIterations: safeMaxIterations,
   };
@@ -117,11 +136,20 @@ export function transitionTuiInteractionState(
 ): TuiInteractionState {
   const normalized = input.toLowerCase();
   const iterationPaneActive =
-    state.view === 'iterations' || state.view === 'iteration-detail' || state.focusedPane === 'iterations';
+    state.view === 'iterations' ||
+    state.view === 'iteration-detail' ||
+    state.focusedPane === 'iterations';
   if (normalized === '?' || normalized === 'h') {
     return {
       ...state,
       helpVisible: !state.helpVisible,
+    };
+  }
+
+  if (normalized === 'd') {
+    return {
+      ...state,
+      dashboardVisible: !state.dashboardVisible,
     };
   }
 
@@ -200,21 +228,8 @@ export function transitionTuiInteractionState(
   return state;
 }
 
-function toneToColor(tone: Tone): 'white' | 'cyan' | 'green' | 'yellow' | 'red' | 'gray' {
-  switch (tone) {
-    case 'info':
-      return 'cyan';
-    case 'success':
-      return 'green';
-    case 'warn':
-      return 'yellow';
-    case 'error':
-      return 'red';
-    case 'muted':
-      return 'gray';
-    default:
-      return 'white';
-  }
+function toneToColor(tone: Tone): string {
+  return toneInkColor(tone);
 }
 
 function StatusText({
@@ -399,7 +414,7 @@ function renderBeads(state: LiveRunState): React.JSX.Element | null {
   if (!beads.available) {
     const suffix = beads.error ? ` (${formatShort(beads.error, 80)})` : '';
     return (
-      <Box marginTop={1} borderStyle="round" borderColor="yellow" paddingX={1}>
+      <Box marginTop={1} borderStyle="round" borderColor={toneToColor('warn')} paddingX={1}>
         <Text>
           {renderStatusBadge('BEADS', 'warn')}{' '}
           <StatusText tone="warn" text={` unavailable${suffix}`} />
@@ -409,7 +424,13 @@ function renderBeads(state: LiveRunState): React.JSX.Element | null {
   }
 
   return (
-    <Box marginTop={1} borderStyle="round" borderColor="blue" paddingX={1} flexDirection="column">
+    <Box
+      marginTop={1}
+      borderStyle="round"
+      borderColor={toneToColor('info')}
+      paddingX={1}
+      flexDirection="column"
+    >
       <Text>
         {renderStatusBadge('BEADS', 'info')}{' '}
         <StatusText
@@ -539,14 +560,14 @@ function renderIterationStrip(
       failedText,
     ];
     return (
-      <Box marginTop={1} borderStyle="round" borderColor="yellow" paddingX={1}>
+      <Box marginTop={1} borderStyle="round" borderColor={toneToColor('warn')} paddingX={1}>
         <Text>{pieces.join(' | ')}</Text>
       </Box>
     );
   }
 
   return (
-    <Box marginTop={1} borderStyle="round" borderColor="yellow" paddingX={1}>
+    <Box marginTop={1} borderStyle="round" borderColor={toneToColor('warn')} paddingX={1}>
       <Text>
         {prevCount > 0 ? <StatusText tone="muted" text={`Prev: ${prevCount} `} /> : null}
         {chipsText ? <StatusText tone="neutral" text={`${chipsText} `} /> : null}
@@ -562,9 +583,7 @@ type IterationQueueMarker = {
   failed: boolean;
 };
 
-function buildRetryFailureQueue(
-  timeline: LiveRunIterationTimeline,
-): IterationQueueMarker[] {
+function buildRetryFailureQueue(timeline: LiveRunIterationTimeline): IterationQueueMarker[] {
   return timeline.markers
     .filter((marker) => marker.failed || marker.retryCount > 0)
     .map((marker) => ({
@@ -581,7 +600,10 @@ function renderIterationHistoryList(
   focused: boolean,
 ): React.JSX.Element {
   const rows: React.JSX.Element[] = [];
-  const safeSelectedIteration = Math.max(1, Math.min(selectedIteration, timeline.maxIterations || 1));
+  const safeSelectedIteration = Math.max(
+    1,
+    Math.min(selectedIteration, timeline.maxIterations || 1),
+  );
   if (timeline.maxIterations <= 0) {
     rows.push(
       <Text key="iter-history-empty">
@@ -593,7 +615,10 @@ function renderIterationHistoryList(
     const rowLimit = columns >= 110 ? 12 : columns >= 80 ? 8 : 4;
     const maxRows = Math.min(rowLimit, timeline.maxIterations);
     const half = Math.floor((maxRows - 1) / 2);
-    const start = Math.max(1, Math.min(target - half, Math.max(1, timeline.maxIterations - maxRows + 1)));
+    const start = Math.max(
+      1,
+      Math.min(target - half, Math.max(1, timeline.maxIterations - maxRows + 1)),
+    );
     const end = Math.min(timeline.maxIterations, start + maxRows - 1);
     for (let iteration = start; iteration <= end; iteration += 1) {
       const marker = timeline.markers[iteration - 1];
@@ -609,7 +634,10 @@ function renderIterationHistoryList(
         <Text key={`iter-${marker.iteration}`}>
           {selectedPrefix}
           <StatusText tone={tone} text={` ${chip.padEnd(8, ' ')} `} />
-          <StatusText tone={isCurrent ? 'info' : 'neutral'} text={isCurrent ? 'current' : 'history'} />
+          <StatusText
+            tone={isCurrent ? 'info' : 'neutral'}
+            text={isCurrent ? 'current' : 'history'}
+          />
         </Text>,
       );
     }
@@ -621,10 +649,7 @@ function renderIterationHistoryList(
   rows.push(
     <Text key="iter-queue-title">
       {renderStatusBadge('QUEUE', 'warn')}{' '}
-      <StatusText
-        tone="muted"
-        text={`retry/failure (${visibleQueue.length}/${queue.length})`}
-      />
+      <StatusText tone="muted" text={`retry/failure (${visibleQueue.length}/${queue.length})`} />
     </Text>,
   );
   if (visibleQueue.length === 0) {
@@ -641,7 +666,8 @@ function renderIterationHistoryList(
       const markerTone: Tone = marker.failed ? 'error' : 'warn';
       rows.push(
         <Text key={`iter-queue-${marker.iteration}`}>
-          {selectedPrefix} <StatusText tone={markerTone} text={`I${String(marker.iteration).padStart(2, '0')}`} />{' '}
+          {selectedPrefix}{' '}
+          <StatusText tone={markerTone} text={`I${String(marker.iteration).padStart(2, '0')}`} />{' '}
           <StatusText tone="muted" text={markerLabel} />
         </Text>,
       );
@@ -650,12 +676,95 @@ function renderIterationHistoryList(
 
   const focusText = focused ? '[iter list focus]' : '[iter list]';
   return (
-    <Box marginTop={1} borderStyle="round" borderColor="blue" paddingX={1} flexDirection="column">
+    <Box
+      marginTop={1}
+      borderStyle="round"
+      borderColor={toneToColor('info')}
+      paddingX={1}
+      flexDirection="column"
+    >
       <Text>
         {renderStatusBadge('HISTORY', 'info')}{' '}
-        <StatusText tone="muted" text={`${timeline.currentIteration}/${timeline.maxIterations} ${focusText}`} />
+        <StatusText
+          tone="muted"
+          text={`${timeline.currentIteration}/${timeline.maxIterations} ${focusText}`}
+        />
       </Text>
       {rows}
+    </Box>
+  );
+}
+
+function renderToastNotifications(toasts: Toast[]): React.JSX.Element | null {
+  if (toasts.length === 0) {
+    return null;
+  }
+  const display = toasts.slice(-3);
+  return (
+    <Box
+      marginTop={1}
+      borderStyle="round"
+      borderColor={toneToColor('warn')}
+      paddingX={1}
+      flexDirection="column"
+    >
+      {display.map((toast) => (
+        <Text key={toast.id}>
+          {renderStatusBadge('TOAST', toast.tone)}{' '}
+          <StatusText tone={toast.tone} text={toast.message} />
+        </Text>
+      ))}
+    </Box>
+  );
+}
+
+function renderDashboard(
+  state: LiveRunState,
+  timeline: LiveRunIterationTimeline,
+  _columns: number,
+): React.JSX.Element {
+  const queue = buildRetryFailureQueue(timeline);
+  const queueLines = queue.slice(0, 3).map((entry) => (
+    <Text key={`dashboard-queue-${entry.iteration}`}>
+      <StatusText tone="muted" text={`${entry.iteration}:`} />{' '}
+      <StatusText
+        tone={entry.failed ? 'error' : 'warn'}
+        text={entry.failed ? 'failed' : `R${entry.retryCount}`}
+      />
+    </Text>
+  ));
+
+  return (
+    <Box
+      marginTop={1}
+      borderStyle="round"
+      borderColor={toneToColor('info')}
+      paddingX={1}
+      flexDirection="column"
+    >
+      <Text>
+        {renderStatusBadge('DASH', 'info')}{' '}
+        <StatusText
+          tone="neutral"
+          text={`run dashboard ${state.iteration}/${state.maxIterations}`}
+        />{' '}
+        <StatusText
+          tone={state.running ? 'success' : 'muted'}
+          text={state.running ? 'running' : 'stopped'}
+        />
+      </Text>
+      <Text>
+        {renderStatusBadge('QUEUE', queue.length > 0 ? 'warn' : 'muted')}{' '}
+        <StatusText tone="neutral" text={`retry/failure markers: ${queue.length}`} />
+      </Text>
+      {queueLines.length === 0 ? (
+        <Text>
+          <StatusText tone="muted" text="queue empty" />
+        </Text>
+      ) : (
+        queueLines
+      )}
+      {renderRunContext(state).map((line) => line)}
     </Box>
   );
 }
@@ -668,7 +777,7 @@ function renderViewHelp(helpVisible: boolean): React.JSX.Element | null {
     <Box
       marginTop={1}
       borderStyle="round"
-      borderColor="magenta"
+      borderColor={toneToColor('info')}
       flexDirection="column"
       paddingX={1}
     >
@@ -695,7 +804,13 @@ function renderIterationDetail(
     ? `${marker.isCurrent ? 'current' : 'history'} ${marker.succeeded ? 'success' : marker.failed ? 'failed' : 'pending'}`
     : 'pending';
   return (
-    <Box marginTop={1} borderStyle="round" borderColor="yellow" flexDirection="column" paddingX={1}>
+    <Box
+      marginTop={1}
+      borderStyle="round"
+      borderColor={toneToColor('warn')}
+      flexDirection="column"
+      paddingX={1}
+    >
       <Text>
         {renderStatusBadge('ITER-DETAIL', 'info')}{' '}
         <StatusText tone="neutral" text={iterationText} />
@@ -727,10 +842,11 @@ function renderAgentListPanel(
   state: LiveRunState,
   renderer: InkLiveRunRenderer,
   uiState: TuiInteractionState,
-  columns: number,
+  _columns: number,
 ): React.JSX.Element {
   const safeAgentCount = Math.max(0, state.agentIds.length);
-  const safeIndex = safeAgentCount > 0 ? clampIndex(uiState.selectedAgentIndex, 0, safeAgentCount - 1) : -1;
+  const safeIndex =
+    safeAgentCount > 0 ? clampIndex(uiState.selectedAgentIndex, 0, safeAgentCount - 1) : -1;
   const isFocused = uiState.focusedPane === 'agents';
   return (
     <Box flexDirection="column" marginRight={1} flexGrow={1}>
@@ -810,7 +926,12 @@ function renderViewContent(
         <Text>{renderStatusBadge('VIEW', 'warn')} reviewer panel</Text>
         <Box marginTop={1} flexDirection="column">
           {renderRunContext(state).map((line) => line)}
-          {renderCurrentAgentCard(state, uiState, (agentId) => renderer.getAgentSelector(agentId), true)}
+          {renderCurrentAgentCard(
+            state,
+            uiState,
+            (agentId) => renderer.getAgentSelector(agentId),
+            true,
+          )}
         </Box>
       </Box>,
     ];
@@ -832,13 +953,7 @@ function renderViewContent(
   }
 
   return [
-    <Box
-      key="tasks-layout"
-      marginTop={1}
-      flexDirection="row"
-      width={columns - 2}
-      gap={1}
-    >
+    <Box key="tasks-layout" marginTop={1} flexDirection="row" width={columns - 2} gap={1}>
       <Box width={Math.max(60, Math.floor(columns * 0.64))} flexDirection="column">
         {renderTaskSummaryPanel(state, columns)}
         {renderAgentListPanel(state, renderer, uiState, columns)}
@@ -945,15 +1060,15 @@ function renderAgentCard(
       <Text color={toneToColor('muted')}>{buildAgentNotchLine(agentId, cardWidth)}</Text>
       <Box
         borderStyle="round"
-        borderColor={selected ? 'cyan' : toneToColor(tone)}
+        borderColor={selected ? toneToColor('info') : toneToColor(tone)}
         paddingX={1}
         flexDirection="column"
         width={cardWidth}
       >
         <Box>
-          {renderAgentTab('Dev', !selectedReview, 'cyan', 'gray')}
+          {renderAgentTab('Dev', !selectedReview, toneToColor('info'), toneToColor('muted'))}
           <Text> </Text>
-          {renderAgentTab('Review', selectedReview, 'yellow', 'gray')}
+          {renderAgentTab('Review', selectedReview, toneToColor('warn'), toneToColor('muted'))}
         </Box>
         {!snapshot ? (
           <Text>
@@ -964,7 +1079,10 @@ function renderAgentCard(
             />{' '}
             {renderStatusBadge(selector.statusLabel, selector.statusTone)}{' '}
             <StatusText tone={selector.statusTone} dim text={` ${selector.statusText}`} />
-            <StatusText tone="muted" text={` · iter ${state.iteration}/${state.maxIterations} · ${retryAttemptText}`} />
+            <StatusText
+              tone="muted"
+              text={` · iter ${state.iteration}/${state.maxIterations} · ${retryAttemptText}`}
+            />
             <StatusText tone="muted" text={` · ${ageSeconds}s ago`} />
             {selected ? ` ${renderStatusBadge('>', 'info')}` : null}
           </Text>
@@ -1003,6 +1121,7 @@ function LiveView({ renderer }: { renderer: InkLiveRunRenderer }): React.JSX.Ele
   const headerState = renderer.getHeaderState();
   const [, setViewTick] = useState(0);
   const uiState = renderer.getUiState();
+  const toasts = renderer.getToasts();
 
   useInput((input, key) => {
     const next = renderer.transition(input, key);
@@ -1019,9 +1138,14 @@ function LiveView({ renderer }: { renderer: InkLiveRunRenderer }): React.JSX.Ele
           {renderStatusBadge('VIEW', 'info')}{' '}
           <StatusText tone="neutral" text={`${uiState.view} view`} />
           {uiState.helpVisible ? ' · help on' : ''}
+          {uiState.dashboardVisible ? ' · dashboard on' : ''}
         </Text>
       </Box>
       {renderViewHelp(uiState.helpVisible)}
+      {uiState.dashboardVisible
+        ? renderDashboard(state, renderer.getIterationTimeline(), process.stdout.columns ?? 120)
+        : null}
+      {renderToastNotifications(toasts)}
       {renderViewContent(
         state,
         renderer,
@@ -1040,6 +1164,9 @@ export class InkLiveRunRenderer {
   private uiState: TuiInteractionState;
   private timer: NodeJS.Timeout | null = null;
   private app: ReturnType<typeof render> | null = null;
+  private toasts: Toast[] = [];
+  private toastCounter = 1;
+  private readonly toastMessageCooldown = new Map<string, number>();
   private readonly listeners = new Set<Listener>();
 
   constructor(iteration: number, maxIterations: number, agentIds: number[], previewLines: number) {
@@ -1059,6 +1186,12 @@ export class InkLiveRunRenderer {
       }
       this.stateStore.tickFrame();
       this.state = this.stateStore.getSnapshot();
+      const changed = this.pruneExpiredToasts();
+      if (changed) {
+        // keep render in sync while toasts auto-dismiss
+        this.emit();
+        return;
+      }
       this.emit();
     }, 120);
   }
@@ -1076,6 +1209,10 @@ export class InkLiveRunRenderer {
     this.stateStore.getAgentSelector(agentId);
   getIterationTimeline = (): LiveRunIterationTimeline => this.stateStore.getIterationTimeline();
   getUiState = (): TuiInteractionState => this.uiState;
+  getToasts = (): Toast[] => {
+    this.pruneExpiredToasts();
+    return [...this.toasts];
+  };
 
   transition(input: string, key: InkInputKey): TuiInteractionState | null {
     const next = transitionTuiInteractionState(this.uiState, input, key);
@@ -1149,6 +1286,7 @@ export class InkLiveRunRenderer {
   }
 
   setLoopNotice(message: string, tone: Tone): void {
+    this.maybePushToast(message, tone);
     this.stateStore.setLoopNotice(message, tone);
     this.state = this.stateStore.getSnapshot();
     this.emit();
@@ -1182,6 +1320,43 @@ export class InkLiveRunRenderer {
     this.stateStore.setLoopPhase(phase);
     this.state = this.stateStore.getSnapshot();
     this.emit();
+  }
+
+  private maybePushToast(message: string, tone: Tone): void {
+    const normalizedMessage = message.trim();
+    if (!normalizedMessage) {
+      return;
+    }
+    if (normalizedMessage === 'pending status') {
+      return;
+    }
+    const now = Date.now();
+    const cooldownUntil = this.toastMessageCooldown.get(normalizedMessage) ?? 0;
+    if (now < cooldownUntil) {
+      return;
+    }
+    const ttl = TOAST_TTL_MS_BY_TONE[tone];
+    this.toasts.push({
+      id: this.toastCounter,
+      message: normalizedMessage,
+      tone,
+      expiresAt: now + ttl,
+    });
+    this.toastCounter += 1;
+    this.toastMessageCooldown.set(normalizedMessage, now + TOAST_REPEAT_GUARD_MS);
+    if (this.toasts.length > 6) {
+      this.toasts = this.toasts.slice(-6);
+    }
+  }
+
+  private pruneExpiredToasts(): boolean {
+    const now = Date.now();
+    const nextLength = this.toasts.filter((entry) => entry.expiresAt > now).length;
+    if (nextLength === this.toasts.length) {
+      return false;
+    }
+    this.toasts = this.toasts.filter((entry) => entry.expiresAt > now);
+    return true;
   }
 
   setAgentActiveTab(agentId: number, tab: LiveRunAgentTab): void {

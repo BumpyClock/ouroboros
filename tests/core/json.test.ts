@@ -163,7 +163,7 @@ describe('json helpers', () => {
 const args = process.argv.slice(2);
 const hasReadonly = args[0] === '--readonly';
 if (hasReadonly && !args.includes('--parent')) {
-  console.error('{\"unexpected-no-parent\": true}');
+  console.error('{"unexpected-no-parent": true}');
   process.exit(1);
 }
 const parentIndex = args.indexOf('--parent');
@@ -179,7 +179,9 @@ console.log(JSON.stringify(issues));
       process.env.PATH = `${tempRoot}${pathSep}${oldPath}`;
       const snapshot = await loadBeadsSnapshot(tempRoot, 'ouroboros-parent');
       expect(snapshot.available).toBeTrue();
-      expect(snapshot.source).toBe('bd --readonly list --parent ouroboros-parent --json --all --limit 0 --no-pager');
+      expect(snapshot.source).toBe(
+        'bd --readonly list --parent ouroboros-parent --json --all --limit 0 --no-pager',
+      );
       expect(snapshot.total).toBe(1);
       expect(snapshot.remainingIssues.map((issue) => issue.id)).toEqual(['ouroboros-parent.1']);
     } finally {
@@ -213,7 +215,9 @@ console.log(JSON.stringify(issues));
       process.env.PATH = `${tempRoot}${pathSep}${oldPath}`;
       const snapshot = await loadBeadsSnapshot(tempRoot, 'ouroboros-parent');
       expect(snapshot.available).toBeTrue();
-      expect(snapshot.source).toBe('bd list --parent ouroboros-parent --json --all --limit 0 --no-pager');
+      expect(snapshot.source).toBe(
+        'bd list --parent ouroboros-parent --json --all --limit 0 --no-pager',
+      );
       expect(snapshot.total).toBe(1);
       expect(snapshot.remainingIssues.map((issue) => issue.id)).toEqual(['ouroboros-parent.1']);
     } finally {

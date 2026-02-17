@@ -82,6 +82,30 @@ describe('parseArgs reviewer provider/model resolution', () => {
     expect(options.reviewerModel).toBe(getProviderAdapter('claude').defaults.model);
   });
 
+  it('treats blank config reviewerModel as unset and applies resolved provider default', () => {
+    const options = parseWithConfig([], {
+      provider: 'codex',
+      model: 'gpt-5-primary',
+      reviewerProvider: 'claude',
+      reviewerModel: '',
+    });
+
+    expect(options.reviewerProvider).toBe('claude');
+    expect(options.reviewerModel).toBe(getProviderAdapter('claude').defaults.model);
+  });
+
+  it('treats blank config reviewerModel as unset when reviewer provider matches primary', () => {
+    const options = parseWithConfig([], {
+      provider: 'copilot',
+      model: 'copilot-primary',
+      reviewerProvider: 'copilot',
+      reviewerModel: '   ',
+    });
+
+    expect(options.reviewerProvider).toBe('copilot');
+    expect(options.reviewerModel).toBe('copilot-primary');
+  });
+
   it('uses reviewer model CLI override with highest precedence', () => {
     const options = parseWithConfig(['--reviewer-model', 'o3-mini'], {
       provider: 'codex',
@@ -216,9 +240,7 @@ describe('parseArgs reviewer provider/model resolution', () => {
   });
 
   it('defaults to auto when bead mode is unset', () => {
-    const options = parseWithConfig([
-      '--review',
-    ], {
+    const options = parseWithConfig(['--review'], {
       provider: 'codex',
       model: 'gpt-5-primary',
     });
@@ -229,28 +251,22 @@ describe('parseArgs reviewer provider/model resolution', () => {
 
   it('throws when top-level mode is used without a top-level bead id', () => {
     expect(() =>
-      parseWithConfig(
-        ['--bead-mode', 'top-level'],
-        { provider: 'codex', model: 'gpt-5-primary' },
-      ),
+      parseWithConfig(['--bead-mode', 'top-level'], { provider: 'codex', model: 'gpt-5-primary' }),
     ).toThrow(/Top-level mode requires --top-level-bead/);
   });
 
   it('throws when top-level mode uses a blank top-level bead id', () => {
     expect(() =>
-      parseWithConfig(
-        ['--bead-mode', 'top-level', '--top-level-bead', '   '],
-        { provider: 'codex', model: 'gpt-5-primary' },
-      ),
+      parseWithConfig(['--bead-mode', 'top-level', '--top-level-bead', '   '], {
+        provider: 'codex',
+        model: 'gpt-5-primary',
+      }),
     ).toThrow(/Top-level mode requires --top-level-bead/);
   });
 
   it('throws when config contains an invalid bead mode', () => {
     expect(() =>
-      parseWithConfig(
-        [],
-        { provider: 'codex', model: 'gpt-5-primary', beadMode: 'invalid-mode' },
-      ),
+      parseWithConfig([], { provider: 'codex', model: 'gpt-5-primary', beadMode: 'invalid-mode' }),
     ).toThrow(/Unsupported bead mode/);
   });
 

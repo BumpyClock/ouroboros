@@ -24,7 +24,11 @@ type IterationRunResult = {
 type AggregatedIterationOutput = {
   pickedByAgent: Map<number, { id: string; title: string; status: string }>;
   usageAggregate: null;
-  failed: Array<{ status: number | null; combinedOutput: string; result: IterationRunResult['results'][number] }>;
+  failed: Array<{
+    status: number | null;
+    combinedOutput: string;
+    result: IterationRunResult['results'][number];
+  }>;
   stopDetected: boolean;
   reviewOutcomes: Map<number, unknown>;
 };
@@ -38,14 +42,22 @@ let aggregatedOutput: AggregatedIterationOutput = makeAggregatedOutput();
 
 mock.module('../../core/state', () => ({
   loadIterationState: () => state,
-  isCircuitBroken: ({ current_iteration, max_iterations }: { current_iteration: number; max_iterations: number }) =>
-    current_iteration >= max_iterations,
+  isCircuitBroken: ({
+    current_iteration,
+    max_iterations,
+  }: {
+    current_iteration: number;
+    max_iterations: number;
+  }) => current_iteration >= max_iterations,
   writeIterationState: () => {},
   sleep: async () => {},
 }));
 
 mock.module('../../core/beads', () => ({
-  loadBeadsSnapshot: async (projectRoot: string, topLevelBeadId?: string): Promise<BeadsSnapshot> => {
+  loadBeadsSnapshot: async (
+    projectRoot: string,
+    topLevelBeadId?: string,
+  ): Promise<BeadsSnapshot> => {
     loadCalls.push({ projectRoot, topLevelBeadId });
     return snapshot;
   },
@@ -56,7 +68,7 @@ mock.module('../../core/iteration-execution', () => ({
     iterationCalls.push(args);
     return runIterationResult;
   },
-  aggregateIterationOutput: (params: AggregatedIterationOutput) => {
+  aggregateIterationOutput: (_params: AggregatedIterationOutput) => {
     return aggregatedOutput;
   },
 }));
@@ -81,9 +93,7 @@ const mockProvider: ProviderAdapter = {
   formatCommandHint: (command) => command,
 };
 
-function makeSnapshot(
-  values: Partial<BeadsSnapshot> = {},
-): BeadsSnapshot {
+function makeSnapshot(values: Partial<BeadsSnapshot> = {}): BeadsSnapshot {
   return {
     available: true,
     source: 'test',
@@ -274,8 +284,8 @@ describe('runLoopController mode-specific termination', () => {
     });
 
     expect(iterationCalls).toHaveLength(1);
-    expect((iterationCalls[0][7] as string)).toContain('Top-level scope');
-    expect((iterationCalls[0][7] as string)).toContain('ouroboros-13.12');
+    expect(iterationCalls[0][7] as string).toContain('Top-level scope');
+    expect(iterationCalls[0][7] as string).toContain('ouroboros-13.12');
     expect(loadCalls[0]).toEqual({ projectRoot, topLevelBeadId: 'ouroboros-13.12' });
   });
 });

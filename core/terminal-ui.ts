@@ -11,24 +11,45 @@ import {
   type RunContext,
 } from './live-run-state';
 import { formatShort, wrapText } from './text';
+import { defaultTheme, type ThemeDefinition } from './theme';
 import type { BeadIssue, BeadsSnapshot, PreviewEntry, Tone, UsageSummary } from './types';
 
 const SPINNER_FRAMES = LIVE_SPINNER_FRAMES;
 
 export { labelTone };
 
+let activeTheme: ThemeDefinition = defaultTheme;
+let ansiToneColors: Record<Tone, string> = { ...defaultTheme.ansi.tone };
+let inkToneColors: Record<Tone, string> = { ...defaultTheme.ink.tone };
+
 export const ANSI = {
-  reset: '\x1b[0m',
-  bold: '\x1b[1m',
-  dim: '\x1b[2m',
-  cyan: '\x1b[36m',
-  blue: '\x1b[34m',
-  green: '\x1b[32m',
-  yellow: '\x1b[33m',
-  red: '\x1b[31m',
-  gray: '\x1b[90m',
-  white: '\x1b[97m',
+  reset: activeTheme.ansi.reset,
+  bold: activeTheme.ansi.bold,
+  dim: activeTheme.ansi.dim,
+  cyan: activeTheme.ansi.tone.info,
+  blue: activeTheme.ansi.border,
+  green: activeTheme.ansi.tone.success,
+  yellow: activeTheme.ansi.tone.warn,
+  red: activeTheme.ansi.tone.error,
+  gray: activeTheme.ansi.tone.muted,
+  white: activeTheme.ansi.tone.neutral,
 };
+
+export function setTheme(theme: ThemeDefinition): void {
+  activeTheme = theme;
+  ansiToneColors = { ...theme.ansi.tone };
+  inkToneColors = { ...theme.ink.tone };
+  ANSI.reset = theme.ansi.reset;
+  ANSI.bold = theme.ansi.bold;
+  ANSI.dim = theme.ansi.dim;
+  ANSI.cyan = theme.ansi.tone.info;
+  ANSI.blue = theme.ansi.border;
+  ANSI.green = theme.ansi.tone.success;
+  ANSI.yellow = theme.ansi.tone.warn;
+  ANSI.red = theme.ansi.tone.error;
+  ANSI.gray = theme.ansi.tone.muted;
+  ANSI.white = theme.ansi.tone.neutral;
+}
 
 function stylingEnabled(): boolean {
   return Boolean(process.stdout.isTTY) && !process.env.NO_COLOR;
@@ -42,20 +63,11 @@ export function colorize(text: string, ...codes: string[]): string {
 }
 
 export function toneColor(tone: Tone): string {
-  switch (tone) {
-    case 'info':
-      return ANSI.cyan;
-    case 'success':
-      return ANSI.green;
-    case 'warn':
-      return ANSI.yellow;
-    case 'error':
-      return ANSI.red;
-    case 'muted':
-      return ANSI.gray;
-    default:
-      return ANSI.white;
-  }
+  return ansiToneColors[tone] ?? ANSI.white;
+}
+
+export function toneInkColor(tone: Tone): string {
+  return inkToneColors[tone] ?? 'white';
 }
 
 export function badge(text: string, tone: Tone): string {
