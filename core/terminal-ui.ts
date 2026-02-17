@@ -1,10 +1,15 @@
-import { formatShort, wrapText } from './text';
-import {
-  LIVE_SPINNER_FRAMES,
-  LiveRunStateStore,
-  labelTone,
-} from './live-run-state';
 import type { LiveRunState } from './live-run-state';
+import {
+  type IterationSummary,
+  LIVE_SPINNER_FRAMES,
+  type LiveRunAgentSelector,
+  type LiveRunHeaderState,
+  LiveRunStateStore,
+  type LoopPhase,
+  labelTone,
+  type RunContext,
+} from './live-run-state';
+import { formatShort, wrapText } from './text';
 import type { BeadIssue, BeadsSnapshot, PreviewEntry, Tone, UsageSummary } from './types';
 
 const SPINNER_FRAMES = LIVE_SPINNER_FRAMES;
@@ -75,6 +80,83 @@ export function formatTokens(value: number): string {
   return Math.max(0, Math.round(value)).toLocaleString('en-US');
 }
 
+function buildIterationSummaryLines(state: LiveRunState): string[] {
+  const summary = state.lastIterationSummary;
+  const lines: string[] = [];
+  lines.push(`${badge('ITER SUM', 'info')} last iteration result`);
+  if (!summary) {
+    lines.push(`${badge('TOKENS', 'muted')} pending`);
+    return lines;
+  }
+  const usage = summary.usage;
+  if (usage) {
+    lines.push(
+      `${badge('TOKENS', 'muted')} in ${formatTokens(usage.inputTokens)} | cached ${formatTokens(
+        usage.cachedInputTokens,
+      )} | out ${formatTokens(usage.outputTokens)}`,
+    );
+  } else {
+    lines.push(`${badge('TOKENS', 'muted')} no usage summary`);
+  }
+
+  if (summary.pickedBeadsByAgent.size > 0) {
+    for (const agentId of Array.from(summary.pickedBeadsByAgent.keys()).sort(
+      (left, right) => left - right,
+    )) {
+      const picked = summary.pickedBeadsByAgent.get(agentId);
+      if (!picked) {
+        continue;
+      }
+      lines.push(
+        `${badge(`A${agentId}`, 'info')} ${formatShort(`${picked.id}: ${picked.title}`, Math.max(40, terminalWidth() - 20))}`,
+      );
+    }
+  } else {
+    lines.push(`${badge('A', 'muted')} no picked beads`);
+  }
+
+  if (summary.notice) {
+    lines.push(`${badge('NOTE', summary.noticeTone)} ${summary.notice}`);
+  }
+  if (state.retrySeconds !== null) {
+    lines.push(`${badge('RETRY', 'warn')} next retry in ${state.retrySeconds}s`);
+  }
+  if (state.pauseMs !== null) {
+    lines.push(`${badge('PAUSE', 'muted')} waiting ${state.pauseMs}ms`);
+  }
+  return lines;
+}
+
+function buildRunContextLines(state: LiveRunState, commandWidth: number): string[] {
+  const runContext = state.runContext;
+  if (!runContext) {
+    return [
+      `${badge('RUNCTX', 'muted')} no run context`,
+      `${badge('RUNCTX', 'muted')} no log paths`,
+    ];
+  }
+  const startedAt = new Date(runContext.startedAt).toLocaleTimeString();
+  const contextLine = [
+    badge('RUNCTX', 'info'),
+    `${badge('START', 'muted')} ${startedAt}`,
+    badge('RUN', 'muted'),
+    formatShort(runContext.command, Math.max(20, commandWidth)),
+    '|',
+    `${badge('BATCH', 'muted')} ${formatShort(runContext.batch, 80)}`,
+  ].join(' ');
+
+  const logLines = [...runContext.agentLogPaths.entries()]
+    .sort(([left], [right]) => left - right)
+    .map(
+      ([agentId, logPath]) =>
+        `${badge(`A${agentId}LOG`, 'muted')} ${formatShort(logPath, Math.max(36, commandWidth))}`,
+    );
+  if (logLines.length === 0) {
+    logLines.push(`${badge('LOGS', 'muted')} unavailable`);
+  }
+  return [contextLine, ...logLines];
+}
+
 export function progressBar(current: number, total: number): string {
   const width = 22;
   const safeTotal = Math.max(total, 1);
@@ -120,20 +202,10 @@ export class LiveRunRenderer {
   private renderedLineCount = 0;
   private readonly stateStore: LiveRunStateStore;
 
-  constructor(
-    iteration: number,
-    maxIterations: number,
-    agentIds: number[],
-    previewLines: number,
-  ) {
+  constructor(iteration: number, maxIterations: number, agentIds: number[], previewLines: number) {
     this.enabled = Boolean(process.stdout.isTTY);
     this.agentIds = [...agentIds].sort((left, right) => left - right);
-    this.stateStore = new LiveRunStateStore(
-      iteration,
-      maxIterations,
-      this.agentIds,
-      previewLines,
-    );
+    this.stateStore = new LiveRunStateStore(iteration, maxIterations, this.agentIds, previewLines);
     if (!this.enabled) {
       return;
     }
@@ -150,6 +222,14 @@ export class LiveRunRenderer {
 
   isRunning(): boolean {
     return this.stateStore.isRunning();
+  }
+
+  setIteration(iteration: number): void {
+    this.stateStore.setIteration(iteration);
+    if (!this.enabled || !this.stateStore.isRunning()) {
+      return;
+    }
+    this.render();
   }
 
   update(agentId: number, entry: PreviewEntry): void {
@@ -170,6 +250,62 @@ export class LiveRunRenderer {
 
   setAgentPickedBead(agentId: number, issue: BeadIssue): void {
     this.stateStore.setAgentPickedBead(agentId, issue);
+    if (!this.enabled || !this.stateStore.isRunning()) {
+      return;
+    }
+    this.render();
+  }
+
+  setAgentLogPath(agentId: number, path: string): void {
+    this.stateStore.setAgentLogPath(agentId, path);
+    if (!this.enabled || !this.stateStore.isRunning()) {
+      return;
+    }
+    this.render();
+  }
+
+  setRunContext(context: RunContext): void {
+    this.stateStore.setRunContext(context);
+    if (!this.enabled || !this.stateStore.isRunning()) {
+      return;
+    }
+    this.render();
+  }
+
+  setIterationSummary(summary: IterationSummary): void {
+    this.stateStore.setIterationSummary(summary);
+    if (!this.enabled || !this.stateStore.isRunning()) {
+      return;
+    }
+    this.render();
+  }
+
+  setLoopNotice(message: string, tone: Tone): void {
+    this.stateStore.setLoopNotice(message, tone);
+    if (!this.enabled || !this.stateStore.isRunning()) {
+      return;
+    }
+    this.render();
+  }
+
+  setPauseState(milliseconds: number | null): void {
+    this.stateStore.setPauseState(milliseconds);
+    if (!this.enabled || !this.stateStore.isRunning()) {
+      return;
+    }
+    this.render();
+  }
+
+  setRetryState(seconds: number | null): void {
+    this.stateStore.setRetryState(seconds);
+    if (!this.enabled || !this.stateStore.isRunning()) {
+      return;
+    }
+    this.render();
+  }
+
+  setLoopPhase(phase: LoopPhase): void {
+    this.stateStore.setLoopPhase(phase);
     if (!this.enabled || !this.stateStore.isRunning()) {
       return;
     }
@@ -205,12 +341,11 @@ export class LiveRunRenderer {
     this.render();
   }
 
-  private buildHeaderLine(state: LiveRunState): string {
-    const elapsed = ((Date.now() - state.startedAt) / 1000).toFixed(1);
-    const frame = state.running
-      ? SPINNER_FRAMES[state.frameIndex % SPINNER_FRAMES.length]
-      : '';
-    const tone = state.running ? 'info' : state.statusTone;
+  private buildHeaderLine(): string {
+    const state: LiveRunHeaderState = this.stateStore.getHeaderState();
+    const elapsed = state.elapsedSeconds.toFixed(1);
+    const frame = state.spinner;
+    const tone = state.tone;
     const bodyColor = state.running ? ANSI.cyan : toneColor(tone);
     const parts = [
       frame,
@@ -224,51 +359,35 @@ export class LiveRunRenderer {
   }
 
   private buildAgentLines(agentId: number, state: LiveRunState): string[] {
+    const selector: LiveRunAgentSelector = this.stateStore.getAgentSelector(agentId);
     const snapshot = state.agentState.get(agentId);
-    const spawnState = state.agentSpawnState.get(agentId);
     const prefix = badge(`A${agentId}`, 'muted');
-    const picked = state.agentPickedBeads.get(agentId);
+    const picked = selector.pickedBead;
     const titleColor = picked ? ANSI.green : ANSI.dim;
     const title = picked ? `${picked.id} ${picked.title}` : 'no bead picked';
     const titleText = colorize(formatShort(title, Math.max(24, terminalWidth() - 54)), titleColor);
 
     if (!snapshot) {
-      const statusTone: Tone =
-        spawnState?.phase === 'launching'
-          ? 'info'
-          : spawnState?.phase === 'queued'
-            ? 'warn'
-            : 'muted';
-      const statusLabel =
-        spawnState?.phase === 'launching'
-          ? 'SPAWN'
-          : spawnState?.phase === 'queued'
-            ? 'QUEUED'
-            : 'WAIT';
-      const statusText = spawnState?.message ?? 'waiting for events';
-      const headerStateText =
-        spawnState?.phase === 'launching'
-          ? 'launch in progress'
-          : spawnState?.phase === 'queued'
-            ? 'awaiting launch'
-            : 'waiting for events';
+      const statusTone = selector.statusTone;
+      const statusLabel = selector.statusLabel;
+      const statusText = selector.statusText;
+      const detailText = selector.detailText;
       const emptyLines = Array.from({ length: state.previewLines }, (_, rowIndex) => {
         if (rowIndex === 0) {
-          return `  ${badge('STATE', statusTone)} ${colorize(formatShort(statusText, Math.max(36, terminalWidth() - 40)), ANSI.dim)}`;
+          return `  ${badge('STATE', statusTone)} ${colorize(formatShort(detailText, Math.max(36, terminalWidth() - 40)), ANSI.dim)}`;
         }
         return `  ${badge('EMPTY', 'muted')} ${colorize('no event yet', ANSI.dim)}`;
       });
       return [
-        `${prefix} ${titleText} ${badge(statusLabel, statusTone)} ${colorize(headerStateText, ANSI.dim)}`,
+        `${prefix} ${titleText} ${badge(statusLabel, statusTone)} ${colorize(statusText, ANSI.dim)}`,
         ...emptyLines,
       ];
     }
 
-    const ageSeconds = Math.max(0, Math.floor((Date.now() - snapshot.lastUpdatedAt) / 1000));
-    const header = `${prefix} ${titleText} ${badge('EVENTS', 'muted')} ${colorize(
+    const header = `${prefix} ${titleText} ${badge(selector.statusLabel, selector.statusTone)} ${colorize(
       String(snapshot.totalEvents),
       ANSI.bold,
-    )} ${colorize(`updated ${ageSeconds}s ago`, ANSI.dim)}`;
+    )} ${colorize(selector.detailText, ANSI.dim)}`;
     const maxLength = Math.max(36, terminalWidth() - 30);
     const detailLines = snapshot.lines.map((line) => {
       const lineLabel = badge(line.label.toUpperCase(), line.tone);
@@ -313,8 +432,11 @@ export class LiveRunRenderer {
       return;
     }
     const state = this.stateStore.getSnapshot();
+    const commandWidth = Math.max(36, terminalWidth() - 46);
     const lines = [
-      this.buildHeaderLine(state),
+      this.buildHeaderLine(),
+      ...buildIterationSummaryLines(state),
+      ...buildRunContextLines(state, commandWidth),
       ...this.buildBeadsLines(state),
       ...state.agentIds.flatMap((agentId) => this.buildAgentLines(agentId, state)),
     ];
