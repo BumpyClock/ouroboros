@@ -508,3 +508,10 @@ on-zero reviewer/fixer => slot fail, malformed JSONL invalidates snapshot, fallb
   - Commit: 86ab810 (eat(prompts): add built-in prompt fallback).
   - Learnings: built-in prompts now cover the no-file startup path for both dev/reviewer roles without changing existing explicit override semantics.
   - Challenge: no test run or doctor in this iteration per current constraints; recommend one quick un test tests/core/prompts.test.ts and un run doctor pass in follow-up bead if needed.
+
+- 2026-02-17
+- Completed bead ouroboros-10 (TUI refinement completion).
+  - Implemented ANSI fallback hardening in core/terminal-ui.ts: card header now uses <bead id> · <title> (no inline [A#]), added top Agent N notch line, added Dev/Review tabs per agent tied to ctiveTab, and added bottom iteration strip summary with Prev/current/retry/failure markers and width-aware compacting.
+  - Added commit 2538838bec4163008660b29ded5afb4afe80ff94.
+  - Learned: ANSI fallback still needs a manual terminal render smoke to verify visual alignment and width behavior since tests don’t cover terminal-frame output yet.
+
