@@ -358,3 +358,21 @@
   - Added 	ests/core/loop-controller.test.ts covering available/unavailable snapshot and picked-count matrix for marker suppression behavior (prevents malformed/partial JSONL from forcing false no-bead continuation).
   - Learned: this case is best locked by testing the decision predicate directly; avoids expensive loop-controller integration mocks while still covering hardening intent.
   - No test/doctor run in this iteration due session policy.
+
+- Completed bead ouroboros-9.4 (document hardening policy for review subprocess failures and JSONL snapshot validity).
+  - Added docs/learned/review-loop-hardening.md with hard-fail and snapshot trust rules (
+on-zero reviewer/fixer => slot fail, malformed JSONL invalidates snapshot, fallback to d list).
+  - Updated docs/review-loop.md and docs/config.md to document behavior and no-bead stop-marker dependencies on available snapshots.
+  - Added learned index reference in docs/README.md for discoverability.
+  - Learnings: hard-failure and strict snapshot parsing are now explicit enough to reduce ambiguous reviewer behavior during transient tool/process failures.
+  - Challenges: no runtime/test execution was performed in this iteration to keep to user request, so behavior parity is inferred from local implementation/docs alignment.
+
+2026-02-17
+- Completed bead `ouroboros-9` (review-loop and JSONL hardening).
+  - Validated in-tree runtime and test coverage from children `ouroboros-9.1`, `ouroboros-9.2`, `ouroboros-9.3`, and `ouroboros-9.4` satisfies acceptance:
+    - review/fix non-zero subprocess exits fail fast in `core/iteration-execution.ts` via `runSlotReviewLoop` with explicit failure reasons,
+    - malformed/partial `.beads/issues.jsonl` invalidates snapshot in `core/beads.ts` and no-bead-stop logic gates on `available` in `core/loop-controller.ts`,
+    - regressions cover reviewer/fixer failure and malformed-JSONL handling in `tests/core/review-loop.test.ts` and `tests/core/json.test.ts`.
+  - No additional code edits were needed in this bead because all child work is already merged.
+  - Learned: for hardening criteria, validating child-bead closure plus behavior parity was sufficient to close parent safely.
+  - Challenge: no extra runtime verification run was performed in this bead iteration.
