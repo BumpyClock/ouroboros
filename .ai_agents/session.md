@@ -1,6 +1,13 @@
 # session log
 
 ## 2026-02-17
+- Completed bead `ouroboros-13.1` (TUI parity planning).
+  - Added `docs/tui-parity-plan.md` with a reference-backed matrix against `references/ralph-tui` for core/enhanced/advanced UI parity.
+  - Added `docs/tui-parity-plan.md` to `docs/README.md`.
+  - Marked `ouroboros-13.1` done with explicit out-of-scope decision for remote tabs/instance-management.
+  - Challenge: no code-level TUI changes in this bead; next phase is implementation-heavy (`13.2`+).
+
+## 2026-02-17
 - Completed bead `ouroboros-12.5` (Docs: default prompt behavior and customization guidance).
   - Updated `docs/config.md` with concrete examples for custom prompt overrides and explicit built-in fallback usage.
   - Updated `docs/review-loop.md` with reviewer built-in default availability and behavior when review mode is enabled without project-level prompts.
