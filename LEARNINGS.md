@@ -40,4 +40,4 @@
 - Prefer small, non-destructive local bootstrap commands (`--init-*`) over destructive overwrite behavior; add explicit `--force-*` flags only when required and document clearly.
 - 2026-02-17: Implemented Ink TUI multi-pane shell for bead ouroboros-13.3 with focused pane navigation (agents/history), iteration list drilldown, and responsive stacked fallback.
 
-- 2026-02-17: In top-level mode, loadBeadsSnapshot now applies --parent <topLevelBeadId> on both readonly and fallback d list calls so remaining counts are scoped to direct child beads.
+- 2026-02-17: In top-level mode, loadBeadsSnapshot now applies --parent <topLevelBeadId> on both readonly and fallback bd list calls so remaining counts are scoped to direct child beads.
