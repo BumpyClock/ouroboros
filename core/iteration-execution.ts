@@ -132,7 +132,7 @@ async function runSlotReviewLoop(input: SlotReviewInput): Promise<SlotReviewOutc
   const maxFix = options.reviewMaxFixAttempts;
   let lastImplementOutput = `${implementResult.result.stdout}\n${implementResult.result.stderr}`;
   let lastImplementLogPath = implementResult.jsonlLogPath;
-  let lastRunResult = implementResult;
+  let previousFollowUp: string | undefined;
 
   for (let fixAttempt = 0; fixAttempt <= maxFix; fixAttempt += 1) {
     const phase = fixAttempt === 0 ? 'review' : `re-review (fix ${fixAttempt})`;
@@ -152,7 +152,7 @@ async function runSlotReviewLoop(input: SlotReviewInput): Promise<SlotReviewOutc
       gitDiff,
       parallelAgents: options.parallelAgents,
       fixAttempt: fixAttempt > 0 ? fixAttempt : undefined,
-      previousFollowUp: undefined,
+      previousFollowUp,
     });
 
     const fullReviewerPrompt = `${reviewerPrompt}\n\n${reviewerContext}`;
@@ -223,7 +223,7 @@ async function runSlotReviewLoop(input: SlotReviewInput): Promise<SlotReviewOutc
       );
     }
 
-    const fixPrompt = `${lastImplementOutput.length > 0 ? '' : ''}The reviewer found drift in your implementation of bead ${pickedBead.id}: ${pickedBead.title}\n\nReviewer feedback:\n${verdict.followUpPrompt}\n\nPlease fix the issues described above.`;
+    const fixPrompt = `The reviewer found drift in your implementation of bead ${pickedBead.id}: ${pickedBead.title}\n\nReviewer feedback:\n${verdict.followUpPrompt}\n\nPlease fix the issues described above.`;
     const fixArgs = provider.buildExecArgs(fixPrompt, fixLastMessagePath, options);
 
     let fixTrackedChild: ChildProcess | null = null;
@@ -247,15 +247,7 @@ async function runSlotReviewLoop(input: SlotReviewInput): Promise<SlotReviewOutc
 
     lastImplementOutput = `${fixResult.stdout}\n${fixResult.stderr}`;
     lastImplementLogPath = fixLogPath;
-    lastRunResult = {
-      agentId,
-      jsonlLogPath: fixLogPath,
-      lastMessagePath: fixLastMessagePath,
-      result: fixResult,
-    };
-
-    // Update the reviewerContext with fix attempt info for the next review round
-    // (handled at top of loop via fixAttempt increment)
+    previousFollowUp = verdict.followUpPrompt;
   }
 
   return {
@@ -277,9 +269,11 @@ export async function runIteration(
   activeChildren: Set<ChildProcess>,
   activeSpinnerStopRef: ActiveSpinnerStopRef,
   liveRenderer: IterationLiveRenderer | null,
+  reviewerPromptPath?: string,
 ): Promise<{
   results: RunResult[];
   pickedByAgent: Map<number, BeadIssue>;
+  reviewOutcomes: Map<number, SlotReviewOutcome>;
 }> {
   const runs = buildRuns(iteration, options.parallelAgents, logDir, provider, options, prompt);
   const liveRendererEnabled = Boolean(liveRenderer?.isEnabled());
@@ -328,7 +322,12 @@ export async function runIteration(
   const liveSeen = new Set<string>();
   const liveCountByAgent = new Map<number, number>();
   const pickedByAgent = new Map<number, BeadIssue>();
+  const reviewOutcomes = new Map<number, SlotReviewOutcome>();
   const remainingBeadIds = new Set(beadsSnapshot.remainingIssues.map((issue) => issue.id));
+  const reviewerPrompt =
+    options.reviewEnabled && reviewerPromptPath && existsSync(reviewerPromptPath)
+      ? readFileSync(reviewerPromptPath, 'utf8')
+      : null;
   for (const run of runs) {
     if (run.agentId === 1) {
       if (liveRendererEnabled) {
@@ -505,12 +504,34 @@ export async function runIteration(
         if (!pickedBeadSet) {
           releasePickedReadinessOnce();
         }
-        return {
+
+        const implementRunResult: RunResult = {
           agentId: run.agentId,
           jsonlLogPath: run.jsonlLogPath,
           lastMessagePath: run.lastMessagePath,
           result,
         };
+
+        // Run slot-local review/fix loop if review enabled and bead was picked
+        const pickedBead = pickedByAgent.get(run.agentId);
+        if (options.reviewEnabled && reviewerPrompt && pickedBead && result.status === 0) {
+          const outcome = await runSlotReviewLoop({
+            agentId: run.agentId,
+            iteration,
+            implementResult: implementRunResult,
+            pickedBead,
+            options,
+            provider,
+            reviewerPrompt,
+            command,
+            logDir,
+            activeChildren,
+            liveRendererEnabled,
+          });
+          reviewOutcomes.set(run.agentId, outcome);
+        }
+
+        return implementRunResult;
       } finally {
         releasePickedReadinessOnce();
       }
@@ -522,6 +543,7 @@ export async function runIteration(
   return {
     results: await Promise.all(launchedRuns),
     pickedByAgent,
+    reviewOutcomes,
   };
 }
 
@@ -547,8 +569,17 @@ export function aggregateIterationOutput(params: {
   pickedByAgent: Map<number, BeadIssue>;
   liveRenderer: IterationLiveRenderer | null;
   previewLines: number;
+  reviewOutcomes: Map<number, SlotReviewOutcome>;
 }): AggregatedIterationOutput {
-  const { provider, results, beadsSnapshot, pickedByAgent, liveRenderer, previewLines } = params;
+  const {
+    provider,
+    results,
+    beadsSnapshot,
+    pickedByAgent,
+    liveRenderer,
+    previewLines,
+    reviewOutcomes,
+  } = params;
 
   const failed: AggregatedIterationOutput['failed'] = [];
   let usageAggregate: UsageSummary | null = null;
@@ -642,6 +673,21 @@ export function aggregateIterationOutput(params: {
         `${badge(`A${entry.agentId}`, 'muted')} picked bead ${picked.id}: ${picked.title}`,
       );
     }
+
+    const reviewOutcome = reviewOutcomes.get(entry.agentId);
+    if (reviewOutcome && !reviewOutcome.passed) {
+      const reason = reviewOutcome.failureReason ?? 'review drift unresolved';
+      failed.push({
+        status: null,
+        combinedOutput: `review failed for agent ${entry.agentId}: ${reason}`,
+        result: entry,
+      });
+      if (!liveRenderer?.isEnabled()) {
+        console.log(
+          `${badge(`A${entry.agentId}`, 'error')} ${reason} (${reviewOutcome.fixAttempts} fix attempt(s))`,
+        );
+      }
+    }
   }
 
   return {
@@ -649,5 +695,6 @@ export function aggregateIterationOutput(params: {
     usageAggregate,
     failed,
     stopDetected,
+    reviewOutcomes,
   };
 }

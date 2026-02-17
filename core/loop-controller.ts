@@ -1,5 +1,6 @@
 import type { ChildProcess } from 'node:child_process';
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readFileSync, statSync } from 'node:fs';
+import * as path from 'node:path';
 import type { ProviderAdapter } from '../providers/types';
 import { InkLiveRunRenderer } from '../tui/tui';
 import { loadBeadsSnapshot } from './beads';
@@ -7,12 +8,15 @@ import {
   aggregateIterationOutput,
   type IterationLiveRenderer,
   runIteration,
+  type SlotReviewOutcome,
 } from './iteration-execution';
 import type { IterationSummary } from './live-run-state';
 import { isCircuitBroken, loadIterationState, sleep, writeIterationState } from './state';
 import { ANSI, badge, colorize, LiveRunRenderer, printSection } from './terminal-ui';
 import { formatShort } from './text';
 import type { BeadIssue, BeadsSnapshot, CliOptions, RunResult, Tone } from './types';
+
+const BEADS_REFRESH_POLL_MS = 300;
 
 type ActiveSpinnerStopRef = {
   value: ((message: string, tone?: Tone) => void) | null;
@@ -102,6 +106,53 @@ function printBeadsSnapshot(snapshot: BeadsSnapshot): void {
   }
 }
 
+function resolveBeadsIssuesPath(projectRoot: string): string {
+  return path.join(projectRoot, '.beads', 'issues.jsonl');
+}
+
+function readBeadsFileSignature(issuesPath: string): string {
+  try {
+    const stat = statSync(issuesPath);
+    return `${stat.size}:${stat.mtimeMs}`;
+  } catch {
+    return 'missing';
+  }
+}
+
+function startBeadsSnapshotRefreshLoop(
+  projectRoot: string,
+  liveRenderer: IterationLiveRenderer,
+): () => void {
+  const issuesPath = resolveBeadsIssuesPath(projectRoot);
+  let signature = readBeadsFileSignature(issuesPath);
+  let refreshing = false;
+
+  const timer = setInterval(() => {
+    if (refreshing) {
+      return;
+    }
+    const nextSignature = readBeadsFileSignature(issuesPath);
+    if (nextSignature === signature) {
+      return;
+    }
+    signature = nextSignature;
+    refreshing = true;
+    void loadBeadsSnapshot(projectRoot)
+      .then((nextSnapshot) => {
+        liveRenderer.setBeadsSnapshot(nextSnapshot);
+      })
+      .finally(() => {
+        refreshing = false;
+      });
+  }, BEADS_REFRESH_POLL_MS);
+
+  timer.unref?.();
+
+  return () => {
+    clearInterval(timer);
+  };
+}
+
 export async function runLoopController(
   input: LoopControllerInput,
 ): Promise<IterationLiveRenderer | null> {
@@ -151,10 +202,15 @@ export async function runLoopController(
     liveRenderer?.setIteration(iteration);
     let results: RunResult[];
     let pickedByAgent = new Map<number, BeadIssue>();
+    let iterationReviewOutcomes = new Map<number, SlotReviewOutcome>();
     const beadsSnapshot = await loadBeadsSnapshot(options.projectRoot);
     if (!liveRenderer?.isEnabled()) {
       printBeadsSnapshot(beadsSnapshot);
     }
+    const stopBeadsSnapshotRefresh =
+      liveRenderer?.isEnabled() === true
+        ? startBeadsSnapshotRefreshLoop(options.projectRoot, liveRenderer)
+        : null;
     try {
       const iterationRun = await runIteration(
         iteration,
@@ -168,9 +224,11 @@ export async function runLoopController(
         activeChildren,
         activeSpinnerStopRef,
         liveRenderer,
+        input.reviewerPromptPath,
       );
       results = iterationRun.results;
       pickedByAgent = iterationRun.pickedByAgent;
+      iterationReviewOutcomes = iterationRun.reviewOutcomes;
       const liveRendererEnabled = Boolean(liveRenderer?.isEnabled());
       if (liveRenderer && liveRendererEnabled) {
         liveRenderer.setLoopPhase('collecting');
@@ -188,6 +246,8 @@ export async function runLoopController(
       activeSpinnerStopRef.value?.('spawn failed', 'error');
       activeSpinnerStopRef.value = null;
       throw error;
+    } finally {
+      stopBeadsSnapshotRefresh?.();
     }
 
     const aggregatedOutput = aggregateIterationOutput({
@@ -197,6 +257,7 @@ export async function runLoopController(
       pickedByAgent,
       liveRenderer,
       previewLines: options.previewLines,
+      reviewOutcomes: iterationReviewOutcomes,
     });
     const failed = aggregatedOutput.failed;
     const usageAggregate = aggregatedOutput.usageAggregate;

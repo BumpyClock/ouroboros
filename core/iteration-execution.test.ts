@@ -62,6 +62,8 @@ const baseOptions: CliOptions = {
   yolo: false,
   logDir: '.tmp/test-logs',
   showRaw: false,
+  reviewEnabled: false,
+  reviewMaxFixAttempts: 5,
 };
 
 const providerWithTruncatedPreview: ProviderAdapter = {
