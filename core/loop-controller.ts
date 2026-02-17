@@ -1,7 +1,7 @@
-import { existsSync, readFileSync } from 'node:fs';
 import type { ChildProcess } from 'node:child_process';
-import { InkLiveRunRenderer } from '../tui/tui';
+import { existsSync, readFileSync } from 'node:fs';
 import type { ProviderAdapter } from '../providers/types';
+import { InkLiveRunRenderer } from '../tui/tui';
 import { loadBeadsSnapshot } from './beads';
 import {
   aggregateIterationOutput,
@@ -9,20 +9,8 @@ import {
   runIteration,
 } from './iteration-execution';
 import type { IterationSummary } from './live-run-state';
-import {
-  isCircuitBroken,
-  loadIterationState,
-  sleep,
-  writeIterationState,
-} from './state';
-import {
-  ANSI,
-  badge,
-  colorize,
-  LiveRunRenderer,
-  printSection,
-  progressBar,
-} from './terminal-ui';
+import { isCircuitBroken, loadIterationState, sleep, writeIterationState } from './state';
+import { ANSI, badge, colorize, LiveRunRenderer, printSection, progressBar } from './terminal-ui';
 import { formatShort } from './text';
 import type { BeadIssue, BeadsSnapshot, CliOptions, RunResult, Tone } from './types';
 
@@ -61,8 +49,11 @@ function createLiveRenderer(
   try {
     return new InkLiveRunRenderer(iteration, stateMaxIterations, agentIds, options.previewLines);
   } catch (error) {
-    const fallbackReason = error instanceof Error ? formatShort(error.message, 120) : 'unknown error';
-    console.log(`${badge('TUI', 'warn')} Ink renderer unavailable, falling back (${fallbackReason})`);
+    const fallbackReason =
+      error instanceof Error ? formatShort(error.message, 120) : 'unknown error';
+    console.log(
+      `${badge('TUI', 'warn')} Ink renderer unavailable, falling back (${fallbackReason})`,
+    );
     return new LiveRunRenderer(iteration, stateMaxIterations, agentIds, options.previewLines);
   }
 }
@@ -87,8 +78,12 @@ function printInitialSummary(
     console.log(`${badge('MODEL', 'neutral')} ${options.model.trim()}`);
   }
   console.log(`${badge('EFFORT', 'neutral')} reasoning_effort=${options.reasoningEffort}`);
-  console.log(`${badge('PARALLEL', options.parallelAgents > 1 ? 'warn' : 'neutral')} ${options.parallelAgents}`);
-  console.log(`${badge('YOLO', options.yolo ? 'warn' : 'muted')} ${options.yolo ? 'enabled' : 'disabled'}`);
+  console.log(
+    `${badge('PARALLEL', options.parallelAgents > 1 ? 'warn' : 'neutral')} ${options.parallelAgents}`,
+  );
+  console.log(
+    `${badge('YOLO', options.yolo ? 'warn' : 'muted')} ${options.yolo ? 'enabled' : 'disabled'}`,
+  );
 }
 
 function printBeadsSnapshot(snapshot: BeadsSnapshot): void {
@@ -106,7 +101,9 @@ function printBeadsSnapshot(snapshot: BeadsSnapshot): void {
   }
 }
 
-export async function runLoopController(input: LoopControllerInput): Promise<IterationLiveRenderer | null> {
+export async function runLoopController(
+  input: LoopControllerInput,
+): Promise<IterationLiveRenderer | null> {
   const {
     options,
     provider,
@@ -122,7 +119,7 @@ export async function runLoopController(input: LoopControllerInput): Promise<Ite
   const state = loadIterationState(statePath, options.iterationLimit, options.iterationsSet);
   if (isCircuitBroken(state)) {
     console.log(`Circuit breaker hit: max_iterations (${state.max_iterations}) already reached`);
-      return null;
+    return null;
   }
   if (!existsSync(promptPath)) {
     throw new Error(`Prompt file not found: ${promptPath}`);

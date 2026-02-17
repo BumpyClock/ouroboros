@@ -1,15 +1,15 @@
-import path from 'node:path';
 import type { ChildProcess } from 'node:child_process';
+import path from 'node:path';
 import type { ProviderAdapter } from '../providers/types';
+import {
+  type IterationLiveRenderer,
+  shouldStopFromProviderOutput as shouldStopFromProviderOutputInternal,
+} from './iteration-execution';
 import { runLoopController } from './loop-controller';
-import { resolveIterationStatePath } from './state';
 import { resolveRunLogDirectory } from './loop-runs';
 import { resolveRunnableCommand } from './process-runner';
 import { installLoopShutdownGuard } from './shutdown';
-import {
-  shouldStopFromProviderOutput as shouldStopFromProviderOutputInternal,
-  type IterationLiveRenderer,
-} from './iteration-execution';
+import { resolveIterationStatePath } from './state';
 import type { CliOptions, PreviewEntry, Tone } from './types';
 
 type ActiveSpinnerStopRef = {
