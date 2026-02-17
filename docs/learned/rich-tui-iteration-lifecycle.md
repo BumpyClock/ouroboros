@@ -13,6 +13,8 @@
 - `runIteration` now suppresses legacy lifecycle row logs in rich mode and always pushes equivalent state updates.
 - Added `core/loop-engine.rich-mode.test.ts` coverage for rich-mode suppression and non-TTY fallback row behavior.
 - Added `.beads/issues.jsonl` signature polling in `core/loop-controller.ts` so rich-mode BEADS snapshot updates mid-iteration when bead state changes.
+- Empty agent state no longer renders `[EMPTY] no event yet` placeholder rows; cards stay compact until actual preview events appear.
+- BEADS snapshot loading is now JSONL-first across all platforms (`.beads/issues.jsonl`), with `bd list` used only as fallback when JSONL is unavailable.
 
 ## Pitfalls and mitigations
 - `InkLiveRunRenderer` can be unavailable at runtime; fallback renderer uses the same state contract so lifecycle behavior still stays replacement-first when not TTY.

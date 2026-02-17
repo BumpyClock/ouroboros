@@ -3,7 +3,7 @@ import { existsSync, readFileSync, statSync } from 'node:fs';
 import * as path from 'node:path';
 import type { ProviderAdapter } from '../providers/types';
 import { InkLiveRunRenderer } from '../tui/tui';
-import { loadBeadsSnapshot } from './beads';
+import { loadBeadsSnapshot, loadBeadsSnapshotFromJsonl } from './beads';
 import {
   aggregateIterationOutput,
   type IterationLiveRenderer,
@@ -137,7 +137,12 @@ function startBeadsSnapshotRefreshLoop(
     }
     signature = nextSignature;
     refreshing = true;
-    void loadBeadsSnapshot(projectRoot)
+    const nextSnapshot = loadBeadsSnapshotFromJsonl(projectRoot);
+    if (!nextSnapshot.available) {
+      refreshing = false;
+      return;
+    }
+    void Promise.resolve(nextSnapshot)
       .then((nextSnapshot) => {
         liveRenderer.setBeadsSnapshot(nextSnapshot);
       })

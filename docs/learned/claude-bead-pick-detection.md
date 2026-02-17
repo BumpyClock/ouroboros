@@ -10,6 +10,7 @@ With Claude provider and parallel staged launch, A1 can show active events but r
 - Claude bead IDs may appear in raw JSON lines or `message`-kind payloads that are not used for live rendering.
 - Matching set included all bead IDs (including closed), which could cause false positives.
 - Bead id regex did not handle dotted IDs like `ouroboros-7.1`.
+- Generic id matching on broad tool dumps (`bd list` output) could lock onto a parent bead before explicit pick/update happened.
 
 ## Fix
 
@@ -17,9 +18,13 @@ With Claude provider and parallel staged launch, A1 can show active events but r
 - Keep live-render filtering unchanged; detection now runs independently.
 - Match against `remainingIssues` IDs only.
 - Update bead id extraction regex to support dotted IDs.
+- Prefer explicit pick signals (`Updated issue: <id>`, `bd update <id>`) over generic id mentions.
+- Treat generic multi-id text as ambiguous and ignore it unless exactly one known bead id is present.
 
 ## Regression tests
 
 - `core/iteration-execution.test.ts`: staged launch advances when remaining bead id is only in raw line.
 - `core/iteration-execution.test.ts`: closed bead IDs do not trigger staged-launch readiness.
 - `core/beads.test.ts`: dotted bead IDs are recognized.
+- `core/beads.test.ts`: explicit `Updated issue` / `bd update` id is preferred.
+- `core/beads.test.ts`: ambiguous multi-id text does not pick a bead.

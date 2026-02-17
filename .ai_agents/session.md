@@ -249,3 +249,59 @@
   - `bun run doctor` fully clean (0 warnings).
   - Learning: extracting first `{` to last `}` is sufficient for reviewer output parsing since reviewers may emit preamble text before the JSON verdict.
   - Challenge: initial `RunResult` import was unused; caught by doctor lint pass.
+
+2026-02-17
+- Completed bead `ouroboros-7.4` (integrate slot-local implement->review->fix loop).
+  - Added `runSlotReviewLoop` in `core/iteration-execution.ts` — per-slot review/fix pipeline:
+    - After implementation, runs reviewer process with `buildReviewerContext` (bead metadata + implementer output + git diff + parallel-agent warning + fix attempt history).
+    - Parses strict JSON verdict via `parseReviewerVerdict`; on `drift`, runs fix agent with `followUpPrompt`.
+    - Loops review->fix up to `reviewMaxFixAttempts` (default 5); unresolved drift after cap fails the slot.
+  - Wired into `runIteration` per-slot async block: review runs only when `--review` enabled, bead picked, and implementation exited 0.
+  - Extended `AggregatedIterationOutput` with `reviewOutcomes` map and review failure reporting in `aggregateIterationOutput`.
+  - Updated `loop-controller.ts` to pass `reviewerPromptPath` through to `runIteration` and thread `reviewOutcomes` to aggregation.
+  - Added `captureGitDiff()` helper using `execSync('git diff HEAD')` with 15s timeout and 1MB buffer.
+  - Stop-marker detection remains on implement/fix outputs only (reviewer output excluded).
+  - Staged launch and parallel slot behavior unchanged.
+  - Doctor clean (0 warnings), 65 tests pass.
+  - Learning: review loop is naturally parallel across slots because it runs inside each slot's async block; no additional synchronization needed.
+  - Challenge: scoping `iterationReviewOutcomes` across try/finally boundary required hoisting the variable declaration outside the try block.
+
+2026-02-17
+- Completed bead `ouroboros-7.5` (constrain stop-marker/failure semantics and add review/fix logs and phases).
+  - Extended `LoopPhase` with `reviewing` and `fixing` phases.
+  - Added `AgentReviewPhase` type and per-agent review phase map to `LiveRunState`.
+  - Added `setAgentReviewPhase`/`clearAgentReviewPhase` to `LiveRunStateStore`, `IterationLiveRenderer` interface, `LiveRunRenderer` (ANSI), and `InkLiveRunRenderer` (Ink).
+  - Agent selector now overrides `statusLabel`/`statusTone`/`statusText` when review phase is active (shows REVIEW or FIX badge with bead id and fix attempt count).
+  - Wired phase transitions in `runSlotReviewLoop` with try/finally cleanup; review/fix log paths updated per pass via `setAgentLogPath`.
+  - Updated mock renderer in `loop-engine.rich-mode.test.ts` with review phase stubs.
+  - Stop-marker detection already excluded reviewer output (verified from 7.4 implementation).
+  - Doctor clean (0 warnings), 65 tests pass.
+  - Learning: selector-driven approach means both renderers automatically surface new status without individual renderer changes; the agent card rendering is data-driven from `getAgentSelector`.
+  - Challenge: mock renderer in tests needed review phase stubs to avoid runtime TypeError from missing methods called via non-null liveRenderer reference.
+
+2026-02-17
+- Completed bead `ouroboros-8.1` (define and document canonical test directory layout).
+  - Created `docs/testing.md` with top-level `tests/` mirror tree convention: test path = `tests/<source-path>.test.ts`.
+  - Defined rules: `.test.ts` suffix only, no test files in source dirs, relative imports from test to source.
+  - Exception policy: `tests/integration/` for cross-module tests, `tests/_fixtures/` and `tests/_helpers/` for shared test data.
+  - Added entry to `docs/README.md` index.
+  - Learning: small repos benefit from top-level mirror tree over co-located `__tests__/` — keeps source dirs clean and test runner globs simple.
+  - Challenge: none; straightforward documentation bead.
+
+2026-02-17
+- Completed bead `ouroboros-8.2` (move provider and TUI tests to dedicated test locations).
+  - Moved `providers/claude.test.ts` → `tests/providers/claude.test.ts` and `tui/preview-row-key.test.ts` → `tests/tui/preview-row-key.test.ts`.
+  - Updated import paths from `./` and `../` to `../../` relative references matching new locations.
+  - All 69 tests pass, `bun run doctor` clean.
+  - Learning: git detects renames automatically when content similarity is high; `git rm` + `git add` produces clean rename entries.
+  - Challenge: none; straightforward file relocation with import path updates.
+
+2026-02-17
+- Completed bead `ouroboros-8.3` (move core tests to dedicated test locations).
+  - Moved 9 test files from `core/` to `tests/core/`: beads, json, paths, prompts, review, live-run-state, iteration-execution, loop-engine.stop-marker, loop-engine.rich-mode.
+  - Updated all static imports (`./foo` → `../../core/foo`, `../providers/types` → `../../providers/types`).
+  - Updated `mock.module` paths (`./beads` → `../../core/beads`, `./state` → `../../core/state`, `./process-runner` → `../../core/process-runner`, `../tui/tui` → `../../tui/tui`).
+  - Updated dynamic `import()` paths for `iteration-execution` and `loop-engine` modules.
+  - All 70 tests pass, `bun run doctor` clean (0 warnings).
+  - Learning: `mock.module` paths in bun:test resolve relative to the test file location, same as static imports — must update them when moving test files.
+  - Challenge: none; systematic path replacement with verification.
