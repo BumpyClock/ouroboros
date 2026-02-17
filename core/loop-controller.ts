@@ -254,6 +254,22 @@ export async function runLoopController(
     };
     liveRenderer?.setIterationSummary(summary);
 
+    const pickedCount = pickedByAgent.size;
+    const shouldStopForNoBeads = pickedCount === 0 || beadsSnapshot.remaining <= pickedCount;
+    if (stopDetected && !shouldStopForNoBeads) {
+      if (liveRenderer?.isEnabled()) {
+        liveRenderer.setLoopNotice(
+          'provider stop marker detected, but picked work suggests continuing',
+          'muted',
+        );
+      } else {
+        console.log(
+          `${badge('DELAY', 'warn')} stop marker ignored because this iteration picked ${pickedCount} bead(s)`,
+        );
+      }
+      continue;
+    }
+
     if (stopDetected) {
       stoppedByProviderMarker = true;
       if (liveRenderer?.isEnabled()) {

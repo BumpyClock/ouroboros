@@ -293,7 +293,7 @@ export async function runIteration(
           result,
         };
       } finally {
-        releaseReadinessOnce();
+        releasePickedReadinessOnce();
       }
     })();
 

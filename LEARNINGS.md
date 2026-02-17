@@ -53,6 +53,7 @@
 ## TUI Lifecycle
 - 2026-02-17: rich TTY mode now routes iteration lifecycle (`START`/`RUN`/`BATCH`/`TOKENS`/pause/retry) through renderer state updates; these lines should no longer be printed as per-iteration stdout spam.
 - 2026-02-17: added `core/live-run-state` + `core/loop-engine` test coverage for rich-mode suppression and non-TTY legacy fallback behavior.
+- 2026-02-17: staged parallel spawn refactor must keep readiness release names consistent; a stray `releaseReadinessOnce()` reference (instead of `releasePickedReadinessOnce()`) caused loop termination as agents finished.
 
 ## Cross-platform Path Defaults
 - 2026-02-17: Keep home resolution explicit: prefer HOME, then Windows USERPROFILE, then HOMEDRIVE+HOMEPATH, then homedir().

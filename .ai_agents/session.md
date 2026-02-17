@@ -202,3 +202,11 @@
   - Confirmed no remaining home/project/log path duplication via repo scan for `HOME`, `USERPROFILE`, `HOMEDRIVE`, `HOMEPATH`, `sanitizeProjectName`, `defaultLogDir`, and `resolveHomeDir` in core/docs usage.
   - Learnings: this parent bead was functionally complete from child beads once scan confirmed; closure can be safe when all callsites are redirected and platform docs/test coverage exist.
   - Challenge: output from `rg` searches in this environment can be noisy due to PowerShell job metadata, but the relevant hits were still clear.
+
+2026-02-17
+- Completed beads ouroboros-5.4 and ouroboros-5 (malformed JSON smoke-check + shared json helper verification).
+  - Added tests in core/json.test.ts for malformed iteration-state recovery and malformed d JSON list output path into empty snapshot behavior (loadIterationState + loadBeadsSnapshot smoke checks).
+  - No production code edits required; behavior remains parity-focused and backward compatible.
+  - Learning: one focused shared helper test file can still cover malformed-input resilience for both core consumers without adding heavy mocks.
+  - Challenge: keeping this check platform-stable required temporary PATH shim with Win32 .cmd shim (PATH delimiter-aware).
+
