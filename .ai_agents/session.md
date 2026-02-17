@@ -305,3 +305,24 @@
   - All 70 tests pass, `bun run doctor` clean (0 warnings).
   - Learning: `mock.module` paths in bun:test resolve relative to the test file location, same as static imports — must update them when moving test files.
   - Challenge: none; systematic path replacement with verification.
+
+2026-02-17
+- Completed bead `ouroboros-8.4` (verify test imports and discovery after relocation).
+  - Confirmed all 11 test files live in `tests/` mirror tree; zero `.test.ts` files remain in `core/`, `providers/`, or `tui/`.
+  - All static imports use correct `../../` relative paths; `mock.module` paths also updated.
+  - `bun test` discovers all 70 tests across 11 files via default `**/*.test.ts` glob — no `bunfig.toml` or manual path config needed.
+  - `bun run doctor` clean (0 warnings, 0 fixes).
+  - Learning: bun's default test discovery (`**/*.test.ts`) requires no configuration for mirror-tree layouts; verification-only beads can close quickly when prior child beads did the actual moves.
+  - Challenge: none; this was a pure verification pass confirming work from 8.2 and 8.3.
+
+2026-02-17
+- Completed bead `ouroboros-7.6` (regression tests and docs for review/fix loop).
+  - Added `tests/core/review-loop.test.ts` with 10 tests covering: review disabled path, pass-on-first-review, drift->fix->pass, malformed reviewer JSON failure, invalid verdict, missing followUpPrompt, max fix attempts cap, stop-marker exclusion, aggregation failure surfacing, and multi-drift-then-pass cycle.
+  - Exported `runSlotReviewLoop` and `SlotReviewInput` from `core/iteration-execution.ts` for direct testability (avoids `mock.module` collision with `iteration-execution.test.ts` when both mock `process-runner`).
+  - Created `docs/review-loop.md` with full lifecycle, verdict contract, reviewer context, stop-marker exclusion, lifecycle phases, and CLI/config reference.
+  - Updated `docs/config.md` to replace stale "planned behavior" with actual review loop summary and cross-link.
+  - Updated `docs/README.md` index with review-loop.md entry.
+  - Closed parent bead `ouroboros-7` (all children 7.1-7.6 complete).
+  - Learning: bun `mock.module` for the same module path across test files collides in the same process; testing exported functions directly avoids mock isolation issues.
+  - Challenge: initial attempt to mock `process-runner` in new test file conflicted with existing `iteration-execution.test.ts` mock; resolved by exporting `runSlotReviewLoop` and testing it directly.
+  - 80 tests pass, doctor clean (0 warnings).
