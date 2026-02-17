@@ -87,10 +87,16 @@ describe('Ink TUI interaction state', () => {
   it('cycles views with tab and shortcuts', () => {
     const state = buildInitialTuiInteractionState(2, 10);
 
-    const next = transitionTuiInteractionState(state, '', { tab: true });
-    expect(next.view).toBe('iterations');
-    const direct = transitionTuiInteractionState(next, '3', {});
+    const next = transitionTuiInteractionState(state, '', { rightArrow: true });
+    expect(next.view).toBe('tasks');
+    expect(next.focusedPane).toBe('iterations');
+
+    const iterView = transitionTuiInteractionState(next, '', { rightArrow: true });
+    expect(iterView.view).toBe('iterations');
+
+    const direct = transitionTuiInteractionState(iterView, '3', {});
     expect(direct.view).toBe('iteration-detail');
+    expect(direct.focusedPane).toBe('iterations');
     const reversed = transitionTuiInteractionState(direct, '', { leftArrow: true });
     expect(reversed.view).toBe('iterations');
   });
@@ -115,5 +121,16 @@ describe('Ink TUI interaction state', () => {
     expect(next.selectedIteration).toBe(2);
     const back = transitionTuiInteractionState(next, '[', {});
     expect(back.selectedIteration).toBe(1);
+  });
+
+  it('supports iteration-focus navigation and enter-to-detail', () => {
+    const state = buildInitialTuiInteractionState(2, 8);
+    const focused = transitionTuiInteractionState(state, '', { tab: true });
+    expect(focused.focusedPane).toBe('iterations');
+    const moved = transitionTuiInteractionState(focused, 'j', {});
+    expect(moved.selectedIteration).toBe(2);
+    const detail = transitionTuiInteractionState(moved, '', { return: true });
+    expect(detail.view).toBe('iteration-detail');
+    expect(detail.focusedPane).toBe('iterations');
   });
 });

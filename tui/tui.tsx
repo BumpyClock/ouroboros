@@ -1,5 +1,5 @@
 import { Box, render, Text, useInput } from 'ink';
-import React, { useSyncExternalStore, useState } from 'react';
+import React, { useState, useSyncExternalStore } from 'react';
 import {
   type AgentReviewPhase,
   type IterationSummary,
@@ -19,12 +19,14 @@ import { buildPreviewRowKey } from './preview-row-key';
 
 type Listener = () => void;
 export type TuiView = 'tasks' | 'iterations' | 'iteration-detail' | 'reviewer';
+type TuiPane = 'agents' | 'iterations';
 const VIEW_SEQUENCE: TuiView[] = ['tasks', 'iterations', 'iteration-detail', 'reviewer'];
 const DEFAULT_HELP_TEXT = [
   '? / h: help',
-  'Tab: next view',
+  'Tab: next focus (tasks view)',
   '←/→: prev/next view',
-  'j/k/↑/↓: move agent selection',
+  'j/k/↑/↓: move selection in focused pane',
+  'Enter: open selected iteration detail',
   '[ ]: iteration cursor (iteration detail)',
   '1/2/3/4: direct view selection',
 ];
@@ -35,10 +37,12 @@ export type InkInputKey = {
   rightArrow?: boolean;
   upArrow?: boolean;
   downArrow?: boolean;
+  return?: boolean;
 };
 
 export type TuiInteractionState = {
   view: TuiView;
+  focusedPane: TuiPane;
   selectedAgentIndex: number;
   selectedIteration: number;
   helpVisible: boolean;
@@ -61,6 +65,7 @@ export function buildInitialTuiInteractionState(
   const safeMaxIterations = Math.max(1, maxIterations);
   return {
     view: 'tasks',
+    focusedPane: safeAgentCount > 0 ? 'agents' : 'iterations',
     selectedAgentIndex: safeAgentCount > 0 ? 0 : -1,
     selectedIteration: safeMaxIterations > 0 ? 1 : 1,
     helpVisible: false,
@@ -78,10 +83,7 @@ function resolveNextView(view: TuiView, reverse = false): TuiView {
   return VIEW_SEQUENCE[(next + VIEW_SEQUENCE.length) % VIEW_SEQUENCE.length];
 }
 
-function withAgentDelta(
-  state: TuiInteractionState,
-  delta: number,
-): TuiInteractionState {
+function withAgentDelta(state: TuiInteractionState, delta: number): TuiInteractionState {
   if (state.agentCount === 0) {
     return state;
   }
@@ -96,10 +98,7 @@ function withAgentDelta(
   };
 }
 
-function withIterationDelta(
-  state: TuiInteractionState,
-  delta: number,
-): TuiInteractionState {
+function withIterationDelta(state: TuiInteractionState, delta: number): TuiInteractionState {
   const max = Math.max(1, state.maxIterations);
   const next = clampIndex(state.selectedIteration + delta, 1, max);
   if (next === state.selectedIteration) {
@@ -125,6 +124,12 @@ export function transitionTuiInteractionState(
   }
 
   if (key.tab) {
+    if (state.view === 'tasks') {
+      return {
+        ...state,
+        focusedPane: state.focusedPane === 'agents' ? 'iterations' : 'agents',
+      };
+    }
     return {
       ...state,
       view: resolveNextView(state.view, false),
@@ -132,17 +137,23 @@ export function transitionTuiInteractionState(
   }
 
   if (key.leftArrow) {
-    return {
-      ...state,
-      view: resolveNextView(state.view, true),
-    };
+    if (state.view === 'tasks' && state.focusedPane === 'iterations') {
+      return {
+        ...state,
+        focusedPane: 'agents',
+      };
+    }
+    return { ...state, view: resolveNextView(state.view, true) };
   }
 
   if (key.rightArrow) {
-    return {
-      ...state,
-      view: resolveNextView(state.view, false),
-    };
+    if (state.view === 'tasks' && state.focusedPane === 'agents') {
+      return {
+        ...state,
+        focusedPane: 'iterations',
+      };
+    }
+    return { ...state, view: resolveNextView(state.view, false) };
   }
 
   if (normalized === '1' || normalized === '2' || normalized === '3' || normalized === '4') {
@@ -150,23 +161,38 @@ export function transitionTuiInteractionState(
     return {
       ...state,
       view: VIEW_SEQUENCE[target],
+      focusedPane: VIEW_SEQUENCE[target] === 'iterations' ? 'iterations' : 'agents',
     };
   }
 
   if (key.upArrow || normalized === 'k') {
+    if (state.view === 'tasks' && state.focusedPane === 'iterations') {
+      return withIterationDelta(state, -1);
+    }
     return withAgentDelta(state, -1);
   }
 
   if (key.downArrow || normalized === 'j') {
+    if (state.view === 'tasks' && state.focusedPane === 'iterations') {
+      return withIterationDelta(state, 1);
+    }
     return withAgentDelta(state, 1);
   }
 
-  if (state.view === 'iteration-detail' && normalized === '[') {
+  if ((state.view === 'iteration-detail' || state.focusedPane === 'iterations') && normalized === '[') {
     return withIterationDelta(state, -1);
   }
 
-  if (state.view === 'iteration-detail' && normalized === ']') {
+  if ((state.view === 'iteration-detail' || state.focusedPane === 'iterations') && normalized === ']') {
     return withIterationDelta(state, 1);
+  }
+
+  if (key.return && state.view === 'tasks' && state.focusedPane === 'iterations') {
+    return {
+      ...state,
+      view: 'iteration-detail',
+      focusedPane: 'iterations',
+    };
   }
 
   return state;
@@ -528,12 +554,70 @@ function renderIterationStrip(
   );
 }
 
+function renderIterationHistoryList(
+  timeline: LiveRunIterationTimeline,
+  selectedIteration: number,
+  columns: number,
+  focused: boolean,
+): React.JSX.Element {
+  const rows: React.JSX.Element[] = [];
+  if (timeline.maxIterations <= 0) {
+    rows.push(
+      <Text key="iter-history-empty">
+        <StatusText tone="muted" text="no iteration history yet" />
+      </Text>,
+    );
+  } else {
+    const target = Math.max(1, Math.min(selectedIteration, timeline.maxIterations));
+    const rowLimit = columns >= 110 ? 12 : columns >= 80 ? 8 : 4;
+    const maxRows = Math.min(rowLimit, timeline.maxIterations);
+    const half = Math.floor((maxRows - 1) / 2);
+    const start = Math.max(1, Math.min(target - half, Math.max(1, timeline.maxIterations - maxRows + 1)));
+    const end = Math.min(timeline.maxIterations, start + maxRows - 1);
+    for (let iteration = start; iteration <= end; iteration += 1) {
+      const marker = timeline.markers[iteration - 1];
+      if (!marker) {
+        continue;
+      }
+      const isSelected = marker.iteration === target;
+      const isCurrent = marker.isCurrent;
+      const chip = isCurrent ? `${formatIterationChip(marker)} *` : formatIterationChip(marker);
+      const tone: Tone = marker.failed ? 'error' : marker.succeeded ? 'success' : 'muted';
+      const selectedPrefix = isSelected ? renderStatusBadge(focused ? '▶' : '·', 'info') : ' ';
+      rows.push(
+        <Text key={`iter-${marker.iteration}`}>
+          {selectedPrefix}
+          <StatusText tone={tone} text={` ${chip.padEnd(8, ' ')} `} />
+          <StatusText tone={isCurrent ? 'info' : 'neutral'} text={isCurrent ? 'current' : 'history'} />
+        </Text>,
+      );
+    }
+  }
+
+  const focusText = focused ? '[iter list focus]' : '[iter list]';
+  return (
+    <Box marginTop={1} borderStyle="round" borderColor="blue" paddingX={1} flexDirection="column">
+      <Text>
+        {renderStatusBadge('HISTORY', 'info')}{' '}
+        <StatusText tone="muted" text={`${timeline.currentIteration}/${timeline.maxIterations} ${focusText}`} />
+      </Text>
+      {rows}
+    </Box>
+  );
+}
+
 function renderViewHelp(helpVisible: boolean): React.JSX.Element | null {
   if (!helpVisible) {
     return null;
   }
   return (
-    <Box marginTop={1} borderStyle="round" borderColor="magenta" flexDirection="column" paddingX={1}>
+    <Box
+      marginTop={1}
+      borderStyle="round"
+      borderColor="magenta"
+      flexDirection="column"
+      paddingX={1}
+    >
       {DEFAULT_HELP_TEXT.map((line) => (
         <Text key={line}>
           <StatusText tone="muted" text={line} />
@@ -552,11 +636,18 @@ function renderIterationDetail(
   const iterationText = marker
     ? `iteration ${marker.iteration} ${marker.succeeded ? 'success' : marker.failed ? 'failed' : 'pending'}`
     : `iteration ${state.selectedIteration}`;
+  const retryText = marker ? `retries ${marker.retryCount}` : 'retries 0';
+  const statusLine = marker
+    ? `${marker.isCurrent ? 'current' : 'history'} ${marker.succeeded ? 'success' : marker.failed ? 'failed' : 'pending'}`
+    : 'pending';
   return (
     <Box marginTop={1} borderStyle="round" borderColor="yellow" flexDirection="column" paddingX={1}>
       <Text>
         {renderStatusBadge('ITER-DETAIL', 'info')}{' '}
         <StatusText tone="neutral" text={iterationText} />
+      </Text>
+      <Text>
+        <StatusText tone="muted" text={`${statusLine} · ${retryText}`} />
       </Text>
       {renderIterationStrip(timeline, columns)}
     </Box>
@@ -567,6 +658,7 @@ function renderCurrentAgentCard(
   state: LiveRunState,
   uiState: TuiInteractionState,
   selectorForAgentId: (agentId: number) => LiveRunAgentSelector,
+  selected = false,
 ): React.JSX.Element | null {
   if (state.agentIds.length === 0) {
     return null;
@@ -574,7 +666,55 @@ function renderCurrentAgentCard(
   const maxIndex = Math.max(0, state.agentIds.length - 1);
   const safeIndex = clampIndex(uiState.selectedAgentIndex, 0, maxIndex);
   const agentId = state.agentIds[safeIndex];
-  return renderAgentCard(state, selectorForAgentId(agentId), agentId);
+  return renderAgentCard(state, selectorForAgentId(agentId), agentId, selected);
+}
+
+function renderAgentListPanel(
+  state: LiveRunState,
+  renderer: InkLiveRunRenderer,
+  uiState: TuiInteractionState,
+  columns: number,
+): React.JSX.Element {
+  const safeAgentCount = Math.max(0, state.agentIds.length);
+  const safeIndex = safeAgentCount > 0 ? clampIndex(uiState.selectedAgentIndex, 0, safeAgentCount - 1) : -1;
+  const isFocused = uiState.focusedPane === 'agents';
+  return (
+    <Box flexDirection="column" marginRight={1} flexGrow={1}>
+      <Text>
+        {renderStatusBadge('LIVE', isFocused ? 'info' : 'muted')}{' '}
+        <StatusText tone="muted" text={isFocused ? '[agent focus]' : '[agents]'} />
+      </Text>
+      {safeAgentCount === 0 ? (
+        <Text>
+          <StatusText tone="muted" text="no agents yet" />
+        </Text>
+      ) : (
+        state.agentIds.map((agentId, index) => {
+          const selector = renderer.getAgentSelector(agentId);
+          const isSelected = index === safeIndex;
+          return (
+            <React.Fragment key={`agent-${agentId}`}>
+              {renderAgentCard(state, selector, agentId, isSelected)}
+            </React.Fragment>
+          );
+        })
+      )}
+    </Box>
+  );
+}
+
+function renderTaskSummaryPanel(state: LiveRunState, columns: number): React.JSX.Element {
+  return (
+    <Box marginTop={1} flexDirection="column" width={Math.min(columns - 2, 120)}>
+      <Text>
+        {renderStatusBadge('TASK', 'info')}{' '}
+        <StatusText tone="neutral" text={`iteration ${state.iteration}/${state.maxIterations}`} />
+      </Text>
+      {renderIterationSummary(state).map((line) => line)}
+      {renderRunContext(state).map((line) => line)}
+      {renderBeads(state)}
+    </Box>
+  );
 }
 
 function renderViewContent(
@@ -586,18 +726,25 @@ function renderViewContent(
 ): React.JSX.Element[] {
   const view = uiState.view;
   if (view === 'iterations') {
+    const focused = uiState.focusedPane === 'iterations';
     return [
-      <Box key="iter-summary" marginTop={1} flexDirection="column">
+      <Box key="iter-view" marginTop={1} flexDirection="column">
+        <Text>
+          {renderStatusBadge('ITER', focused ? 'info' : 'muted')}{' '}
+          <StatusText tone="muted" text={focused ? '[iteration focus]' : '[iterations]'} />
+        </Text>
         {renderIterationSummary(state).map((line) => line)}
+        {renderIterationHistoryList(timeline, uiState.selectedIteration, columns, focused)}
       </Box>,
-      <React.Fragment key="iter-strip">{renderIterationStrip(timeline, columns)}</React.Fragment>,
     ];
   }
 
   if (view === 'iteration-detail') {
     return [
       <Box key="iter-detail" marginTop={1} flexDirection="column">
-        <Text>{renderStatusBadge('DETAIL', 'info')} selected iteration {uiState.selectedIteration}</Text>
+        <Text>
+          {renderStatusBadge('DETAIL', 'info')} selected iteration {uiState.selectedIteration}
+        </Text>
         {renderIterationDetail(uiState, timeline, columns)}
       </Box>,
     ];
@@ -606,33 +753,51 @@ function renderViewContent(
   if (view === 'reviewer') {
     return [
       <Box key="reviewer-shell" marginTop={1} flexDirection="column">
-        <Text>
-          {renderStatusBadge('VIEW', 'warn')} reviewer panel
-        </Text>
+        <Text>{renderStatusBadge('VIEW', 'warn')} reviewer panel</Text>
         <Box marginTop={1} flexDirection="column">
           {renderRunContext(state).map((line) => line)}
-          {renderCurrentAgentCard(state, uiState, (agentId) => renderer.getAgentSelector(agentId))}
+          {renderCurrentAgentCard(state, uiState, (agentId) => renderer.getAgentSelector(agentId), true)}
         </Box>
       </Box>,
     ];
   }
 
+  if (columns < 100) {
+    return [
+      <Box key="tasks-stack" marginTop={1} flexDirection="column">
+        {renderTaskSummaryPanel(state, columns)}
+        {renderAgentListPanel(state, renderer, uiState, columns)}
+        {renderIterationHistoryList(
+          timeline,
+          uiState.selectedIteration,
+          columns,
+          uiState.focusedPane === 'iterations',
+        )}
+      </Box>,
+    ];
+  }
+
   return [
-    <React.Fragment key="summary">
-      <Box marginTop={1} flexDirection="column">
-        {renderIterationSummary(state).map((line) => line)}
+    <Box
+      key="tasks-layout"
+      marginTop={1}
+      flexDirection="row"
+      width={columns - 2}
+      gap={1}
+    >
+      <Box width={Math.max(60, Math.floor(columns * 0.64))} flexDirection="column">
+        {renderTaskSummaryPanel(state, columns)}
+        {renderAgentListPanel(state, renderer, uiState, columns)}
       </Box>
-      <Box marginTop={1} flexDirection="column">
-        {renderRunContext(state).map((line) => line)}
+      <Box flexDirection="column" flexGrow={1}>
+        {renderIterationHistoryList(
+          timeline,
+          uiState.selectedIteration,
+          columns,
+          uiState.focusedPane === 'iterations',
+        )}
       </Box>
-      {renderBeads(state)}
-      {state.agentIds.map((agentId) => (
-        <React.Fragment key={agentId}>
-          {renderAgentCard(state, renderer.getAgentSelector(agentId), agentId)}
-        </React.Fragment>
-      ))}
-      {renderIterationStrip(timeline, columns)}
-    </React.Fragment>,
+    </Box>,
   ];
 }
 
@@ -688,6 +853,7 @@ function renderAgentCard(
   state: LiveRunState,
   selector: LiveRunAgentSelector,
   agentId: number,
+  selected = false,
 ): React.JSX.Element {
   const snapshot = state.agentState.get(agentId);
   const picked = selector.pickedBead;
@@ -722,7 +888,7 @@ function renderAgentCard(
       <Text color={toneToColor('muted')}>{buildAgentNotchLine(agentId, cardWidth)}</Text>
       <Box
         borderStyle="round"
-        borderColor={toneToColor(tone)}
+        borderColor={selected ? 'cyan' : toneToColor(tone)}
         paddingX={1}
         flexDirection="column"
         width={cardWidth}
@@ -734,25 +900,27 @@ function renderAgentCard(
         </Box>
         {!snapshot ? (
           <Text>
-            <StatusText
-              tone={pickedTitleTone}
-              dim={!picked}
-              text={formatShort(pickedTitle, titleMax)}
-            />{' '}
-            {renderStatusBadge(selector.statusLabel, selector.statusTone)}{' '}
-            <StatusText tone={selector.statusTone} dim text={` ${selector.statusText}`} />
-          </Text>
-        ) : (
-          <Text>
-            <StatusText
-              tone={pickedTitleTone}
-              dim={!picked}
-              text={formatShort(pickedTitle, titleMax)}
-            />{' '}
-            {renderStatusBadge(selector.statusLabel, selector.statusTone)}{' '}
-            <StatusText tone="neutral" text={` ${snapshot.totalEvents}`} />{' '}
-            <StatusText tone="muted" dim text={`updated ${ageSeconds}s ago`} />
-          </Text>
+          <StatusText
+            tone={pickedTitleTone}
+            dim={!picked}
+            text={formatShort(pickedTitle, titleMax)}
+          />{' '}
+          {renderStatusBadge(selector.statusLabel, selector.statusTone)}{' '}
+          <StatusText tone={selector.statusTone} dim text={` ${selector.statusText}`} />
+          {selected ? ` ${renderStatusBadge('>', 'info')}` : null}
+        </Text>
+      ) : (
+        <Text>
+          <StatusText
+            tone={pickedTitleTone}
+            dim={!picked}
+            text={formatShort(pickedTitle, titleMax)}
+          />{' '}
+          {renderStatusBadge(selector.statusLabel, selector.statusTone)}{' '}
+          <StatusText tone="neutral" text={` ${snapshot.totalEvents}`} />{' '}
+          <StatusText tone="muted" dim text={`updated ${ageSeconds}s ago`} />
+          {selected ? ` ${renderStatusBadge('>', 'info')}` : null}
+        </Text>
         )}
         {previewLines.map((line, rowIndex) => (
           <Text key={buildPreviewRowKey(agentId, rowIndex)}>

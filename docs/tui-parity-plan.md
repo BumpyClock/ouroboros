@@ -52,3 +52,8 @@ Date: 2026-02-17
 4. `ouroboros-13.3`: worker/iteration detail plumbing in multi-view loop context.
 5. `ouroboros-13.4`: conflict/merge operational overlays.
 6. `ouroboros-13.5`+: UX overlays/theme once interaction is stable.
+
+## Implementation notes (current session)
+
+- `ouroboros-13.3` now has Ink TUI multi-pane shell behavior with left live/task panel and right iteration history panel.
+- Focused pane navigation is explicit (`Tab` / `←` / `→`), with iteration detail drilldown via `Enter` from history focus.

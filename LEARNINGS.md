@@ -38,3 +38,4 @@
 - `.ai_agents/` is git-ignored in this repo; keep canonical default prompt text in tracked docs (`docs/prompts/*.default.md`) and treat `.ai_agents/prompts/*` as runtime/local copies.
 - Ensure mixed-reviewer provider paths are enforced at CLI/runtime seam, not ad-hoc in tests: reviewer adapter/model/command should be resolved once in loop-engine before loop execution, then threaded through controller/slot review loop.
 - Prefer small, non-destructive local bootstrap commands (`--init-*`) over destructive overwrite behavior; add explicit `--force-*` flags only when required and document clearly.
+- 2026-02-17: Implemented Ink TUI multi-pane shell for bead ouroboros-13.3 with focused pane navigation (agents/history), iteration list drilldown, and responsive stacked fallback.
