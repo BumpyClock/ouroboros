@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'bun:test';
 import * as path from 'node:path';
+import { homedir } from 'node:os';
 import { defaultLogDir, resolveHomeDir } from './paths';
 
 function restoreEnv(keys: string[], previousValues: Record<string, string | undefined>): void {
@@ -69,6 +70,19 @@ describe('resolveHomeDir', () => {
         restoreEnv(['HOME', 'USERPROFILE', 'HOMEDRIVE', 'HOMEPATH'], previousValues);
       }
     });
+  } else {
+    it('falls back to os.homedir on non-Windows when HOME is missing', () => {
+      const previousValues = {
+        HOME: process.env.HOME,
+      };
+      delete process.env.HOME;
+
+      try {
+        expect(resolveHomeDir()).toBe(homedir());
+      } finally {
+        restoreEnv(['HOME'], previousValues);
+      }
+    });
   }
 });
 
@@ -80,13 +94,18 @@ describe('defaultLogDir', () => {
       HOMEDRIVE: process.env.HOMEDRIVE,
       HOMEPATH: process.env.HOMEPATH,
     };
-    process.env.HOME = process.platform === 'win32' ? 'C:\\Users\\ResolvedHome' : '/tmp/resolved-home';
+    if (process.platform === 'win32') {
+      process.env.HOME = 'C:\\Users\\ResolvedHome';
+    } else {
+      delete process.env.HOME;
+    }
     delete process.env.USERPROFILE;
     delete process.env.HOMEDRIVE;
     delete process.env.HOMEPATH;
 
     const logDir = defaultLogDir('/repo/path/my project');
-    const expectedBase = path.join(process.env.HOME, '.ouroborus', 'logs', 'my_project');
+    const resolvedHome = resolveHomeDir();
+    const expectedBase = path.join(resolvedHome, '.ouroborus', 'logs', 'my_project');
 
     try {
       expect(logDir.startsWith(`${expectedBase}${path.sep}`)).toBeTrue();
