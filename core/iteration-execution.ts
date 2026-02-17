@@ -126,7 +126,10 @@ export async function runIteration(
   for (const run of runs) {
     if (run.agentId === 1) {
       if (liveRendererEnabled) {
-        liveRenderer?.setAgentLaunching(run.agentId, 'launching now, waiting for first picked bead');
+        liveRenderer?.setAgentLaunching(
+          run.agentId,
+          'launching now, waiting for first picked bead',
+        );
       }
       continue;
     }
@@ -172,10 +175,7 @@ export async function runIteration(
     if (runIndex > 0) {
       await waitForPicked(runIndex);
       if (liveRendererEnabled) {
-        liveRenderer?.setAgentLaunching(
-          run.agentId,
-          `launching after A${runIndex} picked a bead`,
-        );
+        liveRenderer?.setAgentLaunching(run.agentId, `launching after A${runIndex} picked a bead`);
       } else {
         console.log(
           `${badge(
@@ -239,7 +239,7 @@ export async function runIteration(
                   entry.kind === 'error',
               );
             for (const entry of liveEntries) {
-                const matchedIds = extractReferencedBeadIds(entry.text, knownBeadIds);
+              const matchedIds = extractReferencedBeadIds(entry.text, knownBeadIds);
               if (matchedIds.length > 0) {
                 const matchedIssue = beadsSnapshot.byId.get(matchedIds[0]);
                 if (matchedIssue) {
