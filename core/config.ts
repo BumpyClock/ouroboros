@@ -103,6 +103,7 @@ function toReasoningEffort(value: unknown): ReasoningEffort | undefined {
 function normalizeConfigRecord(input: Record<string, unknown>): PartialOptions {
   return {
     provider: parseString(input.provider)?.toLowerCase(),
+    reviewerProvider: parseString(input.reviewerProvider)?.toLowerCase(),
     promptPath: parseString(input.promptPath),
     iterationLimit: toPositiveInt(input.iterationLimit),
     previewLines: toPositiveInt(input.previewLines),
@@ -110,6 +111,7 @@ function normalizeConfigRecord(input: Record<string, unknown>): PartialOptions {
     pauseMs: toNonNegativeInt(input.pauseMs),
     command: parseString(input.command),
     model: parseString(input.model),
+    reviewerModel: parseString(input.reviewerModel),
     reasoningEffort: toReasoningEffort(input.reasoningEffort),
     yolo: toBoolean(input.yolo),
     logDir: parseString(input.logDir),

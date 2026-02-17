@@ -97,6 +97,8 @@ Source of truth: [config.md](./config.md#reviewer-providermodel-resolution-contr
 --review                       Enable review loop (default: off)
 --no-review                    Disable review loop
 --review-max-fix-attempts <n>  Max fix attempts per review cycle (default: 5)
+--reviewer-provider <name>     Reviewer provider override (default: primary provider)
+--reviewer-model <model>       Reviewer model override
 --developer-prompt <path>      Developer prompt path
 --reviewer-prompt <path>       Reviewer prompt path
 ```
@@ -106,6 +108,8 @@ Source of truth: [config.md](./config.md#reviewer-providermodel-resolution-contr
 ```toml
 reviewEnabled = true
 reviewMaxFixAttempts = 3
+reviewerProvider = "claude"
+reviewerModel = "sonnet"
 developerPromptPath = ".ai_agents/prompts/developer.md"
 reviewerPromptPath = ".ai_agents/prompts/reviewer.md"
 ```

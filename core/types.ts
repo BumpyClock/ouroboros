@@ -4,6 +4,7 @@ export type CliOptions = {
   projectRoot: string;
   projectKey: string;
   provider: string;
+  reviewerProvider: string;
   iterationLimit: number;
   iterationsSet: boolean;
   previewLines: number;
@@ -11,6 +12,7 @@ export type CliOptions = {
   pauseMs: number;
   command: string;
   model: string;
+  reviewerModel: string;
   reasoningEffort: ReasoningEffort;
   yolo: boolean;
   logDir: string;

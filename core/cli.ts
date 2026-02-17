@@ -5,6 +5,7 @@ import type { CliOptions, ReasoningEffort } from './types';
 
 type CliOverrides = {
   provider?: string;
+  reviewerProvider?: string;
   iterationLimit?: number;
   iterationsSet: boolean;
   previewLines?: number;
@@ -12,6 +13,7 @@ type CliOverrides = {
   pauseMs?: number;
   command?: string;
   model?: string;
+  reviewerModel?: string;
   reasoningEffort?: ReasoningEffort;
   yolo?: boolean;
   logDir?: string;
@@ -42,6 +44,9 @@ function parseCliOverrides(argv: string[]): CliOverrides {
     if (arg === '--provider') {
       overrides.provider = (argv[i + 1] ?? '').trim().toLowerCase();
       i += 1;
+    } else if (arg === '--reviewer-provider') {
+      overrides.reviewerProvider = (argv[i + 1] ?? '').trim().toLowerCase();
+      i += 1;
     } else if (arg === '--prompt' || arg === '-p') {
       overrides.developerPromptPath = argv[i + 1];
       i += 1;
@@ -63,6 +68,9 @@ function parseCliOverrides(argv: string[]): CliOverrides {
       i += 1;
     } else if (arg === '--model' || arg === '-m') {
       overrides.model = argv[i + 1] ?? '';
+      i += 1;
+    } else if (arg === '--reviewer-model') {
+      overrides.reviewerModel = argv[i + 1] ?? '';
       i += 1;
     } else if (arg === '--reasoning-effort') {
       const value = (argv[i + 1] ?? '').toLowerCase();
@@ -117,6 +125,8 @@ Options:
 
 Provider-specific:
   -m, --model <model>      Model override (provider-specific identifier)
+      --reviewer-provider <name> Reviewer provider override (default: primary --provider)
+      --reviewer-model <model>   Reviewer model override (provider-specific identifier)
       --reasoning-effort   low|medium|high (codex only)
       --yolo               Enable high-autonomy mode for selected provider
       --no-yolo            Disable high-autonomy mode
@@ -160,19 +170,33 @@ export function parseArgs(argv = process.argv.slice(2)): CliOptions {
     config.runtimeConfig.iterationLimit,
     50,
   ) as number;
+  const model = pick(cli.model, config.runtimeConfig.model, provider.defaults.model) as string;
+  const reviewerProviderName = pick(
+    cli.reviewerProvider,
+    config.runtimeConfig.reviewerProvider,
+    provider.name,
+  ) as string;
+  const reviewerProvider = getProviderAdapter(reviewerProviderName);
+  const reviewerModel = pick(
+    cli.reviewerModel,
+    config.runtimeConfig.reviewerModel,
+    reviewerProvider.name === provider.name ? model : reviewerProvider.defaults.model,
+  ) as string;
   const iterationsSet = cli.iterationsSet || config.runtimeConfig.iterationLimit !== undefined;
 
   return {
     projectRoot: config.projectRoot,
     projectKey: config.projectKey,
     provider: provider.name,
+    reviewerProvider: reviewerProvider.name,
     iterationLimit,
     iterationsSet,
     previewLines: pick(cli.previewLines, config.runtimeConfig.previewLines, 3) as number,
     parallelAgents: pick(cli.parallelAgents, config.runtimeConfig.parallelAgents, 1) as number,
     pauseMs: pick(cli.pauseMs, config.runtimeConfig.pauseMs, 0) as number,
     command: pick(cli.command, config.runtimeConfig.command, provider.defaults.command) as string,
-    model: pick(cli.model, config.runtimeConfig.model, provider.defaults.model) as string,
+    model,
+    reviewerModel,
     reasoningEffort: pick(
       cli.reasoningEffort,
       config.runtimeConfig.reasoningEffort,

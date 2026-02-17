@@ -56,6 +56,8 @@ Supported keys:
 - `pauseMs`
 - `command`
 - `model`
+- `reviewerProvider` (`codex`, `claude`, `copilot`; default: resolved `provider`)
+- `reviewerModel` (string; default: resolved `model` when reviewer provider matches primary, otherwise reviewer provider default model)
 - `reasoningEffort` (`low`, `medium`, `high`)
 - `yolo`
 - `logDir`
@@ -83,7 +85,7 @@ Review is skipped when `reviewEnabled` is false (default), no reviewer prompt ex
 
 ## Reviewer provider/model resolution contract (bead 11 source of truth)
 
-Status: contract defined in `ouroboros-11.1`; runtime wiring lands in `ouroboros-11.2+`.
+Status: contract defined in `ouroboros-11.1`; CLI/config resolution lands in `ouroboros-11.2`; runtime execution wiring continues in `ouroboros-11.3+`.
 
 Terms:
 
