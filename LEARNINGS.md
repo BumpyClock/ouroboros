@@ -35,3 +35,4 @@
 - When repo-wide checks are blocked by unrelated failures, run targeted checks on touched files and record scope.
 - On Windows, run `bd close` sequentially to avoid `issues.jsonl.tmp` rename races.
 - `bd create` cannot combine `--id` with `--parent`; for explicit dotted IDs (for example `ouroboros-10.3`), create with `--id` and attach parent via `--deps parent-child:<parent-id>`.
+- `.ai_agents/` is git-ignored in this repo; keep canonical default prompt text in tracked docs (`docs/prompts/*.default.md`) and treat `.ai_agents/prompts/*` as runtime/local copies.
