@@ -28,6 +28,7 @@ export const COPILOT_FIRST_STRING_KEYS = [
 const FALLBACK_FIRST_STRING_KEYS = Array.from(
   new Set([...CLAUDE_FIRST_STRING_KEYS, ...CODEX_FIRST_STRING_KEYS, ...COPILOT_FIRST_STRING_KEYS]),
 );
+export const NO_BEADS_MARKERS = ['no beads available', 'no_beads_available'] as const;
 
 export function isRecord(value: unknown): value is Record<string, unknown> {
   return !!value && typeof value === 'object' && !Array.isArray(value);
@@ -108,4 +109,9 @@ export function firstStringValue(
     .filter(Boolean)
     .join(' ')
     .trim();
+}
+
+export function hasNoBeadsMarker(output: string): boolean {
+  const normalized = output.toLowerCase();
+  return NO_BEADS_MARKERS.some((marker) => normalized.includes(marker));
 }

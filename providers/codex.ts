@@ -3,6 +3,7 @@ import type { CliOptions, PreviewEntry, UsageSummary } from '../core/types';
 import {
   CODEX_FIRST_STRING_KEYS,
   collectRawJsonLines,
+  hasNoBeadsMarker,
   firstStringValue,
   isRecord,
   safeJsonParse,
@@ -160,11 +161,6 @@ function extractUsageSummary(output: string): UsageSummary | null {
     return { inputTokens, cachedInputTokens, outputTokens };
   }
   return null;
-}
-
-function hasNoBeadsMarker(output: string): boolean {
-  const normalized = output.toLowerCase();
-  return normalized.includes('no beads available') || normalized.includes('no_beads_available');
 }
 
 function formatCommandHint(command: string): string {
