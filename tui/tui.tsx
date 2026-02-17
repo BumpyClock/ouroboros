@@ -282,7 +282,12 @@ function formatAgentTitle(picked: BeadIssue | null, maxLength: number): string {
   return canKeepSeparator ? `${truncatedId} · ` : truncatedId;
 }
 
-function renderAgentTab(label: string, isActive: boolean, activeTone: Tone, inactiveTone: Tone): React.JSX.Element {
+function renderAgentTab(
+  label: string,
+  isActive: boolean,
+  activeTone: Tone,
+  inactiveTone: Tone,
+): React.JSX.Element {
   return isActive ? (
     <Text color={activeTone}>{`[${label}]`}</Text>
   ) : (
@@ -584,4 +589,3 @@ export class InkLiveRunRenderer {
     }
   }
 }
-

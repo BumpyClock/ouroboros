@@ -1,11 +1,10 @@
 
-Work style: telegraph; noun-phrases ok; drop grammar; min tokens.
+ork style: telegraph; noun-phrases ok; drop grammar; min tokens.
 
 
 - read `docs/` and keep them updated with implementation.
-- read `~/.codex/AGENTS.md` 
-
-use `beads` skill.
+- read `~/.codex/AGENTS.md`
+- use `beads` skill.
 
 
 # GOAL
