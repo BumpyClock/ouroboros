@@ -126,43 +126,43 @@ export async function runIteration(
   for (const run of runs) {
     if (run.agentId === 1) {
       if (liveRendererEnabled) {
-        liveRenderer?.setAgentLaunching(run.agentId, 'launching now, waiting for first response');
+        liveRenderer?.setAgentLaunching(run.agentId, 'launching now, waiting for first picked bead');
       }
       continue;
     }
-    const readinessGate = run.agentId - 1;
+    const previousAgentId = run.agentId - 1;
     if (liveRendererEnabled) {
       liveRenderer?.setAgentQueued(
         run.agentId,
-        `waiting to spawn until readiness ${readinessGate}/${runs.length}`,
+        `waiting to spawn until A${previousAgentId} picked a bead`,
       );
     }
   }
 
-  let readinessCount = 0;
-  const readinessWaiters: Array<{ target: number; resolve: () => void }> = [];
-  const flushReadinessWaiters = () => {
+  let pickedReadinessCount = 0;
+  const pickedReadinessWaiters: Array<{ target: number; resolve: () => void }> = [];
+  const flushPickedReadinessWaiters = () => {
     const remaining: Array<{ target: number; resolve: () => void }> = [];
-    for (const waiter of readinessWaiters) {
-      if (readinessCount >= waiter.target) {
+    for (const waiter of pickedReadinessWaiters) {
+      if (pickedReadinessCount >= waiter.target) {
         waiter.resolve();
       } else {
         remaining.push(waiter);
       }
     }
-    readinessWaiters.length = 0;
-    readinessWaiters.push(...remaining);
+    pickedReadinessWaiters.length = 0;
+    pickedReadinessWaiters.push(...remaining);
   };
-  const releaseReadiness = () => {
-    readinessCount += 1;
-    flushReadinessWaiters();
+  const releasePickedReadiness = () => {
+    pickedReadinessCount += 1;
+    flushPickedReadinessWaiters();
   };
-  const waitForReadiness = (target: number): Promise<void> => {
-    if (readinessCount >= target) {
+  const waitForPicked = (target: number): Promise<void> => {
+    if (pickedReadinessCount >= target) {
       return Promise.resolve();
     }
     return new Promise((resolve) => {
-      readinessWaiters.push({ target, resolve });
+      pickedReadinessWaiters.push({ target, resolve });
     });
   };
 
@@ -170,15 +170,18 @@ export async function runIteration(
   for (let runIndex = 0; runIndex < runs.length; runIndex += 1) {
     const run = runs[runIndex];
     if (runIndex > 0) {
-      await waitForReadiness(runIndex);
+      await waitForPicked(runIndex);
       if (liveRendererEnabled) {
         liveRenderer?.setAgentLaunching(
           run.agentId,
-          `launching after readiness ${runIndex}/${runs.length}`,
+          `launching after A${runIndex} picked a bead`,
         );
       } else {
         console.log(
-          `${badge('SPAWN', 'muted')} launching agent ${run.agentId} after readiness ${runIndex}/${runs.length}`,
+          `${badge(
+            'SPAWN',
+            'muted',
+          )} launching agent ${run.agentId} after A${runIndex} picked a bead`,
         );
       }
     }
@@ -186,12 +189,23 @@ export async function runIteration(
     const launchedRun = (async (): Promise<RunResult> => {
       let trackedChild: ChildProcess | null = null;
       let readinessReleased = false;
-      const releaseReadinessOnce = () => {
+      let pickedBeadSet = false;
+      const releasePickedReadinessOnce = () => {
         if (readinessReleased) {
           return;
         }
         readinessReleased = true;
-        releaseReadiness();
+        releasePickedReadiness();
+      };
+
+      const markPickedBead = (issue: BeadIssue) => {
+        if (pickedBeadSet) {
+          return;
+        }
+        pickedByAgent.set(run.agentId, issue);
+        pickedBeadSet = true;
+        liveRenderer?.setAgentPickedBead(run.agentId, issue);
+        releasePickedReadinessOnce();
       };
 
       try {
@@ -225,12 +239,11 @@ export async function runIteration(
                   entry.kind === 'error',
               );
             for (const entry of liveEntries) {
-              const matchedIds = extractReferencedBeadIds(entry.text, knownBeadIds);
+                const matchedIds = extractReferencedBeadIds(entry.text, knownBeadIds);
               if (matchedIds.length > 0) {
                 const matchedIssue = beadsSnapshot.byId.get(matchedIds[0]);
                 if (matchedIssue) {
-                  pickedByAgent.set(run.agentId, matchedIssue);
-                  liveRenderer?.setAgentPickedBead(run.agentId, matchedIssue);
+                  markPickedBead(matchedIssue);
                 }
               }
               if (liveRendererEnabled) {
@@ -257,10 +270,22 @@ export async function runIteration(
               );
             }
           },
-          onFirstResponse: () => {
-            releaseReadinessOnce();
-          },
         });
+
+        if (!pickedBeadSet) {
+          const combined = `${result.stdout}\n${result.stderr}`;
+          const fallbackIds = extractReferencedBeadIds(combined, knownBeadIds);
+          if (fallbackIds.length > 0) {
+            const fallbackIssue = beadsSnapshot.byId.get(fallbackIds[0]);
+            if (fallbackIssue) {
+              markPickedBead(fallbackIssue);
+            }
+          }
+        }
+
+        if (!pickedBeadSet) {
+          releasePickedReadinessOnce();
+        }
         return {
           agentId: run.agentId,
           jsonlLogPath: run.jsonlLogPath,
