@@ -26,6 +26,12 @@
 - Prefer helper-level renderer tests to lock UI contracts quickly.
 - Treat prompt fallback correctness as behavior, not only config correctness; adding contract-focused tests catches regressions in prompt assets.
 
+### `ouroboros-13.4` (2026-02-17)
+- Completed: added operational TUI worker/failure visibility for current loop state.
+- `tui/tui.tsx`: added per-agent iteration/pass context with elapsed timing and a retry/failure queue section in iteration history.
+- Queue surface is driven by timeline markers (`retryCount` / `failed`) and is navigable via iteration cursor.
+- Conflict-specific resolution surface remains deferred; failures are surfaced through queue/failure entries pending dedicated merge panel.
+
 ### Cleanup notes
 - Removed duplicate bead entries, malformed control characters, and inconsistent bullet/date formatting.
 - Kept only consolidated outcomes for compaction-friendly session memory.

@@ -556,6 +556,24 @@ function renderIterationStrip(
   );
 }
 
+type IterationQueueMarker = {
+  iteration: number;
+  retryCount: number;
+  failed: boolean;
+};
+
+function buildRetryFailureQueue(
+  timeline: LiveRunIterationTimeline,
+): IterationQueueMarker[] {
+  return timeline.markers
+    .filter((marker) => marker.failed || marker.retryCount > 0)
+    .map((marker) => ({
+      iteration: marker.iteration,
+      retryCount: marker.retryCount,
+      failed: marker.failed,
+    }));
+}
+
 function renderIterationHistoryList(
   timeline: LiveRunIterationTimeline,
   selectedIteration: number,
@@ -563,6 +581,7 @@ function renderIterationHistoryList(
   focused: boolean,
 ): React.JSX.Element {
   const rows: React.JSX.Element[] = [];
+  const safeSelectedIteration = Math.max(1, Math.min(selectedIteration, timeline.maxIterations || 1));
   if (timeline.maxIterations <= 0) {
     rows.push(
       <Text key="iter-history-empty">
@@ -570,7 +589,7 @@ function renderIterationHistoryList(
       </Text>,
     );
   } else {
-    const target = Math.max(1, Math.min(selectedIteration, timeline.maxIterations));
+    const target = safeSelectedIteration;
     const rowLimit = columns >= 110 ? 12 : columns >= 80 ? 8 : 4;
     const maxRows = Math.min(rowLimit, timeline.maxIterations);
     const half = Math.floor((maxRows - 1) / 2);
@@ -591,6 +610,39 @@ function renderIterationHistoryList(
           {selectedPrefix}
           <StatusText tone={tone} text={` ${chip.padEnd(8, ' ')} `} />
           <StatusText tone={isCurrent ? 'info' : 'neutral'} text={isCurrent ? 'current' : 'history'} />
+        </Text>,
+      );
+    }
+  }
+
+  const queue = buildRetryFailureQueue(timeline);
+  const visibleQueueLimit = columns >= 110 ? 4 : columns >= 80 ? 3 : 2;
+  const visibleQueue = queue.slice(Math.max(0, queue.length - visibleQueueLimit));
+  rows.push(
+    <Text key="iter-queue-title">
+      {renderStatusBadge('QUEUE', 'warn')}{' '}
+      <StatusText
+        tone="muted"
+        text={`retry/failure (${visibleQueue.length}/${queue.length})`}
+      />
+    </Text>,
+  );
+  if (visibleQueue.length === 0) {
+    rows.push(
+      <Text key="iter-queue-empty">
+        <StatusText tone="muted" text="queue clear" />
+      </Text>,
+    );
+  } else {
+    for (const marker of visibleQueue) {
+      const isSelected = marker.iteration === safeSelectedIteration;
+      const markerLabel = marker.failed ? 'FAIL' : `R${marker.retryCount}`;
+      const selectedPrefix = isSelected ? renderStatusBadge('▶', 'info') : ' ';
+      const markerTone: Tone = marker.failed ? 'error' : 'warn';
+      rows.push(
+        <Text key={`iter-queue-${marker.iteration}`}>
+          {selectedPrefix} <StatusText tone={markerTone} text={`I${String(marker.iteration).padStart(2, '0')}`} />{' '}
+          <StatusText tone="muted" text={markerLabel} />
         </Text>,
       );
     }
@@ -871,6 +923,9 @@ function renderAgentCard(
   const titleMax = Math.max(12, cardInnerWidth - statusPrefix.length - statusTextLength - 8);
   const tone: Tone = snapshot ? 'neutral' : 'muted';
   const ageSeconds = snapshot ? selector.ageSeconds : 0;
+  const retryAttemptText = selector.reviewPhase
+    ? `pass ${selector.reviewPhase.fixAttempt} (${selector.reviewPhase.phase})`
+    : `pass ${state.iteration}/${state.maxIterations}`;
   const pickedTitle = formatAgentTitle(picked, titleMax);
   const pickedTitleTone: Tone = picked ? 'success' : 'muted';
   const selectedReview = selector.activeTab === 'review';
@@ -902,27 +957,31 @@ function renderAgentCard(
         </Box>
         {!snapshot ? (
           <Text>
-          <StatusText
-            tone={pickedTitleTone}
-            dim={!picked}
-            text={formatShort(pickedTitle, titleMax)}
-          />{' '}
-          {renderStatusBadge(selector.statusLabel, selector.statusTone)}{' '}
-          <StatusText tone={selector.statusTone} dim text={` ${selector.statusText}`} />
-          {selected ? ` ${renderStatusBadge('>', 'info')}` : null}
-        </Text>
-      ) : (
-        <Text>
-          <StatusText
-            tone={pickedTitleTone}
-            dim={!picked}
-            text={formatShort(pickedTitle, titleMax)}
-          />{' '}
-          {renderStatusBadge(selector.statusLabel, selector.statusTone)}{' '}
-          <StatusText tone="neutral" text={` ${snapshot.totalEvents}`} />{' '}
-          <StatusText tone="muted" dim text={`updated ${ageSeconds}s ago`} />
-          {selected ? ` ${renderStatusBadge('>', 'info')}` : null}
-        </Text>
+            <StatusText
+              tone={pickedTitleTone}
+              dim={!picked}
+              text={formatShort(pickedTitle, titleMax)}
+            />{' '}
+            {renderStatusBadge(selector.statusLabel, selector.statusTone)}{' '}
+            <StatusText tone={selector.statusTone} dim text={` ${selector.statusText}`} />
+            <StatusText tone="muted" text={` · iter ${state.iteration}/${state.maxIterations} · ${retryAttemptText}`} />
+            <StatusText tone="muted" text={` · ${ageSeconds}s ago`} />
+            {selected ? ` ${renderStatusBadge('>', 'info')}` : null}
+          </Text>
+        ) : (
+          <Text>
+            <StatusText
+              tone={pickedTitleTone}
+              dim={!picked}
+              text={formatShort(pickedTitle, titleMax)}
+            />{' '}
+            {renderStatusBadge(selector.statusLabel, selector.statusTone)}{' '}
+            <StatusText tone="neutral" text={` ${snapshot.totalEvents}`} />{' '}
+            <StatusText tone="muted" text={` · iter ${state.iteration}/${state.maxIterations}`} />{' '}
+            <StatusText tone="muted" text={` · ${retryAttemptText}`} />{' '}
+            <StatusText tone="muted" dim text={` · ${ageSeconds}s ago`} />
+            {selected ? ` ${renderStatusBadge('>', 'info')}` : null}
+          </Text>
         )}
         {previewLines.map((line, rowIndex) => (
           <Text key={buildPreviewRowKey(agentId, rowIndex)}>
