@@ -450,3 +450,23 @@ on-zero reviewer/fixer => slot fail, malformed JSONL invalidates snapshot, fallb
   - New coverage asserts `runLoop` resolves both primary and reviewer adapters when review is enabled, uses reviewer-command resolution when providers differ (cross-platform via `resolveRunnableCommand`), and keeps reviewer command on primary when providers are same.
   - Existing `runSlotReviewLoop` contract remains validated by review-loop tests: reviewer subprocess uses `reviewerModel`/reviewer command while fix subprocess uses primary provider command.
   - Learned: existing mixed-provider wiring was mostly already implemented; this test prevents future regressions by locking the handoff contract in `loop-engine`.
+
+2026-02-17
+- Completed bead `ouroboros-12.1` (default prompt content contract).
+  - Added canonical prompt texts with Ralph provenance in tracked docs:
+    - `docs/prompts/developer.default.md`
+    - `docs/prompts/reviewer.default.md`
+  - Added `docs/prompt-contract.md` documenting:
+    - source path provenance (`C:\Users\adity\Projects\dotfiles\.ai_agents\prompts\ralph.md`),
+    - strict reviewer JSON contract (`verdict` + `followUpPrompt`),
+    - safety constraints (no forced push/tag/history rewrite by default).
+  - Updated `docs/README.md` index to include prompt contract docs.
+  - Ran `bun run doctor`; formatting/lint pass completed with two existing warnings in `tests/core/loop-engine.mixed-review-provider.test.ts` (`noNonNullAssertion`, unsafe autofix declined).
+  - Learning: because `.ai_agents/` is ignored, canonical prompt assets must live in tracked docs and can be mirrored to runtime paths as needed.
+2026-02-17
+- Completed bead `ouroboros-11` (Review loop: separate reviewer provider/model via CLI and config).
+  - Confirmed resolution contract is enforced in `core/cli.ts`: reviewer provider/model precedence is CLI > runtime config > defaults, with reviewer model fallback to reviewer provider default when provider differs.
+  - Added test in `tests/core/cli.test.ts` for runtime `reviewerProvider` fallback model behavior when `reviewerModel` is unset.
+  - Reviewed `core/loop-engine.ts` and `core/loop-controller.ts` runtime wiring to keep implementation/fix on primary provider/command while review subprocess uses reviewer provider/command.
+  - Learned: defaulting reviewer model to reviewer provider default in CLI path is the contract anchor for mixed-provider review loops.
+  - Challenge: no end-to-end run performed in this iteration; coverage is via targeted tests and mixed-provider assertions.

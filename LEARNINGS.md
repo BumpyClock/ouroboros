@@ -36,3 +36,4 @@
 - On Windows, run `bd close` sequentially to avoid `issues.jsonl.tmp` rename races.
 - `bd create` cannot combine `--id` with `--parent`; for explicit dotted IDs (for example `ouroboros-10.3`), create with `--id` and attach parent via `--deps parent-child:<parent-id>`.
 - `.ai_agents/` is git-ignored in this repo; keep canonical default prompt text in tracked docs (`docs/prompts/*.default.md`) and treat `.ai_agents/prompts/*` as runtime/local copies.
+- Ensure mixed-reviewer provider paths are enforced at CLI/runtime seam, not ad-hoc in tests: reviewer adapter/model/command should be resolved once in loop-engine before loop execution, then threaded through controller/slot review loop.

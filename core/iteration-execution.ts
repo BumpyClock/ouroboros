@@ -187,7 +187,11 @@ export async function runSlotReviewLoop(input: SlotReviewInput): Promise<SlotRev
 
       const fullReviewerPrompt = `${reviewerPrompt}\n\n${reviewerContext}`;
       const reviewOptions: CliOptions = { ...options, model: options.reviewerModel };
-      const reviewerArgs = reviewerProvider.buildExecArgs(fullReviewerPrompt, reviewLastMessagePath, reviewOptions);
+      const reviewerArgs = reviewerProvider.buildExecArgs(
+        fullReviewerPrompt,
+        reviewLastMessagePath,
+        reviewOptions,
+      );
 
       let trackedChild: ChildProcess | null = null;
       const reviewResult = await runAgentProcess({

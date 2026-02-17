@@ -92,13 +92,27 @@ describe('parseArgs reviewer provider/model resolution', () => {
     expect(options.reviewerModel).toBe('o3-mini');
   });
 
-  it('prefers reviewer CLI override over runtime reviewer config', () => {
-    const options = parseWithConfig(['--reviewer-provider', 'copilot', '--reviewer-model', 'opus'], {
+  it('uses runtime reviewerProvider with default model when reviewerModel is unset', () => {
+    const options = parseWithConfig([], {
       provider: 'codex',
       model: 'gpt-5-primary',
-      reviewerProvider: 'claude',
-      reviewerModel: 'sonnet',
+      reviewerProvider: 'copilot',
     });
+
+    expect(options.reviewerProvider).toBe('copilot');
+    expect(options.reviewerModel).toBe(getProviderAdapter('copilot').defaults.model);
+  });
+
+  it('prefers reviewer CLI override over runtime reviewer config', () => {
+    const options = parseWithConfig(
+      ['--reviewer-provider', 'copilot', '--reviewer-model', 'opus'],
+      {
+        provider: 'codex',
+        model: 'gpt-5-primary',
+        reviewerProvider: 'claude',
+        reviewerModel: 'sonnet',
+      },
+    );
 
     expect(options.reviewerProvider).toBe('copilot');
     expect(options.reviewerModel).toBe('opus');

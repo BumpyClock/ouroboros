@@ -1,5 +1,5 @@
 import { afterAll, afterEach, beforeEach, describe, expect, it, mock } from 'bun:test';
-import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import * as path from 'node:path';
 
@@ -48,15 +48,21 @@ function writeConfig(filePath: string, contents: string): void {
 
 describe('loadOuroborosConfig reviewer fields', () => {
   it('merges project reviewer provider/model over global config', async () => {
-    writeConfig(path.join(tempHome, '.ouroboros', 'config.toml'), `
+    writeConfig(
+      path.join(tempHome, '.ouroboros', 'config.toml'),
+      `
 reviewerProvider = "global-rev"
 reviewerModel = "global-model"
-`);
+`,
+    );
 
-    writeConfig(path.join(projectRoot, '.ouroboros', 'config.toml'), `
+    writeConfig(
+      path.join(projectRoot, '.ouroboros', 'config.toml'),
+      `
 reviewerProvider = "project-rev"
 reviewerModel = "project-model"
-`);
+`,
+    );
 
     const loaded = loadOuroborosConfig(projectRoot);
     expect(loaded.runtimeConfig.reviewerProvider).toBe('project-rev');
@@ -64,10 +70,13 @@ reviewerModel = "project-model"
   });
 
   it('keeps global reviewer fields when project config does not override them', async () => {
-    writeConfig(path.join(tempHome, '.ouroboros', 'config.toml'), `
+    writeConfig(
+      path.join(tempHome, '.ouroboros', 'config.toml'),
+      `
 reviewerProvider = "global-rev"
 reviewerModel = "global-model"
-`);
+`,
+    );
 
     writeConfig(path.join(projectRoot, '.ouroboros', 'config.toml'), 'provider = "codex"');
 
