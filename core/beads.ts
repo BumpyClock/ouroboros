@@ -137,17 +137,42 @@ export function loadBeadsSnapshotFromJsonl(projectRoot: string): BeadsSnapshot {
   try {
     const content = readFileSync(issuesPath, 'utf8');
     const byId = new Map<string, BeadIssue>();
+    let malformedLines = 0;
     for (const line of content.split(/\r?\n/)) {
       const trimmed = line.trim();
       if (!trimmed) {
         continue;
       }
       const parsed = safeJsonParse(trimmed);
+      if (parsed === null) {
+        malformedLines += 1;
+        continue;
+      }
       const issue = normalizeIssue(parsed);
       if (issue) {
         byId.set(issue.id, issue);
+      } else {
+        malformedLines += 1;
       }
     }
+    if (malformedLines > 0) {
+      const suffix = malformedLines === 1 ? 'line' : 'lines';
+      return {
+        available: false,
+        source,
+        projectRoot,
+        total: 0,
+        remaining: 0,
+        open: 0,
+        inProgress: 0,
+        blocked: 0,
+        closed: 0,
+        deferred: 0,
+        remainingIssues: [],
+        byId: new Map(),
+        error: `${malformedLines} malformed ${suffix} in ${source}`,
+      };
+      }
     return createSnapshot(projectRoot, source, [...byId.values()]);
   } catch (error) {
     return {

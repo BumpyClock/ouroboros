@@ -322,7 +322,8 @@ export async function runLoopController(
     liveRenderer?.setIterationSummary(summary);
 
     const pickedCount = pickedByAgent.size;
-    const shouldStopForNoBeads = pickedCount === 0 || beadsSnapshot.remaining <= pickedCount;
+    const shouldStopForNoBeads =
+      beadsSnapshot.available && (pickedCount === 0 || beadsSnapshot.remaining <= pickedCount);
     if (stopDetected && !shouldStopForNoBeads) {
       if (liveRenderer?.isEnabled()) {
         liveRenderer.setLoopNotice(
