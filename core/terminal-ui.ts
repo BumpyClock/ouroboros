@@ -4,6 +4,7 @@ import {
   LIVE_SPINNER_FRAMES,
   type LiveRunAgentSelector,
   type LiveRunHeaderState,
+  type LiveRunIterationTimeline,
   LiveRunStateStore,
   type LoopPhase,
   labelTone,
@@ -401,22 +402,32 @@ export class LiveRunRenderer {
   private buildAgentLines(agentId: number, state: LiveRunState): string[] {
     const selector: LiveRunAgentSelector = this.stateStore.getAgentSelector(agentId);
     const snapshot = state.agentState.get(agentId);
-    const prefix = badge(`A${agentId}`, 'muted');
+    const width = terminalWidth();
+    const cardWidth = Math.max(36, Math.min(width - 24, 110));
     const picked = selector.pickedBead;
     const titleColor = picked ? ANSI.green : ANSI.dim;
-    const title = picked ? `${picked.id} ${picked.title}` : 'no bead picked';
-    const titleText = colorize(formatShort(title, Math.max(24, terminalWidth() - 54)), titleColor);
+    const titleText = colorize(formatAgentTitle(picked, Math.max(16, cardWidth - 22)), titleColor);
+    const reviewMode = selector.activeTab === 'review';
+    const tabs = `${renderAgentTab('Dev', !reviewMode, ANSI.cyan)} ${renderAgentTab(
+      'Review',
+      reviewMode,
+      ANSI.yellow,
+    )}`;
 
     if (!snapshot) {
       const statusTone = selector.statusTone;
       const statusLabel = selector.statusLabel;
       const statusText = selector.statusText;
       return [
-        `${prefix} ${titleText} ${badge(statusLabel, statusTone)} ${colorize(statusText, ANSI.dim)}`,
+        colorize(buildAgentNotchLine(agentId, cardWidth), ANSI.gray),
+        `${tabs} ${titleText} ${badge(statusLabel, statusTone)} ${colorize(statusText, ANSI.dim)}`,
       ];
     }
 
-    const header = `${prefix} ${titleText} ${badge(selector.statusLabel, selector.statusTone)} ${colorize(
+    const header = `${badge('STATE', 'info')} ${titleText} ${badge(
+      selector.statusLabel,
+      selector.statusTone,
+    )} ${colorize(
       String(snapshot.totalEvents),
       ANSI.bold,
     )} ${colorize(selector.detailText, ANSI.dim)}`;
@@ -426,7 +437,11 @@ export class LiveRunRenderer {
       const text = colorize(formatShort(line.text, maxLength), toneColor(line.tone));
       return `  ${lineLabel} ${text}`;
     });
-    return [header, ...detailLines];
+    return [
+      colorize(buildAgentNotchLine(agentId, cardWidth), ANSI.gray),
+      `${tabs} ${header}`,
+      ...detailLines,
+    ];
   }
 
   private buildBeadsLines(state: LiveRunState): string[] {
@@ -468,6 +483,7 @@ export class LiveRunRenderer {
       ...buildRunContextLines(state, commandWidth),
       ...this.buildBeadsLines(state),
       ...state.agentIds.flatMap((agentId) => this.buildAgentLines(agentId, state)),
+      ...buildIterationStripText(this.stateStore.getIterationTimeline(), terminalWidth()),
     ];
     if (this.renderedLineCount > 0) {
       process.stdout.write(`\x1b[${this.renderedLineCount}A`);
@@ -540,4 +556,126 @@ export function printUsageSummary(usage: UsageSummary, contextLabel?: string): v
       usage.cachedInputTokens,
     )} | out ${formatTokens(usage.outputTokens)}${contextSuffix}`,
   );
+}
+
+function buildAgentNotchLine(agentId: number, width: number): string {
+  const innerWidth = Math.max(16, width - 2);
+  const label = formatShort(` Agent ${agentId} `, Math.max(6, innerWidth - 3));
+  const header = `─${label}`;
+  const fillWidth = Math.max(0, innerWidth - header.length);
+  return `╭${header}${'─'.repeat(fillWidth)}╮`;
+}
+
+function formatAgentTitle(picked: BeadIssue | null, maxLength: number): string {
+  const fallback = 'no bead picked';
+  if (maxLength <= 0) {
+    return '';
+  }
+  if (!picked) {
+    return formatShort(fallback, maxLength);
+  }
+  const fullTitle = `${picked.id} · ${picked.title}`;
+  if (fullTitle.length <= maxLength) {
+    return fullTitle;
+  }
+  const titleBudget = maxLength - picked.id.length - 3;
+  if (titleBudget > 0) {
+    return `${picked.id} · ${formatShort(picked.title, titleBudget)}`;
+  }
+
+  const canKeepSeparator = maxLength >= picked.id.length + 5;
+  const idBudget = canKeepSeparator ? maxLength - 5 : Math.max(1, maxLength - 3);
+  const visiblePrefix = Math.max(1, Math.min(picked.id.length, idBudget));
+  const truncatedId = `${picked.id.slice(0, visiblePrefix)}...`;
+  return canKeepSeparator ? `${truncatedId} · ` : truncatedId;
+}
+
+function formatIterationChip(
+  marker: LiveRunIterationTimeline['markers'][number],
+  compactLabels: boolean,
+): string {
+  const base = marker.isCurrent
+    ? `${String(marker.iteration).padStart(2, '0')}*`
+    : String(marker.iteration).padStart(2, '0');
+  const markerBits: string[] = [];
+  if (marker.retryCount > 0) {
+    markerBits.push(`R${marker.retryCount}`);
+  }
+  if (marker.failed) {
+    markerBits.push('F');
+  }
+  if (markerBits.length === 0) {
+    return compactLabels ? `[${base}]` : `${base}`;
+  }
+  return `[${base}-${markerBits.join('/')}]`;
+}
+
+function buildIterationStripText(
+  timeline: LiveRunIterationTimeline,
+  columns: number,
+): string[] {
+  if (timeline.maxIterations <= 0) {
+    return [
+      `${badge('ITER', 'muted')} ${badge('CURRENT', 'info')} ${String(
+        timeline.currentIteration,
+      )}/${timeline.maxIterations} ${badge('Retry', 'warn')}${timeline.totalRetries} ${badge(
+        'Failed',
+        'error',
+      )}${timeline.totalFailed}`,
+    ];
+  }
+
+  const markers = timeline.markers.filter((marker) => marker.iteration >= 1);
+  const compactLabels = columns < 120;
+  const current = Math.min(Math.max(1, timeline.currentIteration), timeline.maxIterations);
+  let visible: typeof markers = [];
+  let prevCount = 0;
+  if (columns >= 120) {
+    const radius = 3;
+    const start = Math.max(1, current - radius);
+    const end = Math.min(timeline.maxIterations, current + radius);
+    for (let iteration = start; iteration <= end; iteration += 1) {
+      const marker = markers[iteration - 1];
+      if (marker) {
+        visible.push(marker);
+      }
+    }
+    prevCount = Math.max(0, start - 1);
+  } else if (columns >= 100) {
+    const radius = 2;
+    const start = Math.max(1, current - radius);
+    const end = Math.min(timeline.maxIterations, current + radius);
+    for (let iteration = start; iteration <= end; iteration += 1) {
+      const marker = markers[iteration - 1];
+      if (marker) {
+        visible.push(marker);
+      }
+    }
+    prevCount = Math.max(0, start - 1);
+  } else if (columns >= 80) {
+    const visibleCount = Math.min(3, timeline.maxIterations - current + 1);
+    const end = Math.min(timeline.maxIterations, current + visibleCount - 1);
+    for (let iteration = current; iteration <= end; iteration += 1) {
+      const marker = markers[iteration - 1];
+      if (marker) {
+        visible.push(marker);
+      }
+    }
+    prevCount = Math.max(0, current - 1);
+  } else {
+    prevCount = Math.max(0, current - 1);
+  }
+
+  const chipText = visible.map((marker) => formatIterationChip(marker, compactLabels)).join(' ');
+  const compactPrev = compactLabels ? `Prev:${prevCount}` : `Prev: ${prevCount}`;
+  const retryLabel = compactLabels ? `R${timeline.totalRetries}` : `Retry ${timeline.totalRetries}`;
+  const failedLabel = compactLabels ? `F${timeline.totalFailed}` : `Failed ${timeline.totalFailed}`;
+  const base = `${compactPrev} | ${badge('CUR', 'info')} ${timeline.currentIteration}/${timeline.maxIterations} | ${retryLabel} | ${failedLabel}`;
+  const chips = chipText ? ` | ${chipText}` : '';
+  return [compactLabels ? `${base}${chips}` : `${base} | ${chipText}`];
+}
+
+function renderAgentTab(label: string, isActive: boolean, tone: string): string {
+  const active = `[${label}]`;
+  return isActive ? colorize(active, ANSI.bold, tone) : colorize(` ${label} `, ANSI.dim);
 }
