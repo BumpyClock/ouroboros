@@ -2,7 +2,8 @@ import { Box, render, Text } from 'ink';
 import React, { useSyncExternalStore } from 'react';
 import {
   type IterationSummary,
-  LIVE_SPINNER_FRAMES,
+  type LiveRunAgentSelector,
+  type LiveRunHeaderState,
   type LiveRunState,
   LiveRunStateStore,
   type LoopPhase,
@@ -13,7 +14,6 @@ import { formatShort } from '../core/text';
 import type { BeadIssue, BeadsSnapshot, PreviewEntry, Tone, UsageSummary } from '../core/types';
 import { buildPreviewRowKey } from './preview-row-key';
 
-const SPINNER_FRAMES = LIVE_SPINNER_FRAMES;
 type Listener = () => void;
 
 function toneToColor(tone: Tone): 'white' | 'cyan' | 'green' | 'yellow' | 'red' | 'gray' {
@@ -53,27 +53,11 @@ function renderStatusBadge(label: string, tone: Tone): React.JSX.Element {
   return <StatusText tone={tone} text={`[${label}]`} />;
 }
 
-function renderHeader(state: LiveRunState): React.JSX.Element {
-  const elapsedSeconds = ((Date.now() - state.startedAt) / 1000).toFixed(1);
-  const spinner = state.running ? SPINNER_FRAMES[state.frameIndex % SPINNER_FRAMES.length] : ' ';
-  const tone =
-    state.loopPhase === 'failed'
-      ? 'error'
-      : state.loopPhase === 'stopped' || state.loopPhase === 'completed'
-        ? 'success'
-        : state.loopPhase === 'retry_wait'
-          ? 'warn'
-          : state.loopPhase === 'paused'
-            ? 'muted'
-            : state.running
-              ? 'info'
-              : state.statusTone;
-  const body = ` ${spinner} iteration ${state.iteration}/${state.maxIterations} ${state.statusMessage} ${elapsedSeconds}s`;
-  const safeTotal = Math.max(1, state.maxIterations);
-  const ratio = Math.max(0, Math.min(1, state.iteration / safeTotal));
-  const percent = Math.round(ratio * 100);
+function renderHeader(state: LiveRunHeaderState): React.JSX.Element {
+  const tone = state.tone;
+  const body = ` ${state.spinner} iteration ${state.iteration}/${state.maxIterations} ${state.statusMessage} ${state.elapsedSeconds.toFixed(1)}s`;
   const barWidth = Math.max(16, Math.min(28, (process.stdout.columns ?? 120) - 68));
-  const filled = Math.round(barWidth * ratio);
+  const filled = Math.round(barWidth * state.ratio);
   const empty = Math.max(0, barWidth - filled);
   return (
     <Box borderStyle="round" borderColor={toneToColor(tone)} paddingX={1} flexDirection="column">
@@ -87,7 +71,7 @@ function renderHeader(state: LiveRunState): React.JSX.Element {
         <StatusText tone="success" text={'#'.repeat(filled)} />
         <StatusText tone="muted" dim text={'-'.repeat(empty)} />
         <StatusText tone="info" text="]" />
-        <StatusText tone="neutral" text={` ${percent}%`} />
+        <StatusText tone="neutral" text={` ${state.percent}%`} />
       </Text>
     </Box>
   );
@@ -261,17 +245,18 @@ function renderBeads(state: LiveRunState): React.JSX.Element | null {
   );
 }
 
-function renderAgentCard(state: LiveRunState, agentId: number): React.JSX.Element {
+function renderAgentCard(
+  state: LiveRunState,
+  selector: LiveRunAgentSelector,
+  agentId: number,
+): React.JSX.Element {
   const snapshot = state.agentState.get(agentId);
-  const spawnState = state.agentSpawnState.get(agentId);
-  const picked = state.agentPickedBeads.get(agentId);
+  const picked = selector.pickedBead;
   const columns = process.stdout.columns ?? 120;
   const lineMax = Math.max(28, columns - 52);
   const titleMax = Math.max(24, columns - 60);
   const tone: Tone = snapshot ? 'neutral' : 'muted';
-  const ageSeconds = snapshot
-    ? Math.max(0, Math.floor((Date.now() - snapshot.lastUpdatedAt) / 1000))
-    : 0;
+  const ageSeconds = snapshot ? selector.ageSeconds : 0;
   const pickedTitle = picked ? `${picked.id} ${picked.title}` : 'no bead picked';
   const pickedTitleTone: Tone = picked ? 'success' : 'muted';
 
@@ -293,24 +278,11 @@ function renderAgentCard(state: LiveRunState, agentId: number): React.JSX.Elemen
         ];
       })()
     : (() => {
-        const statusLabel =
-          spawnState?.phase === 'launching'
-            ? 'SPAWN'
-            : spawnState?.phase === 'queued'
-              ? 'QUEUE'
-              : 'EMPTY';
-        const statusTone: Tone =
-          spawnState?.phase === 'launching'
-            ? 'info'
-            : spawnState?.phase === 'queued'
-              ? 'warn'
-              : 'muted';
-        const statusText = spawnState?.message ?? 'waiting to be launched';
         return [
           {
-            label: statusLabel,
-            tone: statusTone,
-            text: formatShort(statusText, lineMax),
+            label: selector.statusLabel,
+            tone: selector.statusTone,
+            text: formatShort(selector.statusText, lineMax),
           },
           ...Array.from({ length: Math.max(0, state.previewLines - 1) }, () => ({
             label: 'EMPTY',
@@ -336,35 +308,8 @@ function renderAgentCard(state: LiveRunState, agentId: number): React.JSX.Elemen
             dim={!picked}
             text={` ${formatShort(pickedTitle, titleMax)}`}
           />{' '}
-          {renderStatusBadge(
-            spawnState?.phase === 'launching'
-              ? 'SPAWN'
-              : spawnState?.phase === 'queued'
-                ? 'QUEUED'
-                : 'WAIT',
-            spawnState?.phase === 'launching'
-              ? 'info'
-              : spawnState?.phase === 'queued'
-                ? 'warn'
-                : 'muted',
-          )}{' '}
-          <StatusText
-            tone={
-              spawnState?.phase === 'launching'
-                ? 'info'
-                : spawnState?.phase === 'queued'
-                  ? 'warn'
-                  : 'muted'
-            }
-            dim
-            text={
-              spawnState?.phase === 'launching'
-                ? ' launch in progress'
-                : spawnState?.phase === 'queued'
-                  ? ' awaiting launch'
-                  : ' waiting for events'
-            }
-          />
+          {renderStatusBadge(selector.statusLabel, selector.statusTone)}{' '}
+          <StatusText tone={selector.statusTone} dim text={` ${selector.statusText}`} />
         </Text>
       ) : (
         <Text>
@@ -374,7 +319,7 @@ function renderAgentCard(state: LiveRunState, agentId: number): React.JSX.Elemen
             dim={!picked}
             text={` ${formatShort(pickedTitle, titleMax)}`}
           />{' '}
-          {renderStatusBadge('EVENTS', 'muted')}{' '}
+          {renderStatusBadge(selector.statusLabel, selector.statusTone)}{' '}
           <StatusText tone="neutral" text={` ${snapshot.totalEvents}`} />{' '}
           <StatusText tone="muted" dim text={`updated ${ageSeconds}s ago`} />
         </Text>
@@ -395,9 +340,10 @@ function LiveView({ renderer }: { renderer: InkLiveRunRenderer }): React.JSX.Ele
     renderer.getSnapshot,
     renderer.getSnapshot,
   );
+  const headerState = renderer.getHeaderState();
   return (
     <Box flexDirection="column">
-      {renderHeader(state)}
+      {renderHeader(headerState)}
       <Box marginTop={1} flexDirection="column">
         {renderIterationSummary(state).map((line) => line)}
       </Box>
@@ -406,7 +352,9 @@ function LiveView({ renderer }: { renderer: InkLiveRunRenderer }): React.JSX.Ele
       </Box>
       {renderBeads(state)}
       {state.agentIds.map((agentId) => (
-        <React.Fragment key={agentId}>{renderAgentCard(state, agentId)}</React.Fragment>
+        <React.Fragment key={agentId}>
+          {renderAgentCard(state, renderer.getAgentSelector(agentId), agentId)}
+        </React.Fragment>
       ))}
     </Box>
   );
@@ -448,6 +396,9 @@ export class InkLiveRunRenderer {
   };
 
   getSnapshot = (): LiveRunState => this.state;
+  getHeaderState = (): LiveRunHeaderState => this.stateStore.getHeaderState();
+  getAgentSelector = (agentId: number): LiveRunAgentSelector =>
+    this.stateStore.getAgentSelector(agentId);
 
   isEnabled(): boolean {
     return this.enabled;
