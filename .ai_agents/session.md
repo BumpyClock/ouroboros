@@ -478,3 +478,12 @@ on-zero reviewer/fixer => slot fail, malformed JSONL invalidates snapshot, fallb
   - Commit: `a04603c`.
   - Learning: docs-backed prompt markdown is the safest maintainable location for defaults and avoids in-code string drift.
   - Challenge: runtime fallback resolution is still pending in the next bead (`ouroboros-12.3`) to keep behavior split cleanly.
+
+- Completed bead ouroboros-12.3 (Prompt resolution fallback to built-ins).
+  - Runtime: esolvePromptPath in core/prompts.ts now falls back to docs/prompts/developer.default.md and docs/prompts/reviewer.default.md when project/local prompts are missing.
+  - Explicit paths remain highest priority; missing explicit paths still fail (returned to caller) for clearer errors in downstream checks.
+  - Updated 	ests/core/prompts.test.ts for built-in fallback + explicit-path-preservation behavior.
+  - Updated docs for new fallback contract: docs/config.md, docs/prompt-contract.md, and core/cli.ts usage text.
+  - Commit: 86ab810 (eat(prompts): add built-in prompt fallback).
+  - Learnings: built-in prompts now cover the no-file startup path for both dev/reviewer roles without changing existing explicit override semantics.
+  - Challenge: no test run or doctor in this iteration per current constraints; recommend one quick un test tests/core/prompts.test.ts and un run doctor pass in follow-up bead if needed.
