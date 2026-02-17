@@ -41,8 +41,8 @@ Where:
 
 ## Platform behavior
 
-- Linux/macOS: uses `homedir()` (same as `~` expansion target).
-- Windows: uses `$HOME` when set, otherwise falls back to `homedir()`.
+- Linux/macOS: uses `HOME` when set, otherwise `homedir()` (the same directory as `~`).
+- Windows: prefers `$HOME`, then `%USERPROFILE%`, then `HOMEDRIVE`+`HOMEPATH`, then `homedir()`.
 
 ## TOML keys
 

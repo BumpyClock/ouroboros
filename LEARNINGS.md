@@ -51,3 +51,7 @@
 ## TUI Lifecycle
 - 2026-02-17: rich TTY mode now routes iteration lifecycle (`START`/`RUN`/`BATCH`/`TOKENS`/pause/retry) through renderer state updates; these lines should no longer be printed as per-iteration stdout spam.
 - 2026-02-17: added `core/live-run-state` + `core/loop-engine` test coverage for rich-mode suppression and non-TTY legacy fallback behavior.
+
+## Cross-platform Path Defaults
+- 2026-02-17: Keep home resolution explicit: prefer HOME, then Windows USERPROFILE, then HOMEDRIVE+HOMEPATH, then homedir().
+- 2026-02-17: Added core/paths.test.ts assertions for platform-agnostic home/log path construction with non-deterministic timestamp handled by format checks only.
