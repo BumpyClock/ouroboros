@@ -1,5 +1,5 @@
 import { formatShort } from './text';
-import type { BeadIssue, BeadsSnapshot, PreviewEntry, Tone } from './types';
+import type { BeadIssue, BeadsSnapshot, PreviewEntry, Tone, UsageSummary } from './types';
 
 export const LIVE_SPINNER_FRAMES = ['-', '\\', '|', '/'] as const;
 
@@ -7,6 +7,30 @@ export type LivePreviewLine = {
   label: string;
   tone: Tone;
   text: string;
+};
+
+export type LoopPhase =
+  | 'starting'
+  | 'streaming'
+  | 'collecting'
+  | 'paused'
+  | 'retry_wait'
+  | 'completed'
+  | 'failed'
+  | 'stopped';
+
+export type RunContext = {
+  startedAt: number;
+  command: string;
+  batch: string;
+  agentLogPaths: Map<number, string>;
+};
+
+export type IterationSummary = {
+  usage: UsageSummary | null;
+  pickedBeadsByAgent: Map<number, BeadIssue>;
+  notice: string | null;
+  noticeTone: Tone;
 };
 
 export type LiveAgentSnapshot = {
@@ -34,6 +58,13 @@ export type LiveRunState = {
   agentSpawnState: Map<number, AgentSpawnState>;
   beadsSnapshot: BeadsSnapshot | null;
   agentPickedBeads: Map<number, BeadIssue>;
+  runContext: RunContext | null;
+  lastIterationSummary: IterationSummary | null;
+  loopPhase: LoopPhase;
+  loopNotice: string | null;
+  loopNoticeTone: Tone;
+  pauseMs: number | null;
+  retrySeconds: number | null;
 };
 
 type Listener = () => void;
@@ -93,6 +124,13 @@ function createInitialState(
     agentSpawnState: new Map<number, AgentSpawnState>(),
     beadsSnapshot: null,
     agentPickedBeads: new Map<number, BeadIssue>(),
+    runContext: null,
+    lastIterationSummary: null,
+    loopPhase: 'starting',
+    loopNotice: null,
+    loopNoticeTone: 'muted',
+    pauseMs: null,
+    retrySeconds: null,
   };
 }
 
@@ -115,6 +153,14 @@ export class LiveRunStateStore {
 
   isRunning(): boolean {
     return this.state.running;
+  }
+
+  setIteration(iteration: number): void {
+    this.state = {
+      ...this.state,
+      iteration: Math.max(0, iteration),
+    };
+    this.emit();
   }
 
   setStatus(message: string, tone: Tone = 'info'): void {
@@ -269,6 +315,86 @@ export class LiveRunStateStore {
     this.state = {
       ...this.state,
       agentPickedBeads: nextPicked,
+    };
+    this.emit();
+  }
+
+  setAgentLogPath(agentId: number, path: string): void {
+    if (!this.state.runContext) {
+      return;
+    }
+    const nextRunContext: RunContext = {
+      ...this.state.runContext,
+      agentLogPaths: new Map(this.state.runContext.agentLogPaths).set(agentId, path),
+    };
+    this.state = {
+      ...this.state,
+      runContext: nextRunContext,
+    };
+    this.emit();
+  }
+
+  setRunContext(context: RunContext): void {
+    this.state = {
+      ...this.state,
+      runContext: {
+        ...context,
+        agentLogPaths: new Map(context.agentLogPaths),
+      },
+      loopPhase: 'starting',
+    };
+    this.emit();
+  }
+
+  setIterationSummary(summary: IterationSummary): void {
+    this.state = {
+      ...this.state,
+      lastIterationSummary: {
+        ...summary,
+        pickedBeadsByAgent: new Map(summary.pickedBeadsByAgent),
+      },
+    };
+    this.emit();
+  }
+
+  setLoopNotice(message: string, tone: Tone): void {
+    this.state = {
+      ...this.state,
+      loopNotice: message,
+      loopNoticeTone: tone,
+    };
+    this.emit();
+  }
+
+  clearLoopNotice(): void {
+    this.state = {
+      ...this.state,
+      loopNotice: null,
+      loopNoticeTone: 'muted',
+    };
+    this.emit();
+  }
+
+  setLoopPhase(phase: LoopPhase): void {
+    this.state = {
+      ...this.state,
+      loopPhase: phase,
+    };
+    this.emit();
+  }
+
+  setPauseState(milliseconds: number | null): void {
+    this.state = {
+      ...this.state,
+      pauseMs: milliseconds,
+    };
+    this.emit();
+  }
+
+  setRetryState(seconds: number | null): void {
+    this.state = {
+      ...this.state,
+      retrySeconds: seconds,
     };
     this.emit();
   }
