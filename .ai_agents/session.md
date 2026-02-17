@@ -58,3 +58,6 @@
 - Extended tests for precedence and validation (`tests/core/cli.test.ts`) and config merge behavior (`tests/core/config.test.ts`).
 - Updated config docs with bead mode keys, examples, and `top-level` requirement (`docs/config.md`).
 - Not run: `bun run doctor` and test suite; done as scoped to bead contract.
+### `ouroboros-13.10` update
+- In progress: implement scoped BEADS snapshot loading for top-level mode using `bd list --parent <id>` (readonly + fallback), then add focused coverage and docs updates.
+- Done: updated `core/beads.ts`, `core/loop-controller.ts`, and `tests/core/json.test.ts`; added parent-scoped command construction, threaded top-level bead id from loop controller, and docs note in `docs/config.md`. Encountered no blockers; no syntax tests run in this iteration.

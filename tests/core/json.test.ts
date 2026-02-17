@@ -6,6 +6,18 @@ import { loadBeadsSnapshot } from '../../core/beads';
 import { isRecord, safeJsonParse, toRecord } from '../../core/json';
 import { loadIterationState } from '../../core/state';
 
+function installNodeBdShim(root: string, script: string): void {
+  const jsPath = path.join(root, 'bd-script.js');
+  const isWindows = process.platform === 'win32';
+  writeFileSync(jsPath, script);
+  if (isWindows) {
+    writeFileSync(path.join(root, 'bd.cmd'), `@node "%~dp0\\bd-script.js" %*\r\n`);
+  } else {
+    writeFileSync(path.join(root, 'bd'), `#!/usr/bin/env node\n${script}`);
+    chmodSync(path.join(root, 'bd'), 0o755);
+  }
+}
+
 describe('json helpers', () => {
   it('parses valid JSON and rejects malformed JSON', () => {
     expect(safeJsonParse('{"a":1}')).toEqual({ a: 1 });
@@ -133,6 +145,77 @@ describe('json helpers', () => {
       expect(snapshot.source).toBe('bd list --json --all --limit 0 --no-pager');
       expect(snapshot.total).toBe(1);
       expect(snapshot.remainingIssues.map((issue) => issue.id)).toEqual(['ouroboros-77']);
+    } finally {
+      process.env.PATH = oldPath;
+      rmSync(tempRoot, { recursive: true, force: true });
+    }
+  });
+
+  it('scopes snapshot with --parent when top-level mode is active', async () => {
+    const tempRoot = mkdtempSync(path.join(tmpdir(), 'ouroboros-beads-top-level-scope-'));
+    const oldPath = process.env.PATH ?? '';
+    const pathSep = process.platform === 'win32' ? ';' : ':';
+
+    try {
+      installNodeBdShim(
+        tempRoot,
+        `
+const args = process.argv.slice(2);
+const hasReadonly = args[0] === '--readonly';
+if (hasReadonly && !args.includes('--parent')) {
+  console.error('{\"unexpected-no-parent\": true}');
+  process.exit(1);
+}
+const parentIndex = args.indexOf('--parent');
+const parentId = parentIndex >= 0 ? args[parentIndex + 1] : '';
+const issues = parentId
+  ? [
+      { id: parentId + '.1', title: 'scoped child', status: 'open' },
+    ]
+  : [{ id: 'ouroboros-root', title: 'root', status: 'open' }];
+console.log(JSON.stringify(issues));
+`.trim(),
+      );
+      process.env.PATH = `${tempRoot}${pathSep}${oldPath}`;
+      const snapshot = await loadBeadsSnapshot(tempRoot, 'ouroboros-parent');
+      expect(snapshot.available).toBeTrue();
+      expect(snapshot.source).toBe('bd --readonly list --parent ouroboros-parent --json --all --limit 0 --no-pager');
+      expect(snapshot.total).toBe(1);
+      expect(snapshot.remainingIssues.map((issue) => issue.id)).toEqual(['ouroboros-parent.1']);
+    } finally {
+      process.env.PATH = oldPath;
+      rmSync(tempRoot, { recursive: true, force: true });
+    }
+  });
+
+  it('falls back to non-readonly --parent list when readonly flag is unsupported', async () => {
+    const tempRoot = mkdtempSync(path.join(tmpdir(), 'ouroboros-beads-top-level-fallback-'));
+    const oldPath = process.env.PATH ?? '';
+    const pathSep = process.platform === 'win32' ? ';' : ':';
+
+    try {
+      installNodeBdShim(
+        tempRoot,
+        `
+const args = process.argv.slice(2);
+if (args[0] === '--readonly') {
+  console.error('unknown flag: --readonly');
+  process.exit(1);
+}
+const parentIndex = args.indexOf('--parent');
+const parentId = parentIndex >= 0 ? args[parentIndex + 1] : '';
+const issues = parentId
+  ? [{ id: parentId + '.1', title: 'scoped child', status: 'open' }]
+  : [{ id: 'ouroboros-root', title: 'root', status: 'open' }];
+console.log(JSON.stringify(issues));
+`.trim(),
+      );
+      process.env.PATH = `${tempRoot}${pathSep}${oldPath}`;
+      const snapshot = await loadBeadsSnapshot(tempRoot, 'ouroboros-parent');
+      expect(snapshot.available).toBeTrue();
+      expect(snapshot.source).toBe('bd list --parent ouroboros-parent --json --all --limit 0 --no-pager');
+      expect(snapshot.total).toBe(1);
+      expect(snapshot.remainingIssues.map((issue) => issue.id)).toEqual(['ouroboros-parent.1']);
     } finally {
       process.env.PATH = oldPath;
       rmSync(tempRoot, { recursive: true, force: true });

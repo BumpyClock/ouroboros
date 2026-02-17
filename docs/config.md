@@ -166,6 +166,7 @@ ouroboros --review --provider codex --reviewer-provider claude --reviewer-comman
 
 - Bead snapshots are loaded from `bd --readonly list --json --all --limit 0 --no-pager`.
 - If `--readonly` is unsupported by the local `bd` version, runtime falls back to `bd list --json --all --limit 0 --no-pager`.
+- In `top-level` bead mode, snapshot loading adds `--parent <topLevelBeadId>` on both command variants to limit work to direct child beads.
 - Snapshot commands are time-bounded (5s) to avoid startup/iteration stalls and prolonged lock contention.
 - Snapshot is available when the `bd` command succeeds (JSON parse errors are treated as empty, available snapshots).
 - No-bead stop-marker suppression applies only when this snapshot is available.

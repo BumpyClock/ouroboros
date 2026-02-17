@@ -166,7 +166,8 @@ export async function runLoopController(
     let results: RunResult[];
     let pickedByAgent = new Map<number, BeadIssue>();
     let iterationReviewOutcomes = new Map<number, SlotReviewOutcome>();
-    const beadsSnapshot = await loadBeadsSnapshot(options.projectRoot);
+    const topLevelBeadId = options.beadMode === 'top-level' ? options.topLevelBeadId : undefined;
+    const beadsSnapshot = await loadBeadsSnapshot(options.projectRoot, topLevelBeadId);
     if (!liveRenderer?.isEnabled()) {
       printBeadsSnapshot(beadsSnapshot);
     }

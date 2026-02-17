@@ -18,9 +18,22 @@ const BD_LIST_ARGS_READONLY = [
   '--no-pager',
 ];
 const BD_LIST_ARGS = ['list', '--json', '--all', '--limit', '0', '--no-pager'];
-const BD_LIST_SOURCE_READONLY = 'bd --readonly list --json --all --limit 0 --no-pager';
-const BD_LIST_SOURCE = 'bd list --json --all --limit 0 --no-pager';
 const BD_LIST_TIMEOUT_MS = 5000;
+
+function buildListArgs(useReadonly: boolean, topLevelBeadId?: string): string[] {
+  const args = useReadonly ? [...BD_LIST_ARGS_READONLY] : [...BD_LIST_ARGS];
+  if (!topLevelBeadId) {
+    return args;
+  }
+  const listIndex = args.indexOf('list') + 1;
+  args.splice(listIndex, 0, '--parent', topLevelBeadId);
+  return args;
+}
+
+function buildListSource(useReadonly: boolean, topLevelBeadId?: string): string {
+  const args = buildListArgs(useReadonly, topLevelBeadId);
+  return `bd ${args.join(' ')}`;
+}
 
 function runCommand(
   command: string,
@@ -228,13 +241,26 @@ function isReadonlyFlagUnsupported(stderr: string, stdout: string): boolean {
   return combined.includes('unknown flag: --readonly');
 }
 
-export async function loadBeadsSnapshot(projectRoot: string): Promise<BeadsSnapshot> {
+export async function loadBeadsSnapshot(
+  projectRoot: string,
+  topLevelBeadId?: string,
+): Promise<BeadsSnapshot> {
   try {
-    let source = BD_LIST_SOURCE_READONLY;
-    let result = await runCommand('bd', BD_LIST_ARGS_READONLY, projectRoot, BD_LIST_TIMEOUT_MS);
+    let source = buildListSource(true, topLevelBeadId);
+    let result = await runCommand(
+      'bd',
+      buildListArgs(true, topLevelBeadId),
+      projectRoot,
+      BD_LIST_TIMEOUT_MS,
+    );
     if (result.status !== 0 && isReadonlyFlagUnsupported(result.stderr, result.stdout)) {
-      source = BD_LIST_SOURCE;
-      result = await runCommand('bd', BD_LIST_ARGS, projectRoot, BD_LIST_TIMEOUT_MS);
+      source = buildListSource(false, topLevelBeadId);
+      result = await runCommand(
+        'bd',
+        buildListArgs(false, topLevelBeadId),
+        projectRoot,
+        BD_LIST_TIMEOUT_MS,
+      );
     }
 
     if (result.status !== 0) {
@@ -253,6 +279,6 @@ export async function loadBeadsSnapshot(projectRoot: string): Promise<BeadsSnaps
     return createSnapshot(projectRoot, source, issues);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    return createUnavailableSnapshot(projectRoot, BD_LIST_SOURCE_READONLY, message);
+    return createUnavailableSnapshot(projectRoot, buildListSource(true, topLevelBeadId), message);
   }
 }
