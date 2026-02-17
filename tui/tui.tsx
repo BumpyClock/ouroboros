@@ -146,6 +146,14 @@ function renderIterationSummary(state: LiveRunState): React.JSX.Element[] {
     }
   }
 
+  if (summary.notice) {
+    rows.push(
+      <Text key="summary-notice">
+        {renderStatusBadge('NOTE', summary.noticeTone)}{' '}
+        <StatusText tone={summary.noticeTone} text={summary.notice} />
+      </Text>,
+    );
+  }
   if (state.retrySeconds !== null) {
     rows.push(
       <Text key="summary-retry">
@@ -162,14 +170,6 @@ function renderIterationSummary(state: LiveRunState): React.JSX.Element[] {
       </Text>,
     );
   }
-  if (summary.notice) {
-    rows.push(
-      <Text key="summary-notice">
-        {renderStatusBadge('NOTE', summary.noticeTone)}{' '}
-        <StatusText tone={summary.noticeTone} text={summary.notice} />
-      </Text>,
-    );
-  }
   return rows;
 }
 
@@ -179,7 +179,11 @@ function renderRunContext(state: LiveRunState): React.JSX.Element[] {
     return [
       <Text key="runctx-pending">
         {renderStatusBadge('RUNCTX', 'muted')}{' '}
-        <StatusText tone="muted" text="waiting for run context" />
+        <StatusText tone="muted" text="no run context" />
+      </Text>,
+      <Text key="runctx-pending2">
+        {renderStatusBadge('RUNCTX', 'muted')}{' '}
+        <StatusText tone="muted" text="no log paths" />
       </Text>,
     ];
   }
@@ -280,9 +284,9 @@ function renderAgentCard(
     : (() => {
         return [
           {
-            label: selector.statusLabel,
+            label: 'STATE',
             tone: selector.statusTone,
-            text: formatShort(selector.statusText, lineMax),
+            text: formatShort(selector.detailText, lineMax),
           },
           ...Array.from({ length: Math.max(0, state.previewLines - 1) }, () => ({
             label: 'EMPTY',
