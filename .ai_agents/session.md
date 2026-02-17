@@ -351,3 +351,10 @@
   - `tests/core/json.test.ts`: added regressions for malformed JSONL invalidation and malformed-to-`bd` fallback, plus removed malformed fixture from strict-valid JSONL happy-path test.
   - Learnings: strict JSONL validity should be fail-closed; unknown snapshot states are safe to treat as non-authoritative.
   - Challenge: no runtime verification run in this bead (policy); change is behavioral hardening only.
+
+2026-02-17
+- Completed bead ouroboros-9.3 (review-loop/transient JSONL stop-marker hardening regression).
+  - Added core/loop-controller.ts:shouldIgnoreStopMarkerForNoBeads and used it in no-bead stop-marker decision path.
+  - Added 	ests/core/loop-controller.test.ts covering available/unavailable snapshot and picked-count matrix for marker suppression behavior (prevents malformed/partial JSONL from forcing false no-bead continuation).
+  - Learned: this case is best locked by testing the decision predicate directly; avoids expensive loop-controller integration mocks while still covering hardening intent.
+  - No test/doctor run in this iteration due session policy.

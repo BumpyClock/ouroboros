@@ -39,6 +39,17 @@ type LoopControllerInput = {
   shutdownProbe: ShutdownProbe;
 };
 
+export function shouldIgnoreStopMarkerForNoBeads(params: {
+  stopDetected: boolean;
+  beadsSnapshot: Pick<BeadsSnapshot, 'available' | 'remaining'>;
+  pickedCount: number;
+}): boolean {
+  if (!params.stopDetected || !params.beadsSnapshot.available) {
+    return false;
+  }
+  return params.pickedCount === 0 || params.beadsSnapshot.remaining <= params.pickedCount;
+}
+
 function createLiveRenderer(
   options: CliOptions,
   iteration: number,
@@ -322,9 +333,12 @@ export async function runLoopController(
     liveRenderer?.setIterationSummary(summary);
 
     const pickedCount = pickedByAgent.size;
-    const shouldStopForNoBeads =
-      beadsSnapshot.available && (pickedCount === 0 || beadsSnapshot.remaining <= pickedCount);
-    if (stopDetected && !shouldStopForNoBeads) {
+    const shouldIgnoreStopMarker = shouldIgnoreStopMarkerForNoBeads({
+      stopDetected,
+      beadsSnapshot,
+      pickedCount,
+    });
+    if (shouldIgnoreStopMarker) {
       if (liveRenderer?.isEnabled()) {
         liveRenderer.setLoopNotice(
           'provider stop marker detected, but picked work suggests continuing',
