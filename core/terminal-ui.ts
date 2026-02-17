@@ -81,20 +81,28 @@ export function formatTokens(value: number): string {
   return Math.max(0, Math.round(value)).toLocaleString('en-US');
 }
 
-function buildIterationSummaryLines(state: LiveRunState): string[] {
+function buildIterationSummaryLines(
+  state: LiveRunState,
+  timeline: LiveRunIterationTimeline,
+): string[] {
   const summary = state.lastIterationSummary;
   const lines: string[] = [];
-  lines.push(`${badge('ITER SUM', 'info')} last iteration result`);
+  const compact = terminalWidth() < 120;
+  const retryText = `${compact ? 'R' : 'Retry '}${timeline.totalRetries}`;
+  const failedText = `${compact ? 'F' : 'Failed '}${timeline.totalFailed}`;
+  lines.push(
+    `${badge('ITER', 'info')} ${colorize(`${timeline.currentIteration}/${timeline.maxIterations}`, ANSI.bold)} ${badge(retryText, 'warn')} ${badge(failedText, 'error')}`,
+  );
   if (!summary) {
-    lines.push(`${badge('TOKENS', 'muted')} pending`);
+    lines.push(`${badge('LAST', 'muted')} no result yet`);
     return lines;
   }
   const usage = summary.usage;
   if (usage) {
     lines.push(
-      `${badge('TOKENS', 'muted')} in ${formatTokens(usage.inputTokens)} | cached ${formatTokens(
+      `${badge('TOKENS', 'muted')} in:${formatTokens(usage.inputTokens)} cache:${formatTokens(
         usage.cachedInputTokens,
-      )} | out ${formatTokens(usage.outputTokens)}`,
+      )} out:${formatTokens(usage.outputTokens)}`,
     );
   } else {
     lines.push(`${badge('TOKENS', 'muted')} no usage summary`);
@@ -113,7 +121,7 @@ function buildIterationSummaryLines(state: LiveRunState): string[] {
       );
     }
   } else {
-    lines.push(`${badge('A', 'muted')} no picked beads`);
+      lines.push(`${badge('A', 'muted')} no picked beads`);
   }
 
   if (summary.notice) {
@@ -450,7 +458,7 @@ export class LiveRunRenderer {
     }
     if (!state.beadsSnapshot.available) {
       const suffix = state.beadsSnapshot.error
-        ? ` ${colorize(`(${formatShort(state.beadsSnapshot.error, 100)})`, ANSI.dim)}`
+        ? ` ${colorize(`(${formatShort(state.beadsSnapshot.error, 100)})`, ANSI.dim)`
         : '';
       return [`${badge('BEADS', 'warn')} unavailable${suffix}`];
     }
@@ -479,7 +487,7 @@ export class LiveRunRenderer {
     const commandWidth = Math.max(36, terminalWidth() - 46);
     const lines = [
       this.buildHeaderLine(),
-      ...buildIterationSummaryLines(state),
+      ...buildIterationSummaryLines(state, this.stateStore.getIterationTimeline()),
       ...buildRunContextLines(state, commandWidth),
       ...this.buildBeadsLines(state),
       ...state.agentIds.flatMap((agentId) => this.buildAgentLines(agentId, state)),
