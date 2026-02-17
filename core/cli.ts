@@ -1,8 +1,7 @@
-import { homedir } from 'node:os';
-import * as path from 'node:path';
 import { getProviderAdapter, listProviderNames } from '../providers/registry';
 import { loadOuroborosConfig } from './config';
 import type { CliOptions, ReasoningEffort } from './types';
+import { defaultLogDir } from './paths';
 
 type CliOverrides = {
   provider?: string;
@@ -83,24 +82,6 @@ function parseCliOverrides(argv: string[]): CliOverrides {
   return overrides;
 }
 
-function sanitizeProjectDirName(projectRoot: string): string {
-  const base = path.basename(projectRoot);
-  return base.replace(/[^a-zA-Z0-9._-]/g, '_') || 'project';
-}
-
-function resolveUserHomeDir(): string {
-  if (process.platform === 'win32') {
-    return process.env.HOME || homedir();
-  }
-  return homedir();
-}
-
-function buildDefaultLogDir(projectRoot: string): string {
-  const projectDir = sanitizeProjectDirName(projectRoot);
-  const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-  return path.join(resolveUserHomeDir(), '.ouroborus', 'logs', projectDir, timestamp);
-}
-
 export function printUsage(): void {
   const providers = listProviderNames().join(', ');
   console.log(`Usage:
@@ -138,7 +119,7 @@ export function parseArgs(argv = process.argv.slice(2)): CliOptions {
 
   const config = loadOuroborosConfig(process.cwd());
   const cli = parseCliOverrides(argv);
-  const defaultLogDir = buildDefaultLogDir(config.projectRoot);
+  const cliDefaultLogDir = defaultLogDir(config.projectRoot);
   const providerName = cli.provider ?? config.runtimeConfig.provider ?? 'codex';
   const provider = getProviderAdapter(providerName);
 
@@ -183,7 +164,7 @@ export function parseArgs(argv = process.argv.slice(2)): CliOptions {
     logDir: pick(
       cli.logDir,
       config.runtimeConfig.logDir,
-      defaultLogDir,
+      cliDefaultLogDir,
       provider.defaults.logDir,
     ) as string,
     showRaw: pick(cli.showRaw, config.runtimeConfig.showRaw, false) as boolean,
