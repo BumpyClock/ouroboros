@@ -1,6 +1,18 @@
 # session log
 
 ## 2026-02-17
+- Completed bead `ouroboros-10.7` (Verification + docs for TUI refinement rollout).
+  - Added `tests/tui/tui.test.ts` with focused helper assertions for:
+    - `<id> · <title>` rendering and no `[A#]` inline body prefix
+    - notch header shape/content via `buildAgentNotchLine`
+    - responsive iteration strip behavior at wide/mid/narrow widths
+  - Exported testable helper functions from `tui/tui.tsx`:
+    - `buildAgentNotchLine`
+    - `formatAgentTitle`
+    - `buildIterationStripParts`
+  - Added `docs/learned/tui-refinement-verification.md` and indexed it in `docs/README.md`.
+  - Learned: helper-level renderer assertions are a lightweight way to lock UI contracts before full snapshot plumbing.
+
 - Completed bead `ouroboros-12.4` (Regression tests for no-file prompt fallback and explicit-path errors).
   - Added `tests/core/loop-engine.prompt-resolution.test.ts` with regression coverage for:
     - fallback to built-in developer and reviewer prompts when no local prompt files exist (review-enabled),

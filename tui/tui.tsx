@@ -264,7 +264,7 @@ function formatIterationChip(marker: LiveRunIterationTimeline['markers'][number]
   return markerBits.length > 0 ? `[${base}-${markerBits.join('/')}]` : `[${base}]`;
 }
 
-function buildIterationStripParts(
+export function buildIterationStripParts(
   timeline: LiveRunIterationTimeline,
   columns: number,
 ): {
@@ -375,7 +375,7 @@ function renderIterationStrip(
   );
 }
 
-function buildAgentNotchLine(agentId: number, cardWidth: number): string {
+export function buildAgentNotchLine(agentId: number, cardWidth: number): string {
   const width = Math.max(20, cardWidth);
   const innerWidth = Math.max(12, width - 2);
   const label = formatShort(` Agent ${agentId} `, Math.max(6, innerWidth - 3));
@@ -384,7 +384,7 @@ function buildAgentNotchLine(agentId: number, cardWidth: number): string {
   return `╭${header}${'─'.repeat(fillWidth)}╮`;
 }
 
-function formatAgentTitle(picked: BeadIssue | null, maxLength: number): string {
+export function formatAgentTitle(picked: BeadIssue | null, maxLength: number): string {
   const fallback = 'no bead picked';
   if (maxLength <= 0) {
     return '';
