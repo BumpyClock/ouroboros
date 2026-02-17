@@ -1,6 +1,4 @@
 import { spawn } from 'node:child_process';
-import { existsSync, readFileSync } from 'node:fs';
-import * as path from 'node:path';
 import { safeJsonParse, toRecord } from './json';
 import type { BeadIssue, BeadsSnapshot } from './types';
 
@@ -113,86 +111,6 @@ function createSnapshot(projectRoot: string, source: string, issues: BeadIssue[]
   };
 }
 
-export function loadBeadsSnapshotFromJsonl(projectRoot: string): BeadsSnapshot {
-  const source = '.beads/issues.jsonl';
-  const issuesPath = path.join(projectRoot, '.beads', 'issues.jsonl');
-  if (!existsSync(issuesPath)) {
-    return {
-      available: false,
-      source,
-      projectRoot,
-      total: 0,
-      remaining: 0,
-      open: 0,
-      inProgress: 0,
-      blocked: 0,
-      closed: 0,
-      deferred: 0,
-      remainingIssues: [],
-      byId: new Map(),
-      error: `missing ${source}`,
-    };
-  }
-
-  try {
-    const content = readFileSync(issuesPath, 'utf8');
-    const byId = new Map<string, BeadIssue>();
-    let malformedLines = 0;
-    for (const line of content.split(/\r?\n/)) {
-      const trimmed = line.trim();
-      if (!trimmed) {
-        continue;
-      }
-      const parsed = safeJsonParse(trimmed);
-      if (parsed === null) {
-        malformedLines += 1;
-        continue;
-      }
-      const issue = normalizeIssue(parsed);
-      if (issue) {
-        byId.set(issue.id, issue);
-      } else {
-        malformedLines += 1;
-      }
-    }
-    if (malformedLines > 0) {
-      const suffix = malformedLines === 1 ? 'line' : 'lines';
-      return {
-        available: false,
-        source,
-        projectRoot,
-        total: 0,
-        remaining: 0,
-        open: 0,
-        inProgress: 0,
-        blocked: 0,
-        closed: 0,
-        deferred: 0,
-        remainingIssues: [],
-        byId: new Map(),
-        error: `${malformedLines} malformed ${suffix} in ${source}`,
-      };
-    }
-    return createSnapshot(projectRoot, source, [...byId.values()]);
-  } catch (error) {
-    return {
-      available: false,
-      source,
-      projectRoot,
-      total: 0,
-      remaining: 0,
-      open: 0,
-      inProgress: 0,
-      blocked: 0,
-      closed: 0,
-      deferred: 0,
-      remainingIssues: [],
-      byId: new Map(),
-      error: error instanceof Error ? error.message : String(error),
-    };
-  }
-}
-
 const BEAD_ID_PATTERN = /\b[a-z][a-z0-9]*(?:-[a-z0-9.]+)+\b/gi;
 const EXPLICIT_PICK_PATTERNS = [
   /updated issue:\s*([a-z][a-z0-9]*(?:-[a-z0-9.]+)+)\b/gi,
@@ -237,11 +155,6 @@ export function extractReferencedBeadIds(text: string, knownIds: Set<string>): s
 }
 
 export async function loadBeadsSnapshot(projectRoot: string): Promise<BeadsSnapshot> {
-  const jsonlSnapshot = loadBeadsSnapshotFromJsonl(projectRoot);
-  if (jsonlSnapshot.available) {
-    return jsonlSnapshot;
-  }
-
   try {
     const result = await runCommand('bd', ['list', '--json', '--all', '--limit', '0'], projectRoot);
     if (result.status !== 0) {

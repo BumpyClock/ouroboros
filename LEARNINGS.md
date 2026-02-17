@@ -27,9 +27,8 @@
 - Bead ID parsing must accept dotted IDs (for example `ouroboros-7.1`) to avoid missing sub-bead picks.
 - Claude stream-json tool calls can arrive as top-level `type: "assistant"` with nested `message.content[].type: "tool_use"`; classify by nested content type before top-level event type.
 - Prefer explicit bead-pick markers (`Updated issue: <id>` or `bd update <id>`) over generic id mentions; multi-id dumps should be treated as ambiguous.
-- Rich-mode BEADS panel should refresh when `.beads/issues.jsonl` changes during an iteration; polling file signature is safer than one-time snapshot load.
 - Rich-mode empty agent cards are cleaner without `[EMPTY] no event yet` filler rows; show header only until real events arrive.
-- Use read-only `.beads/issues.jsonl` parsing as primary BEADS snapshot source across all platforms; fallback to `bd list` only when JSONL is unavailable to reduce concurrent rename-write race exposure.
+- Reverted BEADS snapshot loading to `bd list --json --all --limit 0`; do not read `.beads/issues.jsonl` directly in runtime path.
 
 ## Process
 - Add regression tests for bug fixes when scope permits.

@@ -5,8 +5,8 @@ import {
   type IterationSummary,
   type LiveRunAgentSelector,
   type LiveRunAgentTab,
-  type LiveRunIterationTimeline,
   type LiveRunHeaderState,
+  type LiveRunIterationTimeline,
   type LiveRunState,
   LiveRunStateStore,
   type LoopPhase,
@@ -251,7 +251,9 @@ function renderBeads(state: LiveRunState): React.JSX.Element | null {
 }
 
 function formatIterationChip(marker: LiveRunIterationTimeline['markers'][number]): string {
-  const base = marker.isCurrent ? `${String(marker.iteration).padStart(2, '0')}*` : String(marker.iteration).padStart(2, '0');
+  const base = marker.isCurrent
+    ? `${String(marker.iteration).padStart(2, '0')}*`
+    : String(marker.iteration).padStart(2, '0');
   const markerBits: string[] = [];
   if (marker.retryCount > 0) {
     markerBits.push(`R${marker.retryCount}`);
@@ -335,7 +337,10 @@ function buildIterationStripParts(
   };
 }
 
-function renderIterationStrip(timeline: LiveRunIterationTimeline, columns: number): React.JSX.Element {
+function renderIterationStrip(
+  timeline: LiveRunIterationTimeline,
+  columns: number,
+): React.JSX.Element {
   const { chips, prevCount, compactLabels, fallbackOnly, retryCount, failedCount } =
     buildIterationStripParts(timeline, columns);
 
@@ -343,6 +348,7 @@ function renderIterationStrip(timeline: LiveRunIterationTimeline, columns: numbe
   const failedLabelPrefix = compactLabels ? 'F' : 'Failed:';
   const retryText = `${prefix}${retryCount}`;
   const failedText = `${failedLabelPrefix}${failedCount}`;
+  const chipsText = chips.join(' ');
 
   if (fallbackOnly) {
     const pieces = [
@@ -353,9 +359,7 @@ function renderIterationStrip(timeline: LiveRunIterationTimeline, columns: numbe
     ];
     return (
       <Box marginTop={1} borderStyle="round" borderColor="yellow" paddingX={1}>
-        <Text>
-          {pieces.join(' | ')}
-        </Text>
+        <Text>{pieces.join(' | ')}</Text>
       </Box>
     );
   }
@@ -363,16 +367,8 @@ function renderIterationStrip(timeline: LiveRunIterationTimeline, columns: numbe
   return (
     <Box marginTop={1} borderStyle="round" borderColor="yellow" paddingX={1}>
       <Text>
-        {prevCount > 0 ? (
-          <>
-            <StatusText tone="muted" text={`Prev: ${prevCount} `} />
-          </>
-        ) : null}
-        {chips.map((chip, index) => (
-          <Text key={`iter-chip-${index}`}>
-            <StatusText tone="neutral" text={`${chip}${index + 1 < chips.length ? ' ' : ''}`} />
-          </Text>
-        ))}
+        {prevCount > 0 ? <StatusText tone="muted" text={`Prev: ${prevCount} `} /> : null}
+        {chipsText ? <StatusText tone="neutral" text={`${chipsText} `} /> : null}
         <StatusText tone="muted" text={` ${retryText}   ${failedText}`} />
       </Text>
     </Box>

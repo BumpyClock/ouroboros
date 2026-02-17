@@ -1,9 +1,8 @@
 import type { ChildProcess } from 'node:child_process';
-import { existsSync, readFileSync, statSync } from 'node:fs';
-import * as path from 'node:path';
+import { existsSync, readFileSync } from 'node:fs';
 import type { ProviderAdapter } from '../providers/types';
 import { InkLiveRunRenderer } from '../tui/tui';
-import { loadBeadsSnapshot, loadBeadsSnapshotFromJsonl } from './beads';
+import { loadBeadsSnapshot } from './beads';
 import {
   aggregateIterationOutput,
   type IterationLiveRenderer,
@@ -15,8 +14,6 @@ import { isCircuitBroken, loadIterationState, sleep, writeIterationState } from 
 import { ANSI, badge, colorize, LiveRunRenderer, printSection } from './terminal-ui';
 import { formatShort } from './text';
 import type { BeadIssue, BeadsSnapshot, CliOptions, RunResult, Tone } from './types';
-
-const BEADS_REFRESH_POLL_MS = 300;
 
 type ActiveSpinnerStopRef = {
   value: ((message: string, tone?: Tone) => void) | null;
@@ -117,58 +114,6 @@ function printBeadsSnapshot(snapshot: BeadsSnapshot): void {
   }
 }
 
-function resolveBeadsIssuesPath(projectRoot: string): string {
-  return path.join(projectRoot, '.beads', 'issues.jsonl');
-}
-
-function readBeadsFileSignature(issuesPath: string): string {
-  try {
-    const stat = statSync(issuesPath);
-    return `${stat.size}:${stat.mtimeMs}`;
-  } catch {
-    return 'missing';
-  }
-}
-
-function startBeadsSnapshotRefreshLoop(
-  projectRoot: string,
-  liveRenderer: IterationLiveRenderer,
-): () => void {
-  const issuesPath = resolveBeadsIssuesPath(projectRoot);
-  let signature = readBeadsFileSignature(issuesPath);
-  let refreshing = false;
-
-  const timer = setInterval(() => {
-    if (refreshing) {
-      return;
-    }
-    const nextSignature = readBeadsFileSignature(issuesPath);
-    if (nextSignature === signature) {
-      return;
-    }
-    signature = nextSignature;
-    refreshing = true;
-    const nextSnapshot = loadBeadsSnapshotFromJsonl(projectRoot);
-    if (!nextSnapshot.available) {
-      refreshing = false;
-      return;
-    }
-    void Promise.resolve(nextSnapshot)
-      .then((nextSnapshot) => {
-        liveRenderer.setBeadsSnapshot(nextSnapshot);
-      })
-      .finally(() => {
-        refreshing = false;
-      });
-  }, BEADS_REFRESH_POLL_MS);
-
-  timer.unref?.();
-
-  return () => {
-    clearInterval(timer);
-  };
-}
-
 export async function runLoopController(
   input: LoopControllerInput,
 ): Promise<IterationLiveRenderer | null> {
@@ -223,10 +168,6 @@ export async function runLoopController(
     if (!liveRenderer?.isEnabled()) {
       printBeadsSnapshot(beadsSnapshot);
     }
-    const stopBeadsSnapshotRefresh =
-      liveRenderer?.isEnabled() === true
-        ? startBeadsSnapshotRefreshLoop(options.projectRoot, liveRenderer)
-        : null;
     try {
       const iterationRun = await runIteration(
         iteration,
@@ -262,8 +203,6 @@ export async function runLoopController(
       activeSpinnerStopRef.value?.('spawn failed', 'error');
       activeSpinnerStopRef.value = null;
       throw error;
-    } finally {
-      stopBeadsSnapshotRefresh?.();
     }
 
     const aggregatedOutput = aggregateIterationOutput({

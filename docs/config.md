@@ -116,10 +116,9 @@ Matrix (normative for `ouroboros-11.2` to `ouroboros-11.5`):
 
 ## Bead snapshot trust model
 
-- Primary bead source is `.beads/issues.jsonl`.
-- Parser is strict: malformed JSONL lines invalidate the snapshot.
-- When JSONL is unavailable, runtime falls back to `bd list --json --all --limit 0`.
-- No-bead stop-marker suppression applies only when the JSONL snapshot is available; malformed snapshot data never forces a continue decision.
+- Bead snapshots are loaded from `bd list --json --all --limit 0`.
+- Snapshot is available when the `bd` command succeeds (JSON parse errors are treated as empty, available snapshots).
+- No-bead stop-marker suppression applies only when this snapshot is available.
 
 For full lifecycle details and verdict contract, see [`review-loop.md`](./review-loop.md).
 
