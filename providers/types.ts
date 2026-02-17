@@ -12,7 +12,7 @@ export type ProviderAdapter = {
   name: string;
   displayName: string;
   defaults: ProviderDefaults;
-  buildExecArgs: (lastMessagePath: string, options: CliOptions) => string[];
+  buildExecArgs: (prompt: string, lastMessagePath: string, options: CliOptions) => string[];
   previewEntriesFromLine: (line: string) => PreviewEntry[];
   collectMessages: (output: string) => PreviewEntry[];
   collectRawJsonLines: (output: string, previewCount: number) => string[];

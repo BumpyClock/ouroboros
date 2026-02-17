@@ -76,15 +76,27 @@ function buildRuns(
   logDir: string,
   provider: ProviderAdapter,
   options: CliOptions,
+  prompt: string,
 ): RunDefinition[] {
   return Array.from({ length: parallelAgents }, (_, index) => {
     const agentId = index + 1;
     const runBase = `${buildRunFileBase(iteration)}-agent-${String(agentId).padStart(2, '0')}`;
     const jsonlLogPath = path.join(logDir, `${runBase}.jsonl`);
     const lastMessagePath = path.join(logDir, `${runBase}.last-message.txt`);
-    const args = provider.buildExecArgs(lastMessagePath, options);
+    const args = provider.buildExecArgs(prompt, lastMessagePath, options);
     return { agentId, jsonlLogPath, lastMessagePath, args };
   });
+}
+
+function summarizeArgsForLog(args: string[]): string {
+  return args
+    .map((arg) => {
+      if (arg.length > 120) {
+        return `<arg:${arg.length} chars>`;
+      }
+      return arg;
+    })
+    .join(' ');
 }
 
 function printInitialSummary(
@@ -127,7 +139,7 @@ async function runIteration(
   activeChildren: Set<ChildProcess>,
   activeSpinnerStopRef: { value: ((message: string, tone?: Tone) => void) | null },
 ): Promise<{ results: RunResult[]; pickedByAgent: Map<number, BeadIssue> }> {
-  const runs = buildRuns(iteration, options.parallelAgents, logDir, provider, options);
+  const runs = buildRuns(iteration, options.parallelAgents, logDir, provider, options, prompt);
   const liveRenderer = createLiveRenderer(
     options,
     iteration,
@@ -147,7 +159,7 @@ async function runIteration(
     );
   }
   console.log(`${badge('START', 'muted')} ${startedAt}`);
-  console.log(`${badge('RUN', 'muted')} ${command} ${runs[0].args.join(' ')}`);
+  console.log(`${badge('RUN', 'muted')} ${command} ${summarizeArgsForLog(runs[0].args)}`);
   console.log(`${badge('BATCH', 'muted')} target ${runs.length} parallel agent(s), staged startup`);
   for (const run of runs) {
     console.log(`${badge(`A${run.agentId}`, 'muted')} ${run.jsonlLogPath}`);

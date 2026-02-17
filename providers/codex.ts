@@ -1,54 +1,13 @@
 import type { CliOptions, PreviewEntry, UsageSummary } from '../core/types';
 import { formatShort } from '../core/text';
 import type { ProviderAdapter } from './types';
-
-function isObject(value: unknown): value is Record<string, unknown> {
-  return !!value && typeof value === 'object' && !Array.isArray(value);
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return isObject(value);
-}
-
-function safeJsonParse(text: string): unknown | null {
-  try {
-    return JSON.parse(text);
-  } catch {
-    return null;
-  }
-}
-
-function firstStringValue(value: unknown): string {
-  if (typeof value === 'string') {
-    return value.trim();
-  }
-  if (Array.isArray(value)) {
-    const combined = value
-      .map((entry) => firstStringValue(entry))
-      .filter(Boolean)
-      .join('\n')
-      .trim();
-    return combined;
-  }
-  if (!isRecord(value)) {
-    return '';
-  }
-
-  const keyPriority = ['text', 'content', 'output', 'message', 'data', 'summary'];
-  for (const key of keyPriority) {
-    const nested = firstStringValue(value[key]);
-    if (nested) {
-      return nested;
-    }
-  }
-
-  const merged = Object.values(value)
-    .map((entry) => firstStringValue(entry))
-    .filter(Boolean)
-    .join(' ')
-    .trim();
-  return merged;
-}
+import {
+  CODEX_FIRST_STRING_KEYS,
+  isRecord,
+  firstStringValue,
+  safeJsonParse,
+  toJsonCandidates,
+} from './parsing';
 
 function summarizeCommand(command: string): string {
   const compact = command.replace(/\s+/g, ' ').trim();
@@ -80,6 +39,10 @@ function toJsonCandidates(line: string): unknown[] {
   return values;
 }
 
+function codexFirstStringValue(value: unknown): string {
+  return firstStringValue(value, CODEX_FIRST_STRING_KEYS);
+}
+
 function extractCodexPreviewLine(event: Record<string, unknown>): PreviewEntry | null {
   const type = typeof event.type === 'string' ? event.type : '';
 
@@ -91,11 +54,13 @@ function extractCodexPreviewLine(event: Record<string, unknown>): PreviewEntry |
 
     const itemType = typeof item.type === 'string' ? item.type : 'item';
     if (itemType === 'agent_message') {
-      const payload = firstStringValue(item.text ?? item.content ?? item.message);
+      const payload = codexFirstStringValue(item.text ?? item.content ?? item.message);
       return payload ? { kind: 'assistant', label: 'assistant', text: formatShort(payload) } : null;
     }
     if (itemType === 'reasoning') {
-      const payload = firstStringValue(item.text ?? item.summary ?? item.content ?? item.message);
+      const payload = codexFirstStringValue(
+        item.text ?? item.summary ?? item.content ?? item.message,
+      );
       return payload
         ? { kind: 'reasoning', label: 'reasoning', text: formatShort(payload, 200) }
         : null;
@@ -105,7 +70,7 @@ function extractCodexPreviewLine(event: Record<string, unknown>): PreviewEntry |
       itemType.includes('tool') ||
       itemType.includes('call')
     ) {
-      const commandText = firstStringValue(item.command ?? item.input ?? item.name);
+      const commandText = codexFirstStringValue(item.command ?? item.input ?? item.name);
       const status = typeof item.status === 'string' ? item.status : '';
       const exitCode = typeof item.exit_code === 'number' ? item.exit_code : null;
       if (!commandText) {
@@ -121,7 +86,7 @@ function extractCodexPreviewLine(event: Record<string, unknown>): PreviewEntry |
       };
     }
 
-    const fallbackItemText = firstStringValue(item);
+    const fallbackItemText = codexFirstStringValue(item);
     if (!fallbackItemText) {
       return null;
     }
@@ -134,11 +99,11 @@ function extractCodexPreviewLine(event: Record<string, unknown>): PreviewEntry |
   }
 
   if (type === 'error') {
-    const payload = firstStringValue(event.error ?? event.message ?? event);
+    const payload = codexFirstStringValue(event.error ?? event.message ?? event);
     return payload ? { kind: 'error', label: 'error', text: formatShort(payload) } : null;
   }
 
-  const genericPayload = firstStringValue(event.message ?? event.content ?? event.text);
+  const genericPayload = codexFirstStringValue(event.message ?? event.content ?? event.text);
   if (!genericPayload) {
     return null;
   }
@@ -298,7 +263,11 @@ function formatCommandHint(command: string): string {
   return `on Windows, pass --command with a full path like "C:/Users/<user>/AppData/Local/pnpm/codex.CMD"`;
 }
 
-function buildCodexExecArgs(lastMessagePath: string, options: CliOptions): string[] {
+function buildCodexExecArgs(
+  _prompt: string,
+  lastMessagePath: string,
+  options: CliOptions,
+): string[] {
   const args = ['exec', '--json'];
   if (options.model.trim()) {
     args.push('-m', options.model.trim());

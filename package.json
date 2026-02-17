@@ -6,7 +6,8 @@
     "format": "biome format --write .",
     "lint": "biome lint .",
     "lint:check": "biome check .",
-    "lint:ci": "biome ci ."
+    "lint:ci": "biome ci .",
+    "doctor": "bun run format && bun run lint:check"
   },
   "dependencies": {
     "ink": "^6.7.0",

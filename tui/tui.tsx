@@ -3,6 +3,7 @@ import { Box, Text, render } from 'ink';
 import { formatShort } from '../core/text';
 import { badge, labelTone } from '../core/terminal-ui';
 import type { BeadIssue, BeadsSnapshot, PreviewEntry, Tone } from '../core/types';
+import { buildPreviewRowKey } from './preview-row-key';
 
 const SPINNER_FRAMES = ['-', '\\', '|', '/'];
 
@@ -268,8 +269,8 @@ function renderAgentCard(state: LiveViewState, agentId: number): React.JSX.Eleme
           <StatusText tone="muted" dim text={`updated ${ageSeconds}s ago`} />
         </Text>
       )}
-      {previewLines.map((line) => (
-        <Text key={`${agentId}:${line.label}:${line.tone}:${line.text}`}>
+      {previewLines.map((line, rowIndex) => (
+        <Text key={buildPreviewRowKey(agentId, rowIndex)}>
           <StatusText tone="muted" dim text="  " /> {renderStatusBadge(line.label, line.tone)}{' '}
           <StatusText tone={line.tone} text={` ${line.text}`} />
         </Text>

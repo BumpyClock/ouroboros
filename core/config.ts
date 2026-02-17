@@ -19,6 +19,7 @@ type LoadedConfig = {
   projectKey: string;
   globalConfig: PartialOptions;
   projectConfig: PartialOptions;
+  runtimeConfig: PartialOptions;
 };
 
 function resolveGitRoot(cwd: string): string {
@@ -40,7 +41,11 @@ function projectKeyFromRoot(projectRoot: string): string {
   return `${basename}-${hash}`;
 }
 
-function parseJsonFile(configPath: string): Record<string, unknown> {
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return !!value && typeof value === 'object' && !Array.isArray(value);
+}
+
+function parseTomlFile(configPath: string): Record<string, unknown> {
   if (!existsSync(configPath)) {
     return {};
   }
@@ -49,15 +54,27 @@ function parseJsonFile(configPath: string): Record<string, unknown> {
     return {};
   }
   try {
-    const parsed = JSON.parse(raw);
-    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
-      throw new Error('Config root must be an object');
+    const parser = (globalThis as { Bun?: { TOML?: { parse: (text: string) => unknown } } }).Bun
+      ?.TOML;
+    if (!parser?.parse) {
+      throw new Error('TOML parser unavailable');
+    }
+    const parsed = parser.parse(raw);
+    if (!isRecord(parsed)) {
+      throw new Error('Config root must be a TOML table');
     }
     return parsed as Record<string, unknown>;
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     throw new Error(`Invalid config at ${configPath}: ${message}`);
   }
+}
+
+function getHomeDir(): string {
+  if (process.platform === 'win32') {
+    return process.env.HOME || homedir();
+  }
+  return homedir();
 }
 
 function parseString(value: unknown): string | undefined {
@@ -108,14 +125,21 @@ function normalizeConfigRecord(input: Record<string, unknown>): PartialOptions {
   };
 }
 
+function mergeConfig(globalConfig: PartialOptions, projectConfig: PartialOptions): PartialOptions {
+  return {
+    ...globalConfig,
+    ...projectConfig,
+  };
+}
+
 export function loadOuroborosConfig(cwd = process.cwd()): LoadedConfig {
   const projectRoot = resolveGitRoot(cwd);
   const projectKey = projectKeyFromRoot(projectRoot);
-  const ouroborosDir = path.join(homedir(), '.ouroboros');
-  const globalConfigPath = path.join(ouroborosDir, 'config.json');
-  const projectConfigPath = path.join(ouroborosDir, 'projects', `${projectKey}.json`);
-  const globalConfig = normalizeConfigRecord(parseJsonFile(globalConfigPath));
-  const projectConfig = normalizeConfigRecord(parseJsonFile(projectConfigPath));
+  const globalConfigPath = path.join(getHomeDir(), '.ouroboros', 'config.toml');
+  const projectConfigPath = path.join(projectRoot, '.ouroboros', 'config.toml');
+  const globalConfig = normalizeConfigRecord(parseTomlFile(globalConfigPath));
+  const projectConfig = normalizeConfigRecord(parseTomlFile(projectConfigPath));
+  const runtimeConfig = mergeConfig(globalConfig, projectConfig);
   return {
     globalConfigPath,
     projectConfigPath,
@@ -123,5 +147,6 @@ export function loadOuroborosConfig(cwd = process.cwd()): LoadedConfig {
     projectKey,
     globalConfig,
     projectConfig,
+    runtimeConfig,
   };
 }

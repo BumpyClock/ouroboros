@@ -1,8 +1,12 @@
 import { codexProvider } from './codex';
+import { claudeProvider } from './claude';
+import { copilotProvider } from './copilot';
 import type { ProviderAdapter } from './types';
 
 const PROVIDERS: Record<string, ProviderAdapter> = {
   [codexProvider.name]: codexProvider,
+  [claudeProvider.name]: claudeProvider,
+  [copilotProvider.name]: copilotProvider,
 };
 
 export function listProviderNames(): string[] {

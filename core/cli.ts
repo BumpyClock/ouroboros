@@ -1,3 +1,5 @@
+import { homedir } from 'node:os';
+import * as path from 'node:path';
 import type { CliOptions, ReasoningEffort } from './types';
 import { getProviderAdapter, listProviderNames } from '../providers/registry';
 import { loadOuroborosConfig } from './config';
@@ -81,6 +83,24 @@ function parseCliOverrides(argv: string[]): CliOverrides {
   return overrides;
 }
 
+function sanitizeProjectDirName(projectRoot: string): string {
+  const base = path.basename(projectRoot);
+  return base.replace(/[^a-zA-Z0-9._-]/g, '_') || 'project';
+}
+
+function resolveUserHomeDir(): string {
+  if (process.platform === 'win32') {
+    return process.env.HOME || homedir();
+  }
+  return homedir();
+}
+
+function buildDefaultLogDir(projectRoot: string): string {
+  const projectDir = sanitizeProjectDirName(projectRoot);
+  const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+  return path.join(resolveUserHomeDir(), '.ouroborus', 'logs', projectDir, timestamp);
+}
+
 export function printUsage(): void {
   const providers = listProviderNames().join(', ');
   console.log(`Usage:
@@ -94,19 +114,19 @@ Options:
   -P, --parallel <n>       Run n agents per iteration. default: 1
       --pause-ms <ms>      Pause between loops in milliseconds. default: 0
   -c, --command <cmd>      Base command to run. default: provider-specific
-      --log-dir <path>     Directory for per-iteration logs. default: provider-specific
+      --log-dir <path>     Directory for per-iteration logs. default: ~/.ouroborus/logs/<project_dir>/<date-time>
       --show-raw           Stream raw provider output to terminal (default: off)
   -h, --help               Show this help message
 
-Provider-specific (codex):
-  -m, --model <model>      Model passed to codex exec -m
-      --reasoning-effort   low|medium|high for reasoning_effort
-      --yolo               Pass --yolo to codex exec
-      --no-yolo            Disable --yolo
+Provider-specific:
+  -m, --model <model>      Model override (provider-specific identifier)
+      --reasoning-effort   low|medium|high (codex only)
+      --yolo               Enable high-autonomy mode for selected provider
+      --no-yolo            Disable high-autonomy mode
 
 Config:
-  - Global config: ~/.ouroboros/config.json
-  - Project config: ~/.ouroboros/projects/<derived-git-root-key>.json
+  - Global config: ~/.ouroboros/config.toml
+  - Project config: <project-root>/.ouroboros/config.toml
   - Merge order: CLI > project > global > provider defaults`);
 }
 
@@ -118,8 +138,8 @@ export function parseArgs(argv = process.argv.slice(2)): CliOptions {
 
   const config = loadOuroborosConfig(process.cwd());
   const cli = parseCliOverrides(argv);
-  const providerName =
-    cli.provider ?? config.projectConfig.provider ?? config.globalConfig.provider ?? 'codex';
+  const defaultLogDir = buildDefaultLogDir(config.projectRoot);
+  const providerName = cli.provider ?? config.runtimeConfig.provider ?? 'codex';
   const provider = getProviderAdapter(providerName);
 
   const pick = <T>(...values: Array<T | undefined>): T | undefined => {
@@ -133,14 +153,10 @@ export function parseArgs(argv = process.argv.slice(2)): CliOptions {
 
   const iterationLimit = pick(
     cli.iterationLimit,
-    config.projectConfig.iterationLimit,
-    config.globalConfig.iterationLimit,
+    config.runtimeConfig.iterationLimit,
     50,
   ) as number;
-  const iterationsSet =
-    cli.iterationsSet ||
-    config.projectConfig.iterationLimit !== undefined ||
-    config.globalConfig.iterationLimit !== undefined;
+  const iterationsSet = cli.iterationsSet || config.runtimeConfig.iterationLimit !== undefined;
 
   return {
     projectRoot: config.projectRoot,
@@ -148,65 +164,28 @@ export function parseArgs(argv = process.argv.slice(2)): CliOptions {
     provider: provider.name,
     promptPath: pick(
       cli.promptPath,
-      config.projectConfig.promptPath,
-      config.globalConfig.promptPath,
+      config.runtimeConfig.promptPath,
       '.ai_agents/prompt.md',
     ) as string,
     iterationLimit,
     iterationsSet,
-    previewLines: pick(
-      cli.previewLines,
-      config.projectConfig.previewLines,
-      config.globalConfig.previewLines,
-      3,
-    ) as number,
-    parallelAgents: pick(
-      cli.parallelAgents,
-      config.projectConfig.parallelAgents,
-      config.globalConfig.parallelAgents,
-      1,
-    ) as number,
-    pauseMs: pick(
-      cli.pauseMs,
-      config.projectConfig.pauseMs,
-      config.globalConfig.pauseMs,
-      0,
-    ) as number,
-    command: pick(
-      cli.command,
-      config.projectConfig.command,
-      config.globalConfig.command,
-      provider.defaults.command,
-    ) as string,
-    model: pick(
-      cli.model,
-      config.projectConfig.model,
-      config.globalConfig.model,
-      provider.defaults.model,
-    ) as string,
+    previewLines: pick(cli.previewLines, config.runtimeConfig.previewLines, 3) as number,
+    parallelAgents: pick(cli.parallelAgents, config.runtimeConfig.parallelAgents, 1) as number,
+    pauseMs: pick(cli.pauseMs, config.runtimeConfig.pauseMs, 0) as number,
+    command: pick(cli.command, config.runtimeConfig.command, provider.defaults.command) as string,
+    model: pick(cli.model, config.runtimeConfig.model, provider.defaults.model) as string,
     reasoningEffort: pick(
       cli.reasoningEffort,
-      config.projectConfig.reasoningEffort,
-      config.globalConfig.reasoningEffort,
+      config.runtimeConfig.reasoningEffort,
       provider.defaults.reasoningEffort,
     ) as ReasoningEffort,
-    yolo: pick(
-      cli.yolo,
-      config.projectConfig.yolo,
-      config.globalConfig.yolo,
-      provider.defaults.yolo,
-    ) as boolean,
+    yolo: pick(cli.yolo, config.runtimeConfig.yolo, provider.defaults.yolo) as boolean,
     logDir: pick(
       cli.logDir,
-      config.projectConfig.logDir,
-      config.globalConfig.logDir,
+      config.runtimeConfig.logDir,
+      defaultLogDir,
       provider.defaults.logDir,
     ) as string,
-    showRaw: pick(
-      cli.showRaw,
-      config.projectConfig.showRaw,
-      config.globalConfig.showRaw,
-      false,
-    ) as boolean,
+    showRaw: pick(cli.showRaw, config.runtimeConfig.showRaw, false) as boolean,
   };
 }
