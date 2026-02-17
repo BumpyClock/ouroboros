@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'bun:test';
-import type { BeadsSnapshot } from '../../core/types';
 import { shouldIgnoreStopMarkerForNoBeads } from '../../core/loop-controller';
+import type { BeadsSnapshot } from '../../core/types';
 
 function makeSnapshot(available: boolean, remaining: number): BeadsSnapshot {
   return {

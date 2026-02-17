@@ -172,7 +172,7 @@ export function loadBeadsSnapshotFromJsonl(projectRoot: string): BeadsSnapshot {
         byId: new Map(),
         error: `${malformedLines} malformed ${suffix} in ${source}`,
       };
-      }
+    }
     return createSnapshot(projectRoot, source, [...byId.values()]);
   } catch (error) {
     return {

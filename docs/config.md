@@ -77,8 +77,16 @@ When `--review` is enabled, each agent slot runs a review/fix cycle after implem
 4. Steps 2-3 repeat up to `reviewMaxFixAttempts` (default `5`) times.
 5. Unresolved drift after max attempts fails the slot and the iteration.
 6. Malformed reviewer output (non-JSON, invalid verdict) fails the slot immediately.
+7. Reviewer/fixer process non-zero exit status fails the slot immediately (no extra review/fix continuation).
 
 Review is skipped when `reviewEnabled` is false (default), no reviewer prompt exists, no bead was picked, or implementation exited non-zero.
+
+## Bead snapshot trust model
+
+- Primary bead source is `.beads/issues.jsonl`.
+- Parser is strict: malformed JSONL lines invalidate the snapshot.
+- When JSONL is unavailable, runtime falls back to `bd list --json --all --limit 0`.
+- No-bead stop-marker suppression applies only when the JSONL snapshot is available; malformed snapshot data never forces a continue decision.
 
 For full lifecycle details and verdict contract, see [`review-loop.md`](./review-loop.md).
 

@@ -28,6 +28,14 @@ Review is **skipped** when any of these are true:
 - No bead was picked by the agent
 - Implementation exited non-zero
 
+## Failure policy
+
+Non-zero review/fix subprocess exits are hard failures:
+
+- if reviewer exits non-zero, the slot is failed and no verdict parsing is attempted.
+- if fixer exits non-zero, the slot is failed and no extra review/fix retries occur.
+- failed slots mark the iteration as failed (`failed` output path).
+
 ## Verdict contract
 
 Reviewer output must contain a JSON object:

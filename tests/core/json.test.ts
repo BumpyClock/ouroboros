@@ -104,10 +104,9 @@ describe('json helpers', () => {
       const issuesPath = path.join(beadsDir, 'issues.jsonl');
       writeFileSync(
         issuesPath,
-        [
-          '{"id":"ouroboros-1","title":"a","status":"open","priority":1}',
-          '{bad-json-line}',
-        ].join('\n'),
+        ['{"id":"ouroboros-1","title":"a","status":"open","priority":1}', '{bad-json-line}'].join(
+          '\n',
+        ),
       );
 
       const snapshot = loadBeadsSnapshotFromJsonl(tempRoot);
@@ -137,8 +136,8 @@ describe('json helpers', () => {
       writeFileSync(
         bdShim,
         process.platform === 'win32'
-          ? "@echo off\r\necho [{\"id\":\"ouroboros-42\",\"title\":\"from-bd\",\"status\":\"open\"}]\r\nexit /b 0\r\n"
-          : "#!/usr/bin/env sh\necho '[{\"id\":\"ouroboros-42\",\"title\":\"from-bd\",\"status\":\"open\"}]'\n",
+          ? '@echo off\r\necho [{"id":"ouroboros-42","title":"from-bd","status":"open"}]\r\nexit /b 0\r\n'
+          : '#!/usr/bin/env sh\necho \'[{"id":"ouroboros-42","title":"from-bd","status":"open"}]\'\n',
       );
       if (process.platform !== 'win32') {
         chmodSync(bdShim, 0o755);
