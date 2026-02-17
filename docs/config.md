@@ -34,6 +34,11 @@ Where:
 - `<project_dir>` is the git root directory name (sanitized).
 - `<date-time>` is an ISO timestamp generated at process start.
 
+## Output mode behavior
+
+- **TTY + rich mode** (`showRaw = false`): iteration lifecycle and summary lines are rendered in live, replace-in-place panels.
+- **Non-TTY or `--show-raw`**: legacy per-iteration rows are printed to stdout for script compatibility.
+
 ## Platform behavior
 
 - Linux/macOS: uses `homedir()` (same as `~` expansion target).

@@ -14,6 +14,14 @@ Supported providers:
 bun ouroboros.ts --help
 ```
 
+## TUI lifecycle output
+
+- In TTY rich mode (`showRaw = false`), iteration lifecycle is rendered inline in live panels:
+  - run context (`START`/`RUN`/`BATCH`/agent logs)
+  - iteration summary (`TOKENS`, picked beads, stop/retry/pause state)
+  - per-iteration progress and agent status
+- In non-TTY environments and when `--show-raw` is enabled, behavior is legacy row-by-row output.
+
 ## Install deps
 
 ```bash

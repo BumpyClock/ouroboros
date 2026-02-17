@@ -443,6 +443,8 @@ export async function runLoop(options: CliOptions, provider: ProviderAdapter): P
     printInitialSummary(provider, options, command, promptPath, logDir, state.max_iterations);
 
     let stoppedByProviderMarker = false;
+    let reachedCircuit = false;
+    let terminalLoopPhase: 'completed' | 'stopped' | 'failed' | null = null;
     const agentIds = Array.from({ length: options.parallelAgents }, (_, index) => index + 1);
     liveRenderer = createLiveRenderer(
       options,
@@ -468,7 +470,7 @@ export async function runLoop(options: CliOptions, provider: ProviderAdapter): P
         results: RunResult[];
         pickedByAgent: Map<number, BeadIssue>;
       } | null = null;
-      if (!process.stdout.isTTY || options.showRaw) {
+      if (!liveRenderer?.isEnabled()) {
         printBeadsSnapshot(beadsSnapshot);
       }
       try {
@@ -489,7 +491,6 @@ export async function runLoop(options: CliOptions, provider: ProviderAdapter): P
         pickedByAgent = iterationRun.pickedByAgent;
         const liveRendererEnabled = Boolean(liveRenderer?.isEnabled());
         if (liveRenderer && liveRendererEnabled) {
-          liveRenderer.setLoopNotice('iteration started', 'muted');
           liveRenderer.setLoopPhase('collecting');
         }
 
@@ -547,6 +548,11 @@ export async function runLoop(options: CliOptions, provider: ProviderAdapter): P
           if (combined) {
             console.log(colorize(formatShort(combined, 600), ANSI.red));
           }
+        }
+        if (liveRenderer?.isEnabled()) {
+          liveRenderer.setLoopNotice('one or more agents failed', 'error');
+          liveRenderer.setLoopPhase('failed');
+          terminalLoopPhase = 'failed';
         }
         break;
       }
@@ -656,11 +662,14 @@ export async function runLoop(options: CliOptions, provider: ProviderAdapter): P
           liveRenderer.setLoopPhase('stopped');
           liveRenderer.setPauseState(null);
           liveRenderer.setRetryState(null);
+          terminalLoopPhase = 'stopped';
         } else {
           console.log(`${badge('STOP', 'success')} provider stop marker detected`);
         }
         break;
       }
+
+      reachedCircuit = state.current_iteration >= state.max_iterations;
 
       if (state.current_iteration < state.max_iterations && options.pauseMs > 0) {
         if (liveRenderer?.isEnabled()) {
@@ -681,10 +690,27 @@ export async function runLoop(options: CliOptions, provider: ProviderAdapter): P
           liveRenderer.setLoopNotice('pending status', 'muted');
           liveRenderer.setLoopPhase('streaming');
         }
+      } else if (liveRenderer?.isEnabled()) {
+        liveRenderer.setLoopPhase('streaming');
+      }
+      if (liveRenderer?.isEnabled()) {
+        liveRenderer.setLoopNotice('iteration complete', 'info');
       }
     }
 
-    if (!stoppedByProviderMarker && isCircuitBroken(state)) {
+    if (liveRenderer?.isEnabled()) {
+      if (terminalLoopPhase === 'failed' || terminalLoopPhase === 'stopped') {
+        liveRenderer.setLoopPhase(terminalLoopPhase);
+      } else if (!stoppedByProviderMarker && isCircuitBroken(state)) {
+        liveRenderer.setLoopNotice(
+          `max iterations (${state.max_iterations}) reached`,
+          reachedCircuit ? 'warn' : 'success',
+        );
+        liveRenderer.setLoopPhase('completed');
+      } else {
+        liveRenderer.setLoopPhase('completed');
+      }
+    } else if (!stoppedByProviderMarker && isCircuitBroken(state)) {
       console.log(`${badge('CIRCUIT', 'warn')} max_iterations (${state.max_iterations}) reached`);
     }
   } finally {
