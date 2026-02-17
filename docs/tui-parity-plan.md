@@ -53,6 +53,11 @@ Date: 2026-02-17
 5. `ouroboros-13.4`: conflict/merge operational overlays.
 6. `ouroboros-13.5`+: UX overlays/theme once interaction is stable.
 
+## Bead status snapshot (source of truth)
+- `ouroboros-13.1` status: this planning document is live and tracks current parity targets as loop implementation shifts. Last parity refresh: 2026-02-17.
+- `ouroboros-13.2`: in progress per active parity work on view-state and interaction routing.
+- `ouroboros-13.3`-`ouroboros-13.5`: partially complete in prior sessions; remaining work should re-use this document before implementation.
+
 ## Prioritized open-gap matrix (top 5)
 - P0 | Keyboard interaction model (`ouroboros-13.2`)
   - Open gap: no parser-safe view-aware key router for task/iteration/parallel panes.

@@ -96,3 +96,8 @@
 - Added missing regression test for config-provided eviewerProvider validation in 	ests/core/cli.test.ts (unsupported provider should fail).
 - Existing CLI/config implementation already resolved reviewer provider/model precedence correctly; this commit closes the validation gap and confirms behavior.  
 - Challenge: working tree had pre-existing modified files (core/loop-engine.ts, core/terminal-ui.ts, 	ui/tui.tsx, core/theme.ts), so this bead stayed scoped to a single focused test change only.
+### `ouroboros-13.1` (additional session sync)
+- Completed: marked bead `ouroboros-13.1` done and added a live status section to `docs/tui-parity-plan.md` to keep the parity matrix tied to current loop implementation phases.
+- What changed: added `Bead status snapshot (source of truth)` section with explicit `13.1` completion and current `13.2`-`13.5` phase assumptions.
+- Learning: keeping parity docs as a mutable state surface reduces stale planning risk and lowers coordination overhead before implementation jumps.
+- Challenge: `bd` listed `13.1` as open but already done-marked in notes; used tracker status updates to reconcile that state before closure.
