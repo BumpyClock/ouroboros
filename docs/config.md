@@ -58,6 +58,7 @@ Supported keys:
 - `model`
 - `reviewerProvider` (`codex`, `claude`, `copilot`; default: resolved `provider`)
 - `reviewerModel` (string; default: resolved `model` when reviewer provider matches primary, otherwise reviewer provider default model)
+- `reviewerCommand` (optional string; explicit reviewer executable/command for reviewer subprocess)
 - `reasoningEffort` (`low`, `medium`, `high`)
 - `yolo`
 - `logDir`
@@ -100,7 +101,8 @@ Resolution rules:
    - else if reviewer provider equals primary provider, use resolved primary model;
    - else use reviewer provider default model from adapter defaults.
 3. Reviewer command resolution:
-   - if reviewer provider equals primary provider, reviewer command follows primary command resolution;
+   - explicit `reviewerCommand` (CLI/config) takes precedence;
+   - if reviewer provider equals primary provider and no override, reviewer command follows primary command resolution;
    - if reviewer provider differs, reviewer subprocess uses the reviewer provider command resolution path (provider-specific default path), not the resolved primary `command`.
 4. Implementation and fix subprocesses remain on the primary provider/model/command path for now; only reviewer may diverge.
 
@@ -122,6 +124,9 @@ ouroboros --review --provider codex --model gpt-5.3 --reviewer-model o3-mini
 
 # Mixed providers, explicit reviewer model
 ouroboros --review --provider codex --reviewer-provider claude --reviewer-model sonnet
+
+# Mixed providers, explicit reviewer command
+ouroboros --review --provider codex --reviewer-provider claude --reviewer-command /opt/claude/bin/claude --reviewer-model sonnet
 ```
 
 ## Bead snapshot trust model

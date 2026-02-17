@@ -46,13 +46,15 @@ export async function runLoop(options: CliOptions, provider: ProviderAdapter): P
   const logDir = resolveRunLogDirectory(cwd, options.logDir);
   const command = resolveRunnableCommand(options.command, provider.formatCommandHint);
   const reviewerProvider = getProviderAdapter(options.reviewerProvider);
-  const reviewerCommand =
-    options.reviewerProvider === provider.name
-      ? command
-      : resolveRunnableCommand(
-          reviewerProvider.defaults.command,
-          reviewerProvider.formatCommandHint,
-        );
+  const reviewerCommandTemplate =
+    options.reviewerCommand ??
+    (options.reviewerProvider === provider.name
+      ? options.command
+      : reviewerProvider.defaults.command);
+  const reviewerCommand = resolveRunnableCommand(
+    reviewerCommandTemplate,
+    reviewerProvider.formatCommandHint,
+  );
   const activeChildren = new Set<ChildProcess>();
   const activeSpinnerStopRef: ActiveSpinnerStopRef = {
     value: null,

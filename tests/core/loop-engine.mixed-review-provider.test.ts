@@ -143,6 +143,38 @@ describe('runLoop mixed-review-provider wiring', () => {
     expect(capturedInput.reviewerPromptPath).toBe('.tmp/reviewer-prompt.md');
   });
 
+  it('uses explicit reviewerCommand override for reviewer subprocess', async () => {
+    const overrideOptions: CliOptions = {
+      projectRoot: process.cwd(),
+      projectKey: 'ouroboros',
+      provider: 'primary',
+      reviewerProvider: 'reviewer',
+      developerPromptPath: '.ai_agents/prompt.md',
+      iterationLimit: 1,
+      iterationsSet: true,
+      previewLines: 2,
+      parallelAgents: 1,
+      pauseMs: 0,
+      command: 'primary run command',
+      model: 'primary-model',
+      reviewerModel: 'reviewer-model-override',
+      reviewerCommand: '/opt/review/reviewer-cli --json',
+      reasoningEffort: 'medium',
+      yolo: false,
+      logDir: '.tmp/review-loop-test',
+      showRaw: false,
+      reviewEnabled: true,
+      reviewMaxFixAttempts: 5,
+    };
+
+    if (!loopEngineModule) {
+      throw new Error('loopEngineModule did not initialize');
+    }
+    await loopEngineModule.runLoop(overrideOptions, mockPrimaryProvider);
+
+    expect(capturedInput.reviewerCommand).toBe('resolved:/opt/review/reviewer-cli --json');
+  });
+
   it('uses primary command when reviewer provider is the same provider', async () => {
     const sameProviderOptions: CliOptions = {
       projectRoot: process.cwd(),

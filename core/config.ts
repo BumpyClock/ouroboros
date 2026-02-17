@@ -104,6 +104,7 @@ function normalizeConfigRecord(input: Record<string, unknown>): PartialOptions {
   return {
     provider: parseString(input.provider)?.toLowerCase(),
     reviewerProvider: parseString(input.reviewerProvider)?.toLowerCase(),
+    reviewerCommand: parseString(input.reviewerCommand),
     promptPath: parseString(input.promptPath),
     iterationLimit: toPositiveInt(input.iterationLimit),
     previewLines: toPositiveInt(input.previewLines),

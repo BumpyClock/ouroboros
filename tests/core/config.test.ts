@@ -69,6 +69,25 @@ reviewerModel = "project-model"
     expect(loaded.runtimeConfig.reviewerModel).toBe('project-model');
   });
 
+  it('merges project reviewer command over global config', async () => {
+    writeConfig(
+      path.join(tempHome, '.ouroboros', 'config.toml'),
+      `
+reviewerCommand = "/usr/bin/reviewer-global"
+`,
+    );
+
+    writeConfig(
+      path.join(projectRoot, '.ouroboros', 'config.toml'),
+      `
+reviewerCommand = "/usr/local/bin/reviewer-project"
+`,
+    );
+
+    const loaded = loadOuroborosConfig(projectRoot);
+    expect(loaded.runtimeConfig.reviewerCommand).toBe('/usr/local/bin/reviewer-project');
+  });
+
   it('keeps global reviewer fields when project config does not override them', async () => {
     writeConfig(
       path.join(tempHome, '.ouroboros', 'config.toml'),

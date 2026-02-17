@@ -64,10 +64,12 @@ describe('parseArgs reviewer provider/model resolution', () => {
       model: 'gpt-5-primary',
       reviewerProvider: 'claude',
       reviewerModel: 'sonnet',
+      reviewerCommand: 'reviewer-cli-path',
     });
 
     expect(options.reviewerProvider).toBe('claude');
     expect(options.reviewerModel).toBe('sonnet');
+    expect(options.reviewerCommand).toBe('reviewer-cli-path');
   });
 
   it('uses reviewer provider defaults when provider differs and reviewer model is unset', () => {
@@ -101,6 +103,16 @@ describe('parseArgs reviewer provider/model resolution', () => {
 
     expect(options.reviewerProvider).toBe('copilot');
     expect(options.reviewerModel).toBe(getProviderAdapter('copilot').defaults.model);
+  });
+
+  it('reads reviewer command override from config and keeps CLI precedence', () => {
+    const withConfig = parseWithConfig(['--reviewer-command', 'reviewer-cli-cli'], {
+      provider: 'codex',
+      model: 'gpt-5-primary',
+      reviewerCommand: 'project-reviewer-command',
+    });
+
+    expect(withConfig.reviewerCommand).toBe('reviewer-cli-cli');
   });
 
   it('prefers reviewer CLI override over runtime reviewer config', () => {

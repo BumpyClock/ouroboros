@@ -6,6 +6,7 @@ import type { CliOptions, ReasoningEffort } from './types';
 type CliOverrides = {
   provider?: string;
   reviewerProvider?: string;
+  reviewerCommand?: string;
   iterationLimit?: number;
   iterationsSet: boolean;
   previewLines?: number;
@@ -48,6 +49,9 @@ function parseCliOverrides(argv: string[]): CliOverrides {
       i += 1;
     } else if (arg === '--reviewer-provider') {
       overrides.reviewerProvider = (argv[i + 1] ?? '').trim().toLowerCase();
+      i += 1;
+    } else if (arg === '--reviewer-command') {
+      overrides.reviewerCommand = argv[i + 1];
       i += 1;
     } else if (arg === '--prompt' || arg === '-p') {
       overrides.developerPromptPath = argv[i + 1];
@@ -132,6 +136,7 @@ Options:
 Provider-specific:
   -m, --model <model>      Model override (provider-specific identifier)
       --reviewer-provider <name> Reviewer provider override (default: primary --provider)
+      --reviewer-command <cmd>  Reviewer command override (default: reviewer provider default command)
       --reviewer-model <model>   Reviewer model override (provider-specific identifier)
       --reasoning-effort   low|medium|high (codex only)
       --yolo               Enable high-autonomy mode for selected provider
@@ -190,6 +195,7 @@ export function parseArgs(argv = process.argv.slice(2)): CliOptions {
     config.runtimeConfig.reviewerModel,
     reviewerProvider.name === provider.name ? model : reviewerProvider.defaults.model,
   ) as string;
+  const reviewerCommand = pick(cli.reviewerCommand, config.runtimeConfig.reviewerCommand);
   const iterationsSet = cli.iterationsSet || config.runtimeConfig.iterationLimit !== undefined;
 
   return {
@@ -204,6 +210,7 @@ export function parseArgs(argv = process.argv.slice(2)): CliOptions {
     pauseMs: pick(cli.pauseMs, config.runtimeConfig.pauseMs, 0) as number,
     command: pick(cli.command, config.runtimeConfig.command, provider.defaults.command) as string,
     model,
+    reviewerCommand,
     reviewerModel,
     reasoningEffort: pick(
       cli.reasoningEffort,

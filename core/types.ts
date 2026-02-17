@@ -13,6 +13,7 @@ export type CliOptions = {
   command: string;
   model: string;
   reviewerModel: string;
+  reviewerCommand?: string;
   reasoningEffort: ReasoningEffort;
   yolo: boolean;
   logDir: string;
