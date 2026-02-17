@@ -336,3 +336,11 @@
   - Closed parent bead `ouroboros-8` (all children 8.1-8.5 complete).
   - Learning: verification beads are quick when prior work is solid; main value is catching stale docs (tree listing was missing one file).
   - Challenge: none; straightforward verification pass.
+
+- 2026-02-17
+  - Completed bead ouroboros-9.1 (Fail fast on non-zero reviewer/fix subprocess exits).
+  - Implemented runtime hard-fail handling in core/iteration-execution.ts for unSlotReviewLoop: non-zero reviewer/fixer statuses now return immediate failed SlotReviewOutcome with explicit eviewer process exited with status X / ixer process exited with status X, clear A# non-live logs, and no verdict parsing/fix continuation on failure.
+  - Added regression tests in 	ests/core/review-loop.test.ts for reviewer non-zero exit and fixer non-zero exit short-circuit behavior; happy-path pass/drift behavior unchanged by design.
+  - Learnings: explicit status checks before JSON parsing are necessary to avoid trusting failed subprocess output; tests should assert call-count/attempt semantics as well as failure reason. 
+  - Challenge: tests not executed in-session by policy.
+

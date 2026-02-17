@@ -266,6 +266,26 @@ describe('review loop integration', () => {
     }
   });
 
+  it('fails when reviewer subprocess exits non-zero', async () => {
+    const reviewResults: StreamResult[] = [
+      { status: 2, stdout: passVerdict(), stderr: 'reviewer crashed' },
+    ];
+    const input = makeSlotReviewInput(reviewResults);
+
+    const origLog = console.log;
+    console.log = () => {};
+    try {
+      const outcome = await getReviewLoop()(input);
+      expect(outcome.passed).toBe(false);
+      expect(outcome.fixAttempts).toBe(0);
+      expect(outcome.failureReason).toContain('reviewer process exited with status 2');
+      expect(outcome.failureReason).not.toContain('reviewer contract violation');
+      expect(runCalls.length).toBe(1);
+    } finally {
+      console.log = origLog;
+    }
+  });
+
   it('fails on reviewer JSON with invalid verdict value', async () => {
     const reviewResults: StreamResult[] = [
       {
@@ -328,6 +348,28 @@ describe('review loop integration', () => {
       expect(outcome.failureReason).toContain(`${maxFix}`);
       // review0 + fix1 + review1 + fix2 + review2 = 5 calls
       expect(runCalls.length).toBe(5);
+    } finally {
+      console.log = origLog;
+    }
+  });
+
+  it('fails when fixer subprocess exits non-zero and stops retrying', async () => {
+    const reviewResults: StreamResult[] = [
+      { status: 0, stdout: driftVerdict('fix this issue'), stderr: '' },
+      { status: 7, stdout: 'did not apply fix', stderr: '' },
+      { status: 0, stdout: passVerdict(), stderr: '' },
+    ];
+    const input = makeSlotReviewInput(reviewResults);
+
+    const origLog = console.log;
+    console.log = () => {};
+    try {
+      const outcome = await getReviewLoop()(input);
+      expect(outcome.passed).toBe(false);
+      expect(outcome.fixAttempts).toBe(1);
+      expect(outcome.failureReason).toContain('fixer process exited with status 7');
+      expect(runCalls.length).toBe(2);
+      // third call must not run after failed fixer
     } finally {
       console.log = origLog;
     }

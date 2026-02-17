@@ -195,6 +195,18 @@ export async function runSlotReviewLoop(input: SlotReviewInput): Promise<SlotRev
       });
 
       const reviewOutput = `${reviewResult.stdout}\n${reviewResult.stderr}`.trim();
+      if (reviewResult.status !== 0) {
+        const reviewerFailureReason = `reviewer process exited with status ${reviewResult.status}`;
+        if (!liveRendererEnabled) {
+          console.log(`${badge(`A${agentId}`, 'error')} ${reviewerFailureReason}`);
+        }
+        clearReviewPhase();
+        return {
+          passed: false,
+          fixAttempts: fixAttempt,
+          failureReason: reviewerFailureReason,
+        };
+      }
       const verdict = parseReviewerVerdict(reviewOutput);
 
       if (!isReviewResult(verdict)) {
@@ -272,6 +284,19 @@ export async function runSlotReviewLoop(input: SlotReviewInput): Promise<SlotRev
           }
         },
       });
+
+      if (fixResult.status !== 0) {
+        const fixFailureReason = `fixer process exited with status ${fixResult.status}`;
+        if (!liveRendererEnabled) {
+          console.log(`${badge(`A${agentId}`, 'error')} ${fixFailureReason}`);
+        }
+        clearReviewPhase();
+        return {
+          passed: false,
+          fixAttempts: fixAttempt + 1,
+          failureReason: fixFailureReason,
+        };
+      }
 
       lastImplementOutput = `${fixResult.stdout}\n${fixResult.stderr}`;
       lastImplementLogPath = fixLogPath;
