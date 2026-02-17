@@ -1,9 +1,9 @@
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { existsSync, readFileSync } from 'node:fs';
-import { homedir } from 'node:os';
 import * as path from 'node:path';
 import type { CliOptions, ReasoningEffort } from './types';
+import { resolveHomeDir, sanitizeProjectName } from './paths';
 
 type PartialOptions = Partial<
   Omit<CliOptions, 'provider' | 'projectRoot' | 'projectKey' | 'iterationsSet'>
@@ -36,7 +36,7 @@ function resolveGitRoot(cwd: string): string {
 
 function projectKeyFromRoot(projectRoot: string): string {
   const normalized = path.resolve(projectRoot).toLowerCase();
-  const basename = path.basename(projectRoot).replace(/[^a-zA-Z0-9._-]/g, '_') || 'project';
+  const basename = sanitizeProjectName(projectRoot);
   const hash = createHash('sha1').update(normalized).digest('hex').slice(0, 10);
   return `${basename}-${hash}`;
 }
@@ -68,13 +68,6 @@ function parseTomlFile(configPath: string): Record<string, unknown> {
     const message = error instanceof Error ? error.message : String(error);
     throw new Error(`Invalid config at ${configPath}: ${message}`);
   }
-}
-
-function getHomeDir(): string {
-  if (process.platform === 'win32') {
-    return process.env.HOME || homedir();
-  }
-  return homedir();
 }
 
 function parseString(value: unknown): string | undefined {
@@ -135,7 +128,7 @@ function mergeConfig(globalConfig: PartialOptions, projectConfig: PartialOptions
 export function loadOuroborosConfig(cwd = process.cwd()): LoadedConfig {
   const projectRoot = resolveGitRoot(cwd);
   const projectKey = projectKeyFromRoot(projectRoot);
-  const globalConfigPath = path.join(getHomeDir(), '.ouroboros', 'config.toml');
+  const globalConfigPath = path.join(resolveHomeDir(), '.ouroboros', 'config.toml');
   const projectConfigPath = path.join(projectRoot, '.ouroboros', 'config.toml');
   const globalConfig = normalizeConfigRecord(parseTomlFile(globalConfigPath));
   const projectConfig = normalizeConfigRecord(parseTomlFile(projectConfigPath));
