@@ -63,3 +63,9 @@ Default logs path (when `--log-dir` and `logDir` are unset):
 - `~/.ouroborus/logs/<project_dir>/<date-time>/`
 
 See [`docs/config.md`](./docs/config.md) for full schema, examples, and platform rules.
+
+## Provider architecture
+
+Provider adapters are thin transport wrappers; all shared parsing, retry extraction, and stop-marker behavior lives in shared modules under `providers/`.
+
+- [`docs/provider-adapter-boundary.md`](./docs/provider-adapter-boundary.md): contract and ownership rules for adapter implementations.
