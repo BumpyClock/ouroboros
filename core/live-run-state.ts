@@ -37,6 +37,31 @@ export type LiveRunState = {
 };
 
 type Listener = () => void;
+type RenderPhase = 'queued' | 'launching' | 'waiting';
+
+export type LiveRunHeaderState = {
+  running: boolean;
+  elapsedSeconds: number;
+  spinner: string;
+  tone: Tone;
+  statusMessage: string;
+  iteration: number;
+  maxIterations: number;
+  ratio: number;
+  percent: number;
+};
+
+export type LiveRunAgentSelector = {
+  pickedBead: BeadIssue | null;
+  statusLabel: string;
+  statusTone: Tone;
+  statusText: string;
+  detailText: string;
+  lastUpdatedAt: number;
+  ageSeconds: number;
+  totalEvents: number;
+  phase: RenderPhase;
+};
 
 export function labelTone(label: string): Tone {
   const normalized = label.toLowerCase();
@@ -90,6 +115,92 @@ export class LiveRunStateStore {
 
   isRunning(): boolean {
     return this.state.running;
+  }
+
+  setStatus(message: string, tone: Tone = 'info'): void {
+    this.state = {
+      ...this.state,
+      statusMessage: message,
+      statusTone: tone,
+    };
+    this.emit();
+  }
+
+  getHeaderState(now = Date.now()): LiveRunHeaderState {
+    const safeTotal = Math.max(1, this.state.maxIterations);
+    const ratio = Math.max(0, Math.min(1, this.state.iteration / safeTotal));
+    return {
+      running: this.state.running,
+      elapsedSeconds: (now - this.state.startedAt) / 1000,
+      spinner: this.state.running
+        ? LIVE_SPINNER_FRAMES[this.state.frameIndex % LIVE_SPINNER_FRAMES.length]
+        : '',
+      tone: this.state.running ? 'info' : this.state.statusTone,
+      statusMessage: this.state.statusMessage,
+      iteration: this.state.iteration,
+      maxIterations: this.state.maxIterations,
+      ratio,
+      percent: Math.round(ratio * 100),
+    };
+  }
+
+  getAgentSelector(agentId: number, now = Date.now()): LiveRunAgentSelector {
+    const snapshot = this.state.agentState.get(agentId);
+    const pickedBead = this.state.agentPickedBeads.get(agentId) ?? null;
+    const spawn = this.state.agentSpawnState.get(agentId);
+
+    if (!snapshot) {
+      if (spawn?.phase === 'launching') {
+        return {
+          pickedBead,
+          statusLabel: 'SPAWN',
+          statusTone: 'info',
+          statusText: 'launch in progress',
+          detailText: spawn.message,
+          lastUpdatedAt: now,
+          ageSeconds: 0,
+          totalEvents: 0,
+          phase: 'launching',
+        };
+      }
+      if (spawn?.phase === 'queued') {
+        return {
+          pickedBead,
+          statusLabel: 'QUEUED',
+          statusTone: 'warn',
+          statusText: 'awaiting launch',
+          detailText: spawn.message,
+          lastUpdatedAt: now,
+          ageSeconds: 0,
+          totalEvents: 0,
+          phase: 'queued',
+        };
+      }
+      return {
+        pickedBead,
+        statusLabel: 'WAIT',
+        statusTone: 'muted',
+        statusText: 'waiting for events',
+        detailText: 'waiting for events',
+        lastUpdatedAt: now,
+        ageSeconds: 0,
+        totalEvents: 0,
+        phase: 'waiting',
+      };
+    }
+
+    const ageSeconds = Math.max(0, Math.floor((now - snapshot.lastUpdatedAt) / 1000));
+    return {
+      pickedBead,
+      statusLabel: 'EVENTS',
+      statusTone: 'muted',
+      statusText: `events ${snapshot.totalEvents}`,
+      detailText: `updated ${ageSeconds}s ago`,
+      lastUpdatedAt: snapshot.lastUpdatedAt,
+      ageSeconds,
+      totalEvents: snapshot.totalEvents,
+      phase: 'waiting',
+    };
   }
 
   tickFrame(): void {
