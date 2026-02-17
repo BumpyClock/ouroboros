@@ -1,6 +1,7 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import * as path from 'node:path';
 import type { IterationState } from './types';
+import { isRecord, safeJsonParse } from './json';
 
 export const ITERATION_STATE_PATH = '.ai_agents/iteration.json';
 
@@ -10,24 +11,12 @@ function ensureDirectory(dir: string): void {
   }
 }
 
-function isObject(value: unknown): value is Record<string, unknown> {
-  return !!value && typeof value === 'object' && !Array.isArray(value);
-}
-
-function safeJsonParse(text: string): unknown | null {
-  try {
-    return JSON.parse(text);
-  } catch {
-    return null;
-  }
-}
-
 export function resolveIterationStatePath(cwd: string): string {
   return path.resolve(cwd, ITERATION_STATE_PATH);
 }
 
 function normalizeIterationState(input: unknown, fallbackMax: number): IterationState {
-  if (!isObject(input)) {
+  if (!isRecord(input)) {
     return { current_iteration: 0, max_iterations: fallbackMax };
   }
 

@@ -1,5 +1,6 @@
 import { spawn } from 'node:child_process';
 import type { BeadIssue, BeadsSnapshot } from './types';
+import { safeJsonParse, toRecord } from './json';
 
 type ShellResult = {
   status: number | null;
@@ -26,26 +27,11 @@ function runCommand(command: string, args: string[], cwd: string): Promise<Shell
   });
 }
 
-function safeJsonParse(input: string): unknown | null {
-  try {
-    return JSON.parse(input);
-  } catch {
-    return null;
-  }
-}
-
-function asRecord(value: unknown): Record<string, unknown> | null {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) {
-    return null;
-  }
-  return value as Record<string, unknown>;
-}
-
 function extractIssueArray(payload: unknown): unknown[] {
   if (Array.isArray(payload)) {
     return payload;
   }
-  const record = asRecord(payload);
+  const record = toRecord(payload);
   if (!record) {
     return [];
   }
@@ -71,7 +57,7 @@ function toNumberValue(value: unknown): number | undefined {
 }
 
 function normalizeIssue(raw: unknown): BeadIssue | null {
-  const record = asRecord(raw);
+  const record = toRecord(raw);
   if (!record) {
     return null;
   }
