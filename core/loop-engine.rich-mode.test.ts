@@ -1,4 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it, mock } from 'bun:test';
+import { appendFileSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import * as path from 'node:path';
 import type { ProviderAdapter } from '../providers/types';
 import type { LoopPhase } from './live-run-state';
 import type { CliOptions, IterationState, Tone } from './types';
@@ -12,6 +15,7 @@ type RendererCall = {
   setLoopPhase: LoopPhase[];
   setIteration: number[];
   setAgentLogPathCount: number;
+  setBeadsSnapshotCount: number;
   stopped: boolean;
   stop: Array<{ message: string; tone: Tone }>;
 };
@@ -45,6 +49,7 @@ const rendererCalls: RendererCall = {
   setLoopPhase: [],
   setIteration: [],
   setAgentLogPathCount: 0,
+  setBeadsSnapshotCount: 0,
   stopped: false,
   stop: [],
 };
@@ -56,6 +61,8 @@ let iterationState: IterationState = {
 let runAgentStatus = 0;
 let runAgentStdout = '';
 let runAgentStderr = '';
+let runAgentDelayMs = 0;
+let loadBeadsSnapshotCallCount = 0;
 
 function resetState(): void {
   rendererCalls.setRunContextCount = 0;
@@ -66,6 +73,7 @@ function resetState(): void {
   rendererCalls.setLoopPhase.length = 0;
   rendererCalls.setIteration.length = 0;
   rendererCalls.setAgentLogPathCount = 0;
+  rendererCalls.setBeadsSnapshotCount = 0;
   rendererCalls.stopped = false;
   rendererCalls.stop.length = 0;
   iterationState = {
@@ -75,24 +83,29 @@ function resetState(): void {
   runAgentStatus = 0;
   runAgentStdout = '';
   runAgentStderr = '';
+  runAgentDelayMs = 0;
+  loadBeadsSnapshotCallCount = 0;
 }
 
 mock.module('./beads', () => ({
   extractReferencedBeadIds: () => [],
-  loadBeadsSnapshot: async () => ({
-    available: true,
-    source: 'mock',
-    projectRoot: process.cwd(),
-    total: 1,
-    remaining: 1,
-    open: 1,
-    inProgress: 0,
-    blocked: 0,
-    closed: 0,
-    deferred: 0,
-    remainingIssues: [],
-    byId: new Map(),
-  }),
+  loadBeadsSnapshot: async (projectRoot: string) => {
+    loadBeadsSnapshotCallCount += 1;
+    return {
+      available: true,
+      source: 'mock',
+      projectRoot,
+      total: 1,
+      remaining: 1,
+      open: 1,
+      inProgress: 0,
+      blocked: 0,
+      closed: 0,
+      deferred: 0,
+      remainingIssues: [],
+      byId: new Map(),
+    };
+  },
 }));
 
 mock.module('./state', () => ({
@@ -110,11 +123,16 @@ mock.module('./state', () => ({
 
 mock.module('./process-runner', () => ({
   resolveRunnableCommand: (command: string) => command,
-  runAgentProcess: async () => ({
-    status: runAgentStatus,
-    stdout: runAgentStdout,
-    stderr: runAgentStderr,
-  }),
+  runAgentProcess: async () => {
+    if (runAgentDelayMs > 0) {
+      await new Promise((resolve) => setTimeout(resolve, runAgentDelayMs));
+    }
+    return {
+      status: runAgentStatus,
+      stdout: runAgentStdout,
+      stderr: runAgentStderr,
+    };
+  },
   terminateChildProcess: async () => {},
 }));
 
@@ -145,7 +163,7 @@ mock.module('../tui/tui', () => ({
     }
 
     setBeadsSnapshot(): void {
-      return;
+      rendererCalls.setBeadsSnapshotCount += 1;
     }
 
     setAgentLogPath(): void {
@@ -291,5 +309,53 @@ describe('runLoop rich-mode lifecycle', () => {
       (line) => line.includes('[START]') || line.includes('[RUN]') || line.includes('[BATCH]'),
     );
     expect(hasLegacyRows).toBeTrue();
+  });
+
+  it('refreshes beads snapshot in rich mode when issues.jsonl changes mid-iteration', async () => {
+    if (!loopEngineModule) {
+      throw new Error('loop-engine module failed to import');
+    }
+    resetState();
+    runAgentDelayMs = 1_200;
+    const tempRoot = mkdtempSync(path.join(tmpdir(), 'ouroboros-beads-refresh-'));
+    const beadsDir = path.join(tempRoot, '.beads');
+    const issuesPath = path.join(beadsDir, 'issues.jsonl');
+    const promptPath = path.join(tempRoot, 'prompt.md');
+    mkdirSync(beadsDir, { recursive: true });
+    writeFileSync(issuesPath, '{"id":"ouroboros-1","title":"seed","status":"open"}\n', 'utf8');
+    writeFileSync(promptPath, '# prompt', 'utf8');
+
+    const mutateTimer = setTimeout(() => {
+      appendFileSync(
+        issuesPath,
+        '{"id":"ouroboros-2","title":"changed","status":"open"}\n',
+        'utf8',
+      );
+    }, 300);
+
+    const originalTty = process.stdout.isTTY;
+    process.stdout.isTTY = true;
+    const originalLog = console.log;
+    console.log = () => {};
+
+    try {
+      await loopEngineModule.runLoop(
+        {
+          ...baseOptions,
+          projectRoot: tempRoot,
+          developerPromptPath: promptPath,
+          iterationLimit: 1,
+        },
+        mockProvider,
+      );
+    } finally {
+      clearTimeout(mutateTimer);
+      console.log = originalLog;
+      process.stdout.isTTY = originalTty;
+      rmSync(tempRoot, { recursive: true, force: true });
+    }
+
+    expect(loadBeadsSnapshotCallCount).toBeGreaterThan(1);
+    expect(rendererCalls.setBeadsSnapshotCount).toBeGreaterThan(1);
   });
 });

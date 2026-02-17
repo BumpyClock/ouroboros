@@ -26,6 +26,7 @@
 - Bead pick detection should scan raw stream lines and match only remaining bead IDs; preview-only parsing can miss Claude IDs and delay staged launches.
 - Bead ID parsing must accept dotted IDs (for example `ouroboros-7.1`) to avoid missing sub-bead picks.
 - Claude stream-json tool calls can arrive as top-level `type: "assistant"` with nested `message.content[].type: "tool_use"`; classify by nested content type before top-level event type.
+- Rich-mode BEADS panel should refresh when `.beads/issues.jsonl` changes during an iteration; polling file signature is safer than one-time snapshot load.
 
 ## Process
 - Add regression tests for bug fixes when scope permits.

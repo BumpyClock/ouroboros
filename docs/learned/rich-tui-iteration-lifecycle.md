@@ -12,8 +12,10 @@
 - Reworked `core/loop-engine.ts` to create one renderer per loop session and update state per iteration.
 - `runIteration` now suppresses legacy lifecycle row logs in rich mode and always pushes equivalent state updates.
 - Added `core/loop-engine.rich-mode.test.ts` coverage for rich-mode suppression and non-TTY fallback row behavior.
+- Added `.beads/issues.jsonl` signature polling in `core/loop-controller.ts` so rich-mode BEADS snapshot updates mid-iteration when bead state changes.
 
 ## Pitfalls and mitigations
 - `InkLiveRunRenderer` can be unavailable at runtime; fallback renderer uses the same state contract so lifecycle behavior still stays replacement-first when not TTY.
 - Non-TTY fallback still prints lifecycle rows for backward compatibility; no contract change for CLI output consumers.
 - `loopPhase` includes terminal states (`completed`, `failed`, `stopped`) to keep header tone and transitions stable for consumers.
+- Refresh loop watches file signature (`size:mtimeMs`) and only reloads snapshots when it changes to avoid continuous `bd list` calls.
