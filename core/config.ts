@@ -1,8 +1,8 @@
+import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { existsSync, readFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import * as path from 'node:path';
-import { execFileSync } from 'node:child_process';
 import type { CliOptions, ReasoningEffort } from './types';
 
 type PartialOptions = Partial<

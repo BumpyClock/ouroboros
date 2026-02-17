@@ -1,22 +1,12 @@
-import type { BeadIssue, BeadsSnapshot, PreviewEntry, Tone, UsageSummary } from './types';
 import { formatShort, wrapText } from './text';
-
-type LivePreviewLine = {
-  label: string;
-  tone: Tone;
-  text: string;
-};
-
-type LiveAgentSnapshot = {
-  totalEvents: number;
-  lastUpdatedAt: number;
-  lines: LivePreviewLine[];
-};
-
-type AgentSpawnState = {
-  phase: 'queued' | 'launching';
-  message: string;
-};
+import {
+  AgentSpawnState,
+  LiveAgentSnapshot,
+  LivePreviewLine,
+  LiveRunStateStore,
+  labelTone,
+} from './live-run-state';
+import type { BeadIssue, BeadsSnapshot, PreviewEntry, Tone, UsageSummary } from './types';
 
 const SPINNER_FRAMES = ['-', '\\', '|', '/'];
 
@@ -92,16 +82,6 @@ export function progressBar(current: number, total: number): string {
   return `[${'#'.repeat(filled)}${'-'.repeat(width - filled)}] ${Math.round(ratio * 100)}%`;
 }
 
-export function labelTone(label: string): Tone {
-  const normalized = label.toLowerCase();
-  if (normalized.includes('error')) return 'error';
-  if (normalized.includes('tool') || normalized.includes('command')) return 'info';
-  if (normalized.includes('reasoning')) return 'muted';
-  if (normalized.includes('assistant')) return 'success';
-  if (normalized.includes('warn')) return 'warn';
-  return 'neutral';
-}
-
 export function createSpinner(label: string): { stop: (message: string, tone?: Tone) => void } {
   if (!process.stdout.isTTY) {
     console.log(`${badge('RUN', 'info')} ${label}`);
@@ -134,19 +114,10 @@ export function createSpinner(label: string): { stop: (message: string, tone?: T
 
 export class LiveRunRenderer {
   private readonly enabled: boolean;
-  private readonly startedAt = Date.now();
   private readonly agentIds: number[];
-  private readonly previewLines: number;
-  private frameIndex = 0;
   private timer: NodeJS.Timeout | null = null;
   private renderedLineCount = 0;
-  private running = true;
-  private statusMessage = 'starting';
-  private statusTone: Tone = 'info';
-  private readonly agentState = new Map<number, LiveAgentSnapshot>();
-  private readonly agentSpawnState = new Map<number, AgentSpawnState>();
-  private beadsSnapshot: BeadsSnapshot | null = null;
-  private readonly agentPickedBeads = new Map<number, BeadIssue>();
+  private readonly stateStore: LiveRunStateStore;
 
   constructor(
     private readonly iteration: number,
@@ -156,7 +127,12 @@ export class LiveRunRenderer {
   ) {
     this.enabled = Boolean(process.stdout.isTTY);
     this.agentIds = [...agentIds].sort((left, right) => left - right);
-    this.previewLines = Math.max(1, previewLines);
+    this.stateStore = new LiveRunStateStore(
+      iteration,
+      maxIterations,
+      this.agentIds,
+      previewLines,
+    );
     if (!this.enabled) {
       return;
     }
@@ -171,54 +147,36 @@ export class LiveRunRenderer {
     return this.enabled;
   }
 
+  isRunning(): boolean {
+    return this.stateStore.isRunning();
+  }
+
   update(agentId: number, entry: PreviewEntry): void {
-    if (!this.enabled || !this.running) {
+    if (!this.enabled || !this.stateStore.isRunning()) {
       return;
     }
-    const previous = this.agentState.get(agentId) ?? {
-      totalEvents: 0,
-      lastUpdatedAt: Date.now(),
-      lines: [],
-    };
-    const nextLine: LivePreviewLine = {
-      label: entry.label,
-      tone: labelTone(entry.label),
-      text: formatShort(entry.text, 220),
-    };
-    const last = previous.lines[previous.lines.length - 1];
-    const nextLines =
-      last && last.label === nextLine.label && last.text === nextLine.text
-        ? previous.lines
-        : [...previous.lines, nextLine].slice(-this.previewLines);
-    this.agentState.set(agentId, {
-      totalEvents: previous.totalEvents + 1,
-      lastUpdatedAt: Date.now(),
-      lines: nextLines,
-    });
-    this.agentSpawnState.delete(agentId);
-    this.statusMessage = 'streaming events';
-    this.statusTone = 'info';
+    this.stateStore.update(agentId, entry);
     this.render();
   }
 
   setBeadsSnapshot(snapshot: BeadsSnapshot | null): void {
-    this.beadsSnapshot = snapshot;
-    if (!this.enabled || !this.running) {
+    this.stateStore.setBeadsSnapshot(snapshot);
+    if (!this.enabled || !this.stateStore.isRunning()) {
       return;
     }
     this.render();
   }
 
   setAgentPickedBead(agentId: number, issue: BeadIssue): void {
-    this.agentPickedBeads.set(agentId, issue);
-    if (!this.enabled || !this.running) {
+    this.stateStore.setAgentPickedBead(agentId, issue);
+    if (!this.enabled || !this.stateStore.isRunning()) {
       return;
     }
     this.render();
   }
 
   setAgentQueued(agentId: number, message: string): void {
-    this.agentSpawnState.set(agentId, { phase: 'queued', message });
+    this.stateStore.setAgentQueued(agentId, message);
     if (!this.enabled || !this.running) {
       return;
     }
@@ -226,7 +184,7 @@ export class LiveRunRenderer {
   }
 
   setAgentLaunching(agentId: number, message: string): void {
-    this.agentSpawnState.set(agentId, { phase: 'launching', message });
+    this.stateStore.setAgentLaunching(agentId, message);
     if (!this.enabled || !this.running) {
       return;
     }
@@ -242,9 +200,7 @@ export class LiveRunRenderer {
       console.log(`${badge('DONE', tone)} ${message}`);
       return;
     }
-    this.running = false;
-    this.statusMessage = message;
-    this.statusTone = tone;
+    this.stateStore.stop(message, tone);
     this.render();
   }
 

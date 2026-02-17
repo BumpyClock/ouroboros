@@ -5,9 +5,10 @@
   "scripts": {
     "format": "biome format --write .",
     "lint": "biome lint .",
+    "lint:fix": "biome check --write .",
     "lint:check": "biome check .",
     "lint:ci": "biome ci .",
-    "doctor": "bun run format && bun run lint:check"
+    "doctor": "bun run format && bun run lint:fix && bun run lint:check"
   },
   "dependencies": {
     "ink": "^6.7.0",

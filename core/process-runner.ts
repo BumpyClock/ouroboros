@@ -1,5 +1,5 @@
+import { type ChildProcess, spawn } from 'node:child_process';
 import { appendFileSync, existsSync, mkdirSync } from 'node:fs';
-import { spawn, type ChildProcess } from 'node:child_process';
 import * as path from 'node:path';
 import { sleep } from './state';
 import type { StreamResult } from './types';

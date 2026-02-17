@@ -1,5 +1,5 @@
-import { codexProvider } from './codex';
 import { claudeProvider } from './claude';
+import { codexProvider } from './codex';
 import { copilotProvider } from './copilot';
 import type { ProviderAdapter } from './types';
 

@@ -1,8 +1,8 @@
 import { homedir } from 'node:os';
 import * as path from 'node:path';
-import type { CliOptions, ReasoningEffort } from './types';
 import { getProviderAdapter, listProviderNames } from '../providers/registry';
 import { loadOuroborosConfig } from './config';
+import type { CliOptions, ReasoningEffort } from './types';
 
 type CliOverrides = {
   provider?: string;

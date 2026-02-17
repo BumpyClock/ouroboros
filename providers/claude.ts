@@ -3,8 +3,8 @@ import type { CliOptions, PreviewEntry, UsageSummary } from '../core/types';
 import {
   CLAUDE_FIRST_STRING_KEYS,
   collectRawJsonLines,
-  hasNoBeadsMarker,
   firstStringValue,
+  hasNoBeadsMarker,
   isRecord,
   safeJsonParse,
   toJsonCandidates,

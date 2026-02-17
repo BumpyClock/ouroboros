@@ -1,7 +1,7 @@
+import { Box, render, Text } from 'ink';
 import React, { useSyncExternalStore } from 'react';
-import { Box, Text, render } from 'ink';
-import { formatShort } from '../core/text';
 import { badge, labelTone } from '../core/terminal-ui';
+import { formatShort } from '../core/text';
 import type { BeadIssue, BeadsSnapshot, PreviewEntry, Tone } from '../core/types';
 import { buildPreviewRowKey } from './preview-row-key';
 

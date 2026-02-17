@@ -1,20 +1,10 @@
-import { existsSync, readFileSync } from 'node:fs';
 import type { ChildProcess } from 'node:child_process';
+import { existsSync, readFileSync } from 'node:fs';
 import * as path from 'node:path';
-import { formatShort } from './text';
-import {
-  ANSI,
-  LiveRunRenderer,
-  badge,
-  colorize,
-  createSpinner,
-  labelTone,
-  printPreview,
-  printSection,
-  printUsageSummary,
-  progressBar,
-} from './terminal-ui';
+import type { ProviderAdapter } from '../providers/types';
 import { InkLiveRunRenderer } from '../tui/tui';
+import { extractReferencedBeadIds, loadBeadsSnapshot } from './beads';
+import { resolveRunnableCommand, runAgentProcess, terminateChildProcess } from './process-runner';
 import {
   buildRunFileBase,
   isCircuitBroken,
@@ -23,8 +13,19 @@ import {
   sleep,
   writeIterationState,
 } from './state';
-import { resolveRunnableCommand, runAgentProcess, terminateChildProcess } from './process-runner';
-import { extractReferencedBeadIds, loadBeadsSnapshot } from './beads';
+import {
+  ANSI,
+  badge,
+  colorize,
+  createSpinner,
+  LiveRunRenderer,
+  labelTone,
+  printPreview,
+  printSection,
+  printUsageSummary,
+  progressBar,
+} from './terminal-ui';
+import { formatShort } from './text';
 import type {
   BeadIssue,
   BeadsSnapshot,
@@ -34,7 +35,6 @@ import type {
   RunResult,
   Tone,
 } from './types';
-import type { ProviderAdapter } from '../providers/types';
 
 type IterationLiveRenderer = {
   isEnabled(): boolean;
@@ -356,6 +356,21 @@ function printBeadsSnapshot(snapshot: BeadsSnapshot): void {
   }
 }
 
+export function shouldStopFromProviderOutput(
+  provider: ProviderAdapter,
+  previewEntries: PreviewEntry[],
+  lastMessageOutput: string,
+): boolean {
+  if (provider.hasStopMarker(lastMessageOutput)) {
+    return true;
+  }
+  return previewEntries.some(
+    (entry) =>
+      (entry.kind === 'assistant' || entry.kind === 'message') &&
+      provider.hasStopMarker(entry.text),
+  );
+}
+
 export async function runLoop(options: CliOptions, provider: ProviderAdapter): Promise<void> {
   const promptPath = path.resolve(process.cwd(), options.promptPath);
   const statePath = resolveIterationStatePath(process.cwd());
@@ -522,7 +537,7 @@ export async function runLoop(options: CliOptions, provider: ProviderAdapter): P
         const lastMessageOutput = existsSync(entry.lastMessagePath)
           ? readFileSync(entry.lastMessagePath, 'utf8')
           : '';
-        if (provider.hasStopMarker(combined) || provider.hasStopMarker(lastMessageOutput)) {
+        if (shouldStopFromProviderOutput(provider, preview, lastMessageOutput)) {
           stopDetected = true;
         }
         if (!pickedByAgent.has(entry.agentId)) {
