@@ -58,3 +58,4 @@
 ## Cross-platform Path Defaults
 - 2026-02-17: Keep home resolution explicit: prefer HOME, then Windows USERPROFILE, then HOMEDRIVE+HOMEPATH, then homedir().
 - 2026-02-17: Added core/paths.test.ts assertions for platform-agnostic home/log path construction with non-deterministic timestamp handled by format checks only.
+- 2026-02-17: Avoid parallel `bd close` writes; concurrent JSONL flushes can race on Windows (`issues.jsonl.tmp` rename access denied). Use sequential close commands.

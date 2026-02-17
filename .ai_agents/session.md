@@ -210,3 +210,9 @@
   - Learning: one focused shared helper test file can still cover malformed-input resilience for both core consumers without adding heavy mocks.
   - Challenge: keeping this check platform-stable required temporary PATH shim with Win32 .cmd shim (PATH delimiter-aware).
 
+2026-02-17
+- Completed remaining bead closeout cleanup.
+  - Closed residual DONE-status beads: `ouroboros-2.1`, `ouroboros-3.2`, `ouroboros-4`.
+  - Verified with `bd list --all --json` that all issues are now `closed`.
+  - Ran `bd sync` to export updated `.beads/issues.jsonl`.
+  - Challenge: initial parallel `bd close` operations caused JSONL rename race (`issues.jsonl.tmp -> issues.jsonl: Access is denied`); sequential closes resolved it.
