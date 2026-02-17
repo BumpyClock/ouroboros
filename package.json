@@ -1,6 +1,11 @@
 {
   "name": "ouroboros",
-  "private": true,
+  "version": "0.0.1",
+  "author": {
+    "name": "Aditya Sharma",
+    "url": "https://github.com/BumpyClock/ouroboros"
+  },
+  "private": false,
   "type": "module",
   "scripts": {
     "format": "biome format --write . && biome check --write .",

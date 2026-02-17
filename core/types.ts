@@ -4,7 +4,6 @@ export type CliOptions = {
   projectRoot: string;
   projectKey: string;
   provider: string;
-  promptPath: string;
   iterationLimit: number;
   iterationsSet: boolean;
   previewLines: number;

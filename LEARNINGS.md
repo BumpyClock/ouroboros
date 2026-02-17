@@ -23,6 +23,9 @@
 - Use deterministic, stable list-row keys (slot identity), never content-derived placeholders or array index keys.
 - Route rich TTY lifecycle updates through renderer state and preserve non-TTY fallback behavior.
 - Claude print mode with `--output-format stream-json` now requires `--verbose`; keep both flags together in provider args.
+- Bead pick detection should scan raw stream lines and match only remaining bead IDs; preview-only parsing can miss Claude IDs and delay staged launches.
+- Bead ID parsing must accept dotted IDs (for example `ouroboros-7.1`) to avoid missing sub-bead picks.
+- Claude stream-json tool calls can arrive as top-level `type: "assistant"` with nested `message.content[].type: "tool_use"`; classify by nested content type before top-level event type.
 
 ## Process
 - Add regression tests for bug fixes when scope permits.

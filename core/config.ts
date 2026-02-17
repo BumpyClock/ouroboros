@@ -11,6 +11,8 @@ type PartialOptions = Partial<
 > & {
   provider?: string;
   reasoningEffort?: ReasoningEffort;
+  /** Legacy TOML key — mapped to developerPromptPath at merge time */
+  promptPath?: string;
 };
 
 type LoadedConfig = {

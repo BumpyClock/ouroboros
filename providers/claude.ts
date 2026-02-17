@@ -17,8 +17,42 @@ function claudeFirstStringValue(value: unknown): string {
   return firstStringValue(value, CLAUDE_FIRST_STRING_KEYS);
 }
 
+function toLowerType(value: unknown): string {
+  return typeof value === 'string' ? value.toLowerCase() : '';
+}
+
+function inferClaudeEventType(event: Record<string, unknown>): string {
+  const topLevelType = toLowerType(event.type);
+  const message = isRecord(event.message) ? event.message : null;
+  const messageType = toLowerType(message?.type);
+  const messageRole = toLowerType(message?.role);
+
+  const contentSources = [message?.content, event.content];
+  const contentTypes = contentSources
+    .flatMap((content) => (Array.isArray(content) ? content : []))
+    .filter(isRecord)
+    .map((item) => toLowerType(item.type))
+    .filter(Boolean);
+
+  if (contentTypes.some((contentType) => contentType.includes('tool_use'))) {
+    return 'tool';
+  }
+  if (
+    contentTypes.some(
+      (contentType) => contentType.includes('think') || contentType.includes('reason'),
+    )
+  ) {
+    return 'reasoning';
+  }
+  if (contentTypes.some((contentType) => contentType.includes('error'))) {
+    return 'error';
+  }
+
+  return topLevelType || messageType || messageRole;
+}
+
 function extractClaudePreviewLine(event: Record<string, unknown>): PreviewEntry | null {
-  const type = typeof event.type === 'string' ? event.type.toLowerCase() : '';
+  const type = inferClaudeEventType(event);
   const payload = claudeFirstStringValue(
     event.message ?? event.content ?? event.text ?? event.delta ?? event.result ?? event,
   );

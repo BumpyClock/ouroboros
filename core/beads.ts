@@ -88,7 +88,7 @@ function sortRemaining(issues: BeadIssue[]): BeadIssue[] {
 }
 
 export function extractReferencedBeadIds(text: string, knownIds: Set<string>): string[] {
-  const matches = text.match(/\b[a-z][a-z0-9]*(?:-[a-z0-9]+)+\b/gi) ?? [];
+  const matches = text.match(/\b[a-z][a-z0-9]*(?:-[a-z0-9.]+)+\b/gi) ?? [];
   const found = new Set<string>();
   for (const match of matches) {
     if (knownIds.has(match)) {

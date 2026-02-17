@@ -5,7 +5,6 @@ import type { CliOptions, ReasoningEffort } from './types';
 
 type CliOverrides = {
   provider?: string;
-  promptPath?: string;
   iterationLimit?: number;
   iterationsSet: boolean;
   previewLines?: number;
@@ -44,7 +43,7 @@ function parseCliOverrides(argv: string[]): CliOverrides {
       overrides.provider = (argv[i + 1] ?? '').trim().toLowerCase();
       i += 1;
     } else if (arg === '--prompt' || arg === '-p') {
-      overrides.promptPath = argv[i + 1];
+      overrides.developerPromptPath = argv[i + 1];
       i += 1;
     } else if (arg === '--iterations' || arg === '-n') {
       overrides.iterationLimit = parsePositiveInt(argv[i + 1], 50);
@@ -106,7 +105,7 @@ export function printUsage(): void {
 
 Options:
   --provider <name>        Agent provider. default: codex (supported: ${providers})
-  -p, --prompt <path>      Prompt file path. default: .ai_agents/prompt.md
+  -p, --prompt <path>      Developer prompt file path (fallback: .ai_agents/prompts/developer.md, .ai_agents/prompt.md)
   -n, --iterations <n>     Max loops. default: 50
   -l, --preview <n>        Number of recent messages shown. default: 3
   -P, --parallel <n>       Run n agents per iteration. default: 1
@@ -126,8 +125,8 @@ Review loop:
       --review                   Enable slot-local review/fix loop (default: off)
       --no-review                Disable review loop
       --review-max-fix-attempts <n>  Max fix attempts per review cycle. default: 5
-      --developer-prompt <path>  Developer prompt file path (optional)
-      --reviewer-prompt <path>   Reviewer prompt file path (optional)
+      --developer-prompt <path>  Developer prompt (fallback: .ai_agents/prompts/developer.md, .ai_agents/prompt.md)
+      --reviewer-prompt <path>   Reviewer prompt (fallback: .ai_agents/prompts/reviewer.md)
 
 Config:
   - Global config: ~/.ouroboros/config.toml
@@ -167,11 +166,6 @@ export function parseArgs(argv = process.argv.slice(2)): CliOptions {
     projectRoot: config.projectRoot,
     projectKey: config.projectKey,
     provider: provider.name,
-    promptPath: pick(
-      cli.promptPath,
-      config.runtimeConfig.promptPath,
-      '.ai_agents/prompt.md',
-    ) as string,
     iterationLimit,
     iterationsSet,
     previewLines: pick(cli.previewLines, config.runtimeConfig.previewLines, 3) as number,
@@ -198,7 +192,11 @@ export function parseArgs(argv = process.argv.slice(2)): CliOptions {
       config.runtimeConfig.reviewMaxFixAttempts,
       5,
     ) as number,
-    developerPromptPath: pick(cli.developerPromptPath, config.runtimeConfig.developerPromptPath),
+    developerPromptPath: pick(
+      cli.developerPromptPath,
+      config.runtimeConfig.developerPromptPath,
+      config.runtimeConfig.promptPath,
+    ),
     reviewerPromptPath: pick(cli.reviewerPromptPath, config.runtimeConfig.reviewerPromptPath),
   };
 }

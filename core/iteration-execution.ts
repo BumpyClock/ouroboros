@@ -1,10 +1,19 @@
 import type { ChildProcess } from 'node:child_process';
+import { execSync } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
+import * as path from 'node:path';
 import type { ProviderAdapter } from '../providers/types';
 import { extractReferencedBeadIds } from './beads';
 import type { IterationSummary, LoopPhase, RunContext } from './live-run-state';
 import { buildRuns, summarizeArgsForLog } from './loop-runs';
 import { runAgentProcess } from './process-runner';
+import {
+  buildReviewerContext,
+  isReviewResult,
+  parseReviewerVerdict,
+  type ReviewResult,
+} from './review';
+import { buildRunFileBase } from './state';
 import {
   ANSI,
   badge,
@@ -48,6 +57,13 @@ type ActiveSpinnerStopRef = {
   value: ((message: string, tone?: Tone) => void) | null;
 };
 
+export type SlotReviewOutcome = {
+  passed: boolean;
+  fixAttempts: number;
+  lastVerdict?: ReviewResult;
+  failureReason?: string;
+};
+
 export type AggregatedIterationOutput = {
   pickedByAgent: Map<number, BeadIssue>;
   usageAggregate: UsageSummary | null;
@@ -57,7 +73,197 @@ export type AggregatedIterationOutput = {
     result: RunResult;
   }>;
   stopDetected: boolean;
+  reviewOutcomes: Map<number, SlotReviewOutcome>;
 };
+
+function findMatchedRemainingBeadIssue(
+  text: string,
+  remainingBeadIds: Set<string>,
+  beadsById: Map<string, BeadIssue>,
+): BeadIssue | null {
+  const matchedIds = extractReferencedBeadIds(text, remainingBeadIds);
+  if (matchedIds.length === 0) {
+    return null;
+  }
+  return beadsById.get(matchedIds[0]) ?? null;
+}
+
+function captureGitDiff(): string {
+  try {
+    return execSync('git diff HEAD', {
+      encoding: 'utf8',
+      timeout: 15_000,
+      maxBuffer: 1024 * 1024,
+    });
+  } catch {
+    return '(git diff unavailable)';
+  }
+}
+
+type SlotReviewInput = {
+  agentId: number;
+  iteration: number;
+  implementResult: RunResult;
+  pickedBead: BeadIssue;
+  options: CliOptions;
+  provider: ProviderAdapter;
+  reviewerPrompt: string;
+  command: string;
+  logDir: string;
+  activeChildren: Set<ChildProcess>;
+  liveRendererEnabled: boolean;
+};
+
+async function runSlotReviewLoop(input: SlotReviewInput): Promise<SlotReviewOutcome> {
+  const {
+    agentId,
+    iteration,
+    implementResult,
+    pickedBead,
+    options,
+    provider,
+    reviewerPrompt,
+    command,
+    logDir,
+    activeChildren,
+    liveRendererEnabled,
+  } = input;
+
+  const maxFix = options.reviewMaxFixAttempts;
+  let lastImplementOutput = `${implementResult.result.stdout}\n${implementResult.result.stderr}`;
+  let lastImplementLogPath = implementResult.jsonlLogPath;
+  let lastRunResult = implementResult;
+
+  for (let fixAttempt = 0; fixAttempt <= maxFix; fixAttempt += 1) {
+    const phase = fixAttempt === 0 ? 'review' : `re-review (fix ${fixAttempt})`;
+    const reviewLogBase = `${buildRunFileBase(iteration)}-agent-${String(agentId).padStart(2, '0')}-review-${fixAttempt}`;
+    const reviewLogPath = path.join(logDir, `${reviewLogBase}.jsonl`);
+    const reviewLastMessagePath = path.join(logDir, `${reviewLogBase}.last-message.txt`);
+
+    if (!liveRendererEnabled) {
+      console.log(`${badge(`A${agentId}`, 'muted')} ${phase} for bead ${pickedBead.id}`);
+    }
+
+    const gitDiff = captureGitDiff();
+    const reviewerContext = buildReviewerContext({
+      bead: pickedBead,
+      implementerOutput: lastImplementOutput.slice(0, 50_000),
+      implementerLogPath: lastImplementLogPath,
+      gitDiff,
+      parallelAgents: options.parallelAgents,
+      fixAttempt: fixAttempt > 0 ? fixAttempt : undefined,
+      previousFollowUp: undefined,
+    });
+
+    const fullReviewerPrompt = `${reviewerPrompt}\n\n${reviewerContext}`;
+    const reviewArgs = provider.buildExecArgs(fullReviewerPrompt, reviewLastMessagePath, options);
+
+    let trackedChild: ChildProcess | null = null;
+    const reviewResult = await runAgentProcess({
+      prompt: fullReviewerPrompt,
+      command,
+      args: reviewArgs,
+      logPath: reviewLogPath,
+      showRaw: false,
+      formatCommandHint: provider.formatCommandHint,
+      onChildChange: (child) => {
+        if (child) {
+          trackedChild = child;
+          activeChildren.add(child);
+        } else if (trackedChild) {
+          activeChildren.delete(trackedChild);
+          trackedChild = null;
+        }
+      },
+    });
+
+    const reviewOutput = `${reviewResult.stdout}\n${reviewResult.stderr}`.trim();
+    const verdict = parseReviewerVerdict(reviewOutput);
+
+    if (!isReviewResult(verdict)) {
+      if (!liveRendererEnabled) {
+        console.log(
+          `${badge(`A${agentId}`, 'error')} reviewer output parse failed: ${verdict.reason}`,
+        );
+      }
+      return {
+        passed: false,
+        fixAttempts: fixAttempt,
+        failureReason: `reviewer contract violation: ${verdict.reason}`,
+      };
+    }
+
+    if (!liveRendererEnabled) {
+      console.log(
+        `${badge(`A${agentId}`, verdict.verdict === 'pass' ? 'success' : 'warn')} reviewer verdict: ${verdict.verdict}`,
+      );
+    }
+
+    if (verdict.verdict === 'pass') {
+      return { passed: true, fixAttempts: fixAttempt, lastVerdict: verdict };
+    }
+
+    // Drift detected — run fix agent if attempts remain
+    if (fixAttempt >= maxFix) {
+      return {
+        passed: false,
+        fixAttempts: fixAttempt,
+        lastVerdict: verdict,
+        failureReason: `drift unresolved after ${maxFix} fix attempt(s)`,
+      };
+    }
+
+    const fixLogBase = `${buildRunFileBase(iteration)}-agent-${String(agentId).padStart(2, '0')}-fix-${fixAttempt + 1}`;
+    const fixLogPath = path.join(logDir, `${fixLogBase}.jsonl`);
+    const fixLastMessagePath = path.join(logDir, `${fixLogBase}.last-message.txt`);
+
+    if (!liveRendererEnabled) {
+      console.log(
+        `${badge(`A${agentId}`, 'info')} fix attempt ${fixAttempt + 1}/${maxFix} for bead ${pickedBead.id}`,
+      );
+    }
+
+    const fixPrompt = `${lastImplementOutput.length > 0 ? '' : ''}The reviewer found drift in your implementation of bead ${pickedBead.id}: ${pickedBead.title}\n\nReviewer feedback:\n${verdict.followUpPrompt}\n\nPlease fix the issues described above.`;
+    const fixArgs = provider.buildExecArgs(fixPrompt, fixLastMessagePath, options);
+
+    let fixTrackedChild: ChildProcess | null = null;
+    const fixResult = await runAgentProcess({
+      prompt: fixPrompt,
+      command,
+      args: fixArgs,
+      logPath: fixLogPath,
+      showRaw: false,
+      formatCommandHint: provider.formatCommandHint,
+      onChildChange: (child) => {
+        if (child) {
+          fixTrackedChild = child;
+          activeChildren.add(child);
+        } else if (fixTrackedChild) {
+          activeChildren.delete(fixTrackedChild);
+          fixTrackedChild = null;
+        }
+      },
+    });
+
+    lastImplementOutput = `${fixResult.stdout}\n${fixResult.stderr}`;
+    lastImplementLogPath = fixLogPath;
+    lastRunResult = {
+      agentId,
+      jsonlLogPath: fixLogPath,
+      lastMessagePath: fixLastMessagePath,
+      result: fixResult,
+    };
+
+    // Update the reviewerContext with fix attempt info for the next review round
+    // (handled at top of loop via fixAttempt increment)
+  }
+
+  return {
+    passed: false,
+    fixAttempts: maxFix,
+    failureReason: `drift unresolved after ${maxFix} fix attempt(s)`,
+  };
+}
 
 export async function runIteration(
   iteration: number,
@@ -122,7 +328,7 @@ export async function runIteration(
   const liveSeen = new Set<string>();
   const liveCountByAgent = new Map<number, number>();
   const pickedByAgent = new Map<number, BeadIssue>();
-  const knownBeadIds = new Set(beadsSnapshot.byId.keys());
+  const remainingBeadIds = new Set(beadsSnapshot.remainingIssues.map((issue) => issue.id));
   for (const run of runs) {
     if (run.agentId === 1) {
       if (liveRendererEnabled) {
@@ -229,23 +435,35 @@ export async function runIteration(
             if (options.showRaw) {
               return;
             }
-            const liveEntries = provider
-              .previewEntriesFromLine(line)
-              .filter(
-                (entry) =>
-                  entry.kind === 'reasoning' ||
-                  entry.kind === 'tool' ||
-                  entry.kind === 'assistant' ||
-                  entry.kind === 'error',
+            const matchedFromRawLine = findMatchedRemainingBeadIssue(
+              line,
+              remainingBeadIds,
+              beadsSnapshot.byId,
+            );
+            if (matchedFromRawLine) {
+              markPickedBead(matchedFromRawLine);
+            }
+
+            const previewEntries = provider.previewEntriesFromLine(line);
+            for (const entry of previewEntries) {
+              const matchedFromEntry = findMatchedRemainingBeadIssue(
+                entry.text,
+                remainingBeadIds,
+                beadsSnapshot.byId,
               );
-            for (const entry of liveEntries) {
-              const matchedIds = extractReferencedBeadIds(entry.text, knownBeadIds);
-              if (matchedIds.length > 0) {
-                const matchedIssue = beadsSnapshot.byId.get(matchedIds[0]);
-                if (matchedIssue) {
-                  markPickedBead(matchedIssue);
-                }
+              if (matchedFromEntry) {
+                markPickedBead(matchedFromEntry);
               }
+            }
+
+            const liveEntries = previewEntries.filter(
+              (entry) =>
+                entry.kind === 'reasoning' ||
+                entry.kind === 'tool' ||
+                entry.kind === 'assistant' ||
+                entry.kind === 'error',
+            );
+            for (const entry of liveEntries) {
               if (liveRendererEnabled) {
                 liveRenderer?.update(run.agentId, entry);
                 continue;
@@ -274,12 +492,13 @@ export async function runIteration(
 
         if (!pickedBeadSet) {
           const combined = `${result.stdout}\n${result.stderr}`;
-          const fallbackIds = extractReferencedBeadIds(combined, knownBeadIds);
-          if (fallbackIds.length > 0) {
-            const fallbackIssue = beadsSnapshot.byId.get(fallbackIds[0]);
-            if (fallbackIssue) {
-              markPickedBead(fallbackIssue);
-            }
+          const fallbackIssue = findMatchedRemainingBeadIssue(
+            combined,
+            remainingBeadIds,
+            beadsSnapshot.byId,
+          );
+          if (fallbackIssue) {
+            markPickedBead(fallbackIssue);
           }
         }
 
@@ -335,7 +554,7 @@ export function aggregateIterationOutput(params: {
   let usageAggregate: UsageSummary | null = null;
   let stopDetected = false;
 
-  const knownBeadIds = new Set(beadsSnapshot.byId.keys());
+  const remainingBeadIds = new Set(beadsSnapshot.remainingIssues.map((issue) => issue.id));
   for (const entry of results) {
     const combined = `${entry.result.stdout}\n${entry.result.stderr}`.trim();
     const context = results.length > 1 ? `agent ${entry.agentId}` : undefined;
@@ -408,12 +627,13 @@ export function aggregateIterationOutput(params: {
     }
 
     if (!pickedByAgent.has(entry.agentId)) {
-      const fallbackIds = extractReferencedBeadIds(combined, knownBeadIds);
-      if (fallbackIds.length > 0) {
-        const fallbackIssue = beadsSnapshot.byId.get(fallbackIds[0]);
-        if (fallbackIssue) {
-          pickedByAgent.set(entry.agentId, fallbackIssue);
-        }
+      const fallbackIssue = findMatchedRemainingBeadIssue(
+        combined,
+        remainingBeadIds,
+        beadsSnapshot.byId,
+      );
+      if (fallbackIssue) {
+        pickedByAgent.set(entry.agentId, fallbackIssue);
       }
     }
     const picked = pickedByAgent.get(entry.agentId);

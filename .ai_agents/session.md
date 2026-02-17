@@ -216,3 +216,36 @@
   - Verified with `bd list --all --json` that all issues are now `closed`.
   - Ran `bd sync` to export updated `.beads/issues.jsonl`.
   - Challenge: initial parallel `bd close` operations caused JSONL rename race (`issues.jsonl.tmp -> issues.jsonl: Access is denied`); sequential closes resolved it.
+
+2026-02-17
+- Completed bead `ouroboros-7.1` (review/developer runtime config schema and CLI flags).
+  - Added `reviewEnabled` (bool, default false), `reviewMaxFixAttempts` (int, default 5), `developerPromptPath` (optional), `reviewerPromptPath` (optional) to `CliOptions` type.
+  - Extended `normalizeConfigRecord` in `core/config.ts` for review fields with existing type coercion helpers.
+  - Added CLI flags: `--review`, `--no-review`, `--review-max-fix-attempts`, `--developer-prompt`, `--reviewer-prompt`.
+  - Wired through `parseArgs` with standard CLI > project > global > default precedence.
+  - Updated `printUsage` and `docs/config.md` with review loop section and TOML key documentation.
+  - `bun run doctor` clean (only pre-existing unused import warning in loop-controller.ts).
+  - Learning: review config fields follow the same pattern as existing fields — add to type, config normalizer, CLI overrides, parseArgs precedence, usage, docs.
+  - Challenge: none; straightforward extension of existing config/CLI infrastructure.
+
+2026-02-17
+- Completed bead `ouroboros-7.2` (prompt directory defaults and optional prompt-file resolution).
+  - Created `core/prompts.ts` with `resolvePromptPath` (role-based fallback: explicit > `.ai_agents/prompts/{role}.md` > `.ai_agents/prompt.md` legacy), `resolveDeveloperPromptPath` (throws on missing), `resolveReviewerPromptPath` (returns null on missing).
+  - Wired prompt resolution in `core/loop-engine.ts` startup: developer prompt required, reviewer prompt required only when `--review` enabled.
+  - Added `core/prompts.test.ts` with 13 tests covering fallback precedence, missing file error reporting, role isolation (reviewer doesn't use legacy), and throw/null contracts.
+  - Fixed pre-existing unused `progressBar` import in `core/loop-controller.ts`; `bun run doctor` now fully clean (0 warnings).
+  - Updated `docs/config.md` with prompt resolution section, directory layout, and fallback chains.
+  - Learning: using real temp dirs in tests is simpler than mocking `existsSync` for path resolution tests in bun.
+  - Challenge: initial test file had leftover mock scaffolding from abandoned fs-mock approach; cleaned up before final commit.
+
+2026-02-17
+- Completed bead `ouroboros-7.3` (reviewer verdict contract parser and follow-up prompt builder).
+  - Created `core/review.ts` with:
+    - `ReviewVerdict` type (`'pass' | 'drift'`), `ReviewResult`, `ReviewFailure` types.
+    - `parseReviewerVerdict`: strict JSON parser extracting `{verdict, followUpPrompt}` from reviewer output; handles preamble text by finding first JSON object; returns typed failure on any contract violation.
+    - `isReviewResult` / `isReviewFailure` type guards.
+    - `buildReviewerContext`: composes reviewer prompt context with bead metadata, implementer output (capped 50k chars), git diff snapshot, parallel-agent warning, fix-attempt history, and response contract instructions.
+  - Added `core/review.test.ts` with 24 tests covering: valid pass/drift, JSON extraction from surrounding text, empty/whitespace, no JSON, malformed JSON, invalid verdict, null verdict, missing/non-string followUpPrompt, array wrapping, bead metadata inclusion, output placeholders, diff placeholders, parallel warning toggle, fix attempt context, response contract, and priority omission.
+  - `bun run doctor` fully clean (0 warnings).
+  - Learning: extracting first `{` to last `}` is sufficient for reviewer output parsing since reviewers may emit preamble text before the JSON verdict.
+  - Challenge: initial `RunResult` import was unused; caught by doctor lint pass.

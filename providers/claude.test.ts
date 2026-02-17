@@ -7,7 +7,7 @@ function createOptions(overrides: Partial<CliOptions> = {}): CliOptions {
     projectRoot: '/tmp/project',
     projectKey: 'project',
     provider: 'claude',
-    promptPath: '.ai_agents/prompt.md',
+    developerPromptPath: '.ai_agents/prompt.md',
     iterationLimit: 3,
     iterationsSet: false,
     previewLines: 5,
@@ -43,5 +43,40 @@ describe('claudeProvider.buildExecArgs', () => {
     );
     expect(args).toContain('--permission-mode');
     expect(args).toContain('bypassPermissions');
+  });
+});
+
+describe('claudeProvider.previewEntriesFromLine', () => {
+  it('classifies nested assistant tool_use content as tool events', () => {
+    const line = JSON.stringify({
+      type: 'assistant',
+      message: {
+        type: 'message',
+        role: 'assistant',
+        content: [{ type: 'tool_use', id: 'toolu_123', name: 'TodoWrite', input: { todos: [] } }],
+      },
+    });
+
+    const [entry] = claudeProvider.previewEntriesFromLine(line);
+    expect(entry).toBeDefined();
+    expect(entry?.kind).toBe('tool');
+    expect(entry?.label).toBe('tool');
+    expect(entry?.text).toContain('TodoWrite');
+  });
+
+  it('keeps assistant text messages classified as assistant events', () => {
+    const line = JSON.stringify({
+      type: 'assistant',
+      message: {
+        type: 'message',
+        role: 'assistant',
+        content: [{ type: 'text', text: 'Now write the tests' }],
+      },
+    });
+
+    const [entry] = claudeProvider.previewEntriesFromLine(line);
+    expect(entry).toBeDefined();
+    expect(entry?.kind).toBe('assistant');
+    expect(entry?.label).toBe('assistant');
   });
 });

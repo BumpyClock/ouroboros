@@ -20,7 +20,7 @@ const baseOptions: CliOptions = {
   projectRoot: process.cwd(),
   projectKey: 'ouroboros',
   provider: 'mock',
-  promptPath: '.ai_agents/prompt.md',
+  developerPromptPath: '.ai_agents/prompt.md',
   iterationLimit: 1,
   iterationsSet: true,
   previewLines: 2,
@@ -32,6 +32,8 @@ const baseOptions: CliOptions = {
   yolo: false,
   logDir: '.',
   showRaw: false,
+  reviewEnabled: false,
+  reviewMaxFixAttempts: 5,
 };
 
 const rendererCalls: RendererCall = {
