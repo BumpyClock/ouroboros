@@ -2,6 +2,7 @@ import { describe, expect, it } from 'bun:test';
 import {
   buildTopLevelScopePrompt,
   shouldIgnoreStopMarkerForNoBeads,
+  shouldPrintInitialSummary,
   shouldStopFromTopLevelExhaustion,
 } from '../../core/loop-controller';
 import type { BeadsSnapshot } from '../../core/types';
@@ -113,5 +114,17 @@ describe('loop controller stop-marker behavior', () => {
         beadsSnapshot: snapshot,
       }),
     ).toBeFalse();
+  });
+
+  it('prints startup summary in non-tty mode', () => {
+    expect(shouldPrintInitialSummary({ showRaw: false }, false)).toBeTrue();
+  });
+
+  it('prints startup summary in raw stream mode even on tty', () => {
+    expect(shouldPrintInitialSummary({ showRaw: true }, true)).toBeTrue();
+  });
+
+  it('suppresses startup summary in rich tty mode', () => {
+    expect(shouldPrintInitialSummary({ showRaw: false }, true)).toBeFalse();
   });
 });

@@ -70,6 +70,13 @@ export function shouldStopFromTopLevelExhaustion(params: {
   );
 }
 
+export function shouldPrintInitialSummary(
+  options: Pick<CliOptions, 'showRaw'>,
+  isTty = Boolean(process.stdout.isTTY),
+): boolean {
+  return options.showRaw || !isTty;
+}
+
 function createLiveRenderer(
   options: CliOptions,
   iteration: number,
@@ -161,7 +168,9 @@ export async function runLoopController(
     throw new Error(`Prompt file not found: ${promptPath}`);
   }
 
-  printInitialSummary(provider, options, command, promptPath, logDir, state.max_iterations);
+  if (shouldPrintInitialSummary(options)) {
+    printInitialSummary(provider, options, command, promptPath, logDir, state.max_iterations);
+  }
 
   let stoppedByProviderMarker = false;
   let reachedCircuit = false;
