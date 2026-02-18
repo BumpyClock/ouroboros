@@ -2120,6 +2120,12 @@ function LiveView({ renderer }: { renderer: InkLiveRunRenderer }): React.JSX.Ele
   const viewportRows = Math.max(18, rows - 1);
 
   useInput((input, key) => {
+    const isCtrlC = (key.ctrl && input.toLowerCase() === 'c') || input === '\u0003';
+    const isQuitKey = input.toLowerCase() === 'q';
+    if (isCtrlC || isQuitKey) {
+      renderer.requestQuit();
+      return;
+    }
     const next = renderer.transition(input, key);
     if (next !== null) {
       setViewTick((value) => value + 1);
@@ -2161,6 +2167,7 @@ export class InkLiveRunRenderer {
   private app: ReturnType<typeof render> | null = null;
   private toasts: Toast[] = [];
   private toastCounter = 1;
+  private quitRequested = false;
   private readonly toastMessageCooldown = new Map<string, number>();
   private readonly listeners = new Set<Listener>();
 
@@ -2411,6 +2418,26 @@ export class InkLiveRunRenderer {
     }
     if (message) {
       console.log(`${badge('DONE', tone)} ${message}`);
+    }
+  }
+
+  requestQuit(): void {
+    if (this.quitRequested) {
+      return;
+    }
+    this.quitRequested = true;
+    if (this.timer) {
+      clearInterval(this.timer);
+      this.timer = null;
+    }
+    if (this.app) {
+      this.app.unmount();
+      this.app = null;
+    }
+    try {
+      process.kill(process.pid, 'SIGINT');
+    } catch {
+      process.exit(130);
     }
   }
 
