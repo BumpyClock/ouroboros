@@ -48,6 +48,19 @@
 +---------------------------------------------------------------+
 ```
 
+### Full-screen shell contract (current Ink renderer)
+- The live TUI renders as a single full-screen frame sized to terminal rows/columns.
+- Shell regions are persistent:
+  - top status strip (run readiness, active view, iteration progress, elapsed seconds)
+  - middle split panes (left navigation list + right detail surface)
+  - bottom shortcut strip (global and view-specific keyboard hints)
+- Left pane content is mode-driven:
+  - tasks/reviewer: per-agent task rows
+  - iterations: iteration rows
+  - parallel views: worker rows
+  - merge/conflict: queue/conflict rows
+- Right pane content is mode-driven detail surface and can include inline help/dashboard/toast sections.
+
 ## Card Header and Notch Rules
 
 ### Notch

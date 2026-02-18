@@ -450,7 +450,7 @@ function renderStatusBadge(label: string, tone: Tone): React.JSX.Element {
   return <StatusText tone={tone} text={`[${label}]`} />;
 }
 
-function renderHeader(state: LiveRunHeaderState): React.JSX.Element {
+function _renderHeader(state: LiveRunHeaderState): React.JSX.Element {
   const tone = state.tone;
   const body = ` ${state.spinner} iteration ${state.iteration}/${state.maxIterations} ${state.statusMessage} ${state.elapsedSeconds.toFixed(1)}s`;
   const barWidth = Math.max(16, Math.min(28, (process.stdout.columns ?? 120) - 68));
@@ -988,6 +988,395 @@ function renderViewHelp(helpVisible: boolean): React.JSX.Element | null {
   );
 }
 
+type PaneRow = {
+  key: string;
+  tone: Tone;
+  text: string;
+};
+
+function selectWindowRows(rows: PaneRow[], selectedIndex: number, maxRows: number): PaneRow[] {
+  if (rows.length <= maxRows) {
+    return rows;
+  }
+  const safeSelected = clampIndex(selectedIndex, 0, rows.length - 1);
+  const half = Math.floor(maxRows / 2);
+  const start = Math.max(0, Math.min(safeSelected - half, rows.length - maxRows));
+  return rows.slice(start, start + maxRows);
+}
+
+function leftPaneTitle(view: TuiView): string {
+  if (view === 'parallel-overview' || view === 'parallel-detail') {
+    return 'Workers';
+  }
+  if (view === 'iterations' || view === 'iteration-detail') {
+    return 'Iterations';
+  }
+  if (view === 'merge-progress') {
+    return 'Merge Queue';
+  }
+  if (view === 'conflict-resolution') {
+    return 'Conflicts';
+  }
+  return 'Tasks';
+}
+
+function leftPaneSelectionIndex(uiState: TuiInteractionState): number {
+  if (uiState.view === 'iterations' || uiState.view === 'iteration-detail') {
+    return Math.max(0, uiState.selectedIteration - 1);
+  }
+  if (uiState.view === 'parallel-overview' || uiState.view === 'parallel-detail') {
+    return Math.max(0, uiState.selectedWorkerIndex);
+  }
+  if (uiState.view === 'merge-progress' || uiState.view === 'conflict-resolution') {
+    return Math.max(0, uiState.selectedConflictIndex);
+  }
+  return Math.max(0, uiState.selectedAgentIndex);
+}
+
+function buildLeftPaneRows(
+  state: LiveRunState,
+  renderer: InkLiveRunRenderer,
+  uiState: TuiInteractionState,
+  timeline: LiveRunIterationTimeline,
+  maxWidth: number,
+): PaneRow[] {
+  if (uiState.view === 'iterations' || uiState.view === 'iteration-detail') {
+    return timeline.markers.map((marker) => {
+      const icon = marker.failed ? '⊘' : marker.succeeded ? '✓' : marker.isCurrent ? '▶' : '○';
+      const tone: Tone = marker.failed
+        ? 'error'
+        : marker.succeeded
+          ? 'success'
+          : marker.isCurrent
+            ? 'info'
+            : 'muted';
+      const label = marker.failed
+        ? 'failed'
+        : marker.succeeded
+          ? 'done'
+          : marker.isCurrent
+            ? 'running'
+            : 'pending';
+      return {
+        key: `iter-row-${marker.iteration}`,
+        tone,
+        text: formatShort(
+          `${icon} Iteration ${String(marker.iteration).padStart(2, '0')}  ${label}`,
+          maxWidth,
+        ),
+      };
+    });
+  }
+
+  if (uiState.view === 'merge-progress' || uiState.view === 'conflict-resolution') {
+    const rows = timeline.markers.filter(
+      (marker) =>
+        marker.failed || marker.retryCount > 0 || marker.iteration <= timeline.currentIteration,
+    );
+    if (rows.length === 0) {
+      return [{ key: 'merge-empty', tone: 'muted', text: 'no merge activity yet' }];
+    }
+    return rows.map((marker) => {
+      const label = marker.failed
+        ? 'conflicted'
+        : marker.retryCount > 0
+          ? `retry ${marker.retryCount}`
+          : 'queued';
+      return {
+        key: `merge-row-${marker.iteration}`,
+        tone: marker.failed ? 'warn' : marker.retryCount > 0 ? 'info' : 'muted',
+        text: formatShort(
+          `${marker.failed ? '⚡' : marker.retryCount > 0 ? '⟳' : '⋯'} I${String(marker.iteration).padStart(2, '0')} ${label}`,
+          maxWidth,
+        ),
+      };
+    });
+  }
+
+  if (uiState.view === 'parallel-overview' || uiState.view === 'parallel-detail') {
+    if (state.agentIds.length === 0) {
+      return [{ key: 'worker-empty', tone: 'muted', text: 'no workers yet' }];
+    }
+    return state.agentIds.map((agentId, index) => {
+      const selector = renderer.getAgentSelector(agentId);
+      const label = selector.pickedBead
+        ? `${selector.pickedBead.id} ${selector.pickedBead.title}`
+        : 'no bead picked';
+      return {
+        key: `worker-${agentId}`,
+        tone: selector.statusTone,
+        text: formatShort(`W${index + 1} ${label}`, maxWidth),
+      };
+    });
+  }
+
+  if (state.agentIds.length === 0) {
+    return [{ key: 'task-empty', tone: 'muted', text: 'no tasks yet' }];
+  }
+  return state.agentIds.map((agentId) => {
+    const selector = renderer.getAgentSelector(agentId);
+    const taskTitle =
+      selector.pickedBead === null
+        ? 'no bead picked'
+        : `${selector.pickedBead.id} ${selector.pickedBead.title}`;
+    return {
+      key: `task-agent-${agentId}`,
+      tone: selector.statusTone,
+      text: formatShort(`${selector.statusLabel} ${taskTitle}`, maxWidth),
+    };
+  });
+}
+
+function renderStatusStrip(
+  headerState: LiveRunHeaderState,
+  state: LiveRunState,
+  uiState: TuiInteractionState,
+): React.JSX.Element {
+  const readiness = state.running ? 'Ready' : headerState.statusMessage;
+  return (
+    <Box
+      borderStyle="single"
+      borderColor={toneToColor('info')}
+      paddingX={1}
+      flexDirection="row"
+      justifyContent="space-between"
+    >
+      <Text>
+        <StatusText tone={state.running ? 'info' : headerState.tone} text={`◉ ${readiness}`} />
+      </Text>
+      <Text>
+        <StatusText tone="info" text="ouroboros/tui" />{' '}
+        <StatusText
+          tone="muted"
+          text={`${uiState.view} · ${headerState.iteration}/${headerState.maxIterations} · ${headerState.elapsedSeconds.toFixed(0)}s`}
+        />
+      </Text>
+    </Box>
+  );
+}
+
+function renderFooterStrip(): React.JSX.Element {
+  return (
+    <Box borderStyle="single" borderColor={toneToColor('muted')} paddingX={1}>
+      <Text>
+        <StatusText
+          tone="muted"
+          text="q:Quit  w:Workers  m:Merge  a/r/s:Conflict  Enter:Detail  Esc:Back  Tab:Focus  ↑↓:Navigate  ?:Help"
+        />
+      </Text>
+    </Box>
+  );
+}
+
+function renderFullScreenBody(
+  state: LiveRunState,
+  renderer: InkLiveRunRenderer,
+  uiState: TuiInteractionState,
+  timeline: LiveRunIterationTimeline,
+  toasts: Toast[],
+  columns: number,
+  rows: number,
+): React.JSX.Element {
+  const leftPaneWidth = Math.max(26, Math.min(44, Math.floor(columns * 0.26)));
+  const rightPaneWidth = Math.max(40, columns - leftPaneWidth - 9);
+  const paneRows = buildLeftPaneRows(
+    state,
+    renderer,
+    uiState,
+    timeline,
+    Math.max(18, leftPaneWidth - 7),
+  );
+  const visibleRows = selectWindowRows(
+    paneRows,
+    leftPaneSelectionIndex(uiState),
+    Math.max(6, rows - 11),
+  );
+
+  const selectedIndex = leftPaneSelectionIndex(uiState);
+  const body: React.JSX.Element[] = [];
+  if (uiState.view === 'tasks' || uiState.view === 'reviewer') {
+    const selectedAgentId =
+      state.agentIds.length === 0
+        ? null
+        : state.agentIds[clampIndex(uiState.selectedAgentIndex, 0, state.agentIds.length - 1)];
+    const selector = selectedAgentId === null ? null : renderer.getAgentSelector(selectedAgentId);
+    const snapshot =
+      selectedAgentId === null ? null : (state.agentState.get(selectedAgentId) ?? null);
+    const title =
+      selector?.pickedBead === null || selector === null
+        ? 'no bead selected'
+        : `${selector.pickedBead.id} ${selector.pickedBead.title}`;
+    body.push(
+      <Text key="detail-title">
+        <StatusText
+          tone="success"
+          text={`▸ ${formatShort(title, Math.max(20, rightPaneWidth - 6))}`}
+        />
+      </Text>,
+    );
+    body.push(
+      <Text key="detail-id">
+        <StatusText tone="muted" text={`ID: ${selector?.pickedBead?.id ?? 'n/a'}`} />
+      </Text>,
+    );
+    body.push(
+      <Box
+        key="detail-meta"
+        marginTop={1}
+        borderStyle="single"
+        borderColor={toneToColor('muted')}
+        flexDirection="column"
+        paddingX={1}
+      >
+        <Text>
+          <StatusText tone="muted" text="Status: " />
+          <StatusText
+            tone={selector?.statusTone ?? 'muted'}
+            text={selector?.statusLabel ?? 'WAIT'}
+          />
+        </Text>
+        <Text>
+          <StatusText tone="muted" text="Phase: " />
+          <StatusText tone="neutral" text={state.loopPhase} />
+        </Text>
+        <Text>
+          <StatusText tone="muted" text="Iteration: " />
+          <StatusText tone="neutral" text={`${state.iteration}/${state.maxIterations}`} />
+        </Text>
+      </Box>,
+    );
+    body.push(
+      <Box
+        key="detail-description"
+        marginTop={1}
+        borderStyle="single"
+        borderColor={toneToColor('muted')}
+        flexDirection="column"
+        paddingX={1}
+      >
+        <Text>
+          <StatusText tone="info" text="Description" />
+        </Text>
+        <Text>
+          <StatusText
+            tone="muted"
+            text={formatShort(
+              state.loopNotice ?? 'No loop notice yet.',
+              Math.max(24, rightPaneWidth - 8),
+            )}
+          />
+        </Text>
+      </Box>,
+    );
+    body.push(
+      <Box
+        key="detail-activity"
+        marginTop={1}
+        borderStyle="single"
+        borderColor={toneToColor('muted')}
+        flexDirection="column"
+        paddingX={1}
+      >
+        <Text>
+          <StatusText tone="info" text="Activity" />
+        </Text>
+        {snapshot?.lines.length ? (
+          snapshot.lines.map((line, index) => (
+            <Text key={buildPreviewRowKey(selectedAgentId ?? 0, index)}>
+              <StatusText
+                tone={line.tone}
+                text={formatShort(
+                  `${line.label.toUpperCase()}: ${line.text}`,
+                  Math.max(24, rightPaneWidth - 8),
+                )}
+              />
+            </Text>
+          ))
+        ) : (
+          <Text>
+            <StatusText tone="muted" text="No live events yet." />
+          </Text>
+        )}
+      </Box>,
+    );
+  } else if (uiState.view === 'iterations') {
+    body.push(
+      renderIterationHistoryList(timeline, uiState.selectedIteration, rightPaneWidth, true),
+    );
+  } else if (uiState.view === 'iteration-detail') {
+    body.push(
+      renderIterationDetail(state, renderer, uiState, timeline, rightPaneWidth) ?? (
+        <Text key="iter-detail-null" />
+      ),
+    );
+  } else if (uiState.view === 'parallel-overview') {
+    body.push(renderParallelOverview(state, renderer, uiState, timeline, rightPaneWidth));
+  } else if (uiState.view === 'parallel-detail') {
+    body.push(renderParallelDetail(state, renderer, uiState, rightPaneWidth));
+  } else if (uiState.view === 'merge-progress') {
+    body.push(renderMergeProgress(timeline, uiState));
+  } else if (uiState.view === 'conflict-resolution') {
+    body.push(renderConflictResolutionPanel(timeline, uiState));
+  }
+
+  if (uiState.helpVisible) {
+    body.push(<React.Fragment key="help-fragment">{renderViewHelp(true)}</React.Fragment>);
+  }
+  if (uiState.dashboardVisible) {
+    body.push(
+      <React.Fragment key="dash-fragment">
+        {renderDashboard(state, timeline, rightPaneWidth)}
+      </React.Fragment>,
+    );
+  }
+  const toastPanel = renderToastNotifications(toasts);
+  if (toastPanel !== null) {
+    body.push(<React.Fragment key="toast-fragment">{toastPanel}</React.Fragment>);
+  }
+
+  return (
+    <Box flexGrow={1} flexDirection="row" marginTop={1}>
+      <Box
+        width={leftPaneWidth}
+        borderStyle="single"
+        borderColor={toneToColor('muted')}
+        flexDirection="column"
+        paddingX={1}
+      >
+        <Text>
+          <StatusText tone="muted" text={leftPaneTitle(uiState.view)} />
+        </Text>
+        {visibleRows.map((row, index) => {
+          const absoluteIndex = paneRows.indexOf(row);
+          const selected = absoluteIndex === selectedIndex;
+          return (
+            <Text key={row.key}>
+              <StatusText tone={selected ? 'info' : 'muted'} text={selected ? '▶ ' : '  '} />
+              <StatusText tone={selected ? 'neutral' : row.tone} text={row.text} />
+              {index === visibleRows.length - 1 && paneRows.length > visibleRows.length ? (
+                <StatusText tone="muted" text=" …" />
+              ) : null}
+            </Text>
+          );
+        })}
+      </Box>
+      <Box
+        marginLeft={1}
+        flexGrow={1}
+        borderStyle="single"
+        borderColor={toneToColor('muted')}
+        flexDirection="column"
+        paddingX={1}
+      >
+        <Text>
+          <StatusText tone="muted" text={`Details [${uiState.view}] [Trace: full]`} />
+        </Text>
+        {body}
+      </Box>
+    </Box>
+  );
+}
+
 function renderIterationDetail(
   liveState: LiveRunState,
   renderer: InkLiveRunRenderer,
@@ -1474,7 +1863,7 @@ function renderTaskSummaryPanel(state: LiveRunState, columns: number): React.JSX
   );
 }
 
-function renderViewContent(
+function _renderViewContent(
   state: LiveRunState,
   renderer: InkLiveRunRenderer,
   uiState: TuiInteractionState,
@@ -1736,22 +2125,27 @@ function LiveView({ renderer }: { renderer: InkLiveRunRenderer }): React.JSX.Ele
     }
   });
   return (
-    <Box flexDirection="column" width={columns} minHeight={Math.max(20, rows - 1)}>
-      {renderHeader(headerState)}
-      <Box marginTop={1} flexDirection="column">
-        <Text>
-          {renderStatusBadge('VIEW', 'info')}{' '}
-          <StatusText tone="neutral" text={`${uiState.view} view`} />
-          {uiState.helpVisible ? ' · help on' : ''}
-          {uiState.dashboardVisible ? ' · dashboard on' : ''}
-        </Text>
+    <Box flexDirection="column" width={columns} height={rows}>
+      <Box
+        borderStyle="round"
+        borderColor={toneToColor('info')}
+        flexDirection="column"
+        width={columns}
+        height={rows}
+        paddingX={1}
+      >
+        {renderStatusStrip(headerState, state, uiState)}
+        {renderFullScreenBody(
+          state,
+          renderer,
+          uiState,
+          renderer.getIterationTimeline(),
+          toasts,
+          columns,
+          rows,
+        )}
+        {renderFooterStrip()}
       </Box>
-      {renderViewHelp(uiState.helpVisible)}
-      {uiState.dashboardVisible
-        ? renderDashboard(state, renderer.getIterationTimeline(), columns)
-        : null}
-      {renderToastNotifications(toasts)}
-      {renderViewContent(state, renderer, uiState, renderer.getIterationTimeline(), columns)}
     </Box>
   );
 }
