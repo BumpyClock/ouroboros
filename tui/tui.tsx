@@ -66,6 +66,7 @@ const TOAST_TTL_MS_BY_TONE: Record<Tone, number> = {
   neutral: 2200,
 };
 const TOAST_REPEAT_GUARD_MS = 1500;
+const LIVE_RENDER_TICK_MS = 1000;
 
 export type InkInputKey = {
   tab?: boolean;
@@ -2116,6 +2117,7 @@ function LiveView({ renderer }: { renderer: InkLiveRunRenderer }): React.JSX.Ele
   const toasts = renderer.getToasts();
   const columns = process.stdout.columns ?? 120;
   const rows = process.stdout.rows ?? 40;
+  const viewportRows = Math.max(18, rows - 1);
 
   useInput((input, key) => {
     const next = renderer.transition(input, key);
@@ -2125,13 +2127,13 @@ function LiveView({ renderer }: { renderer: InkLiveRunRenderer }): React.JSX.Ele
     }
   });
   return (
-    <Box flexDirection="column" width={columns} height={rows}>
+    <Box flexDirection="column" width={columns} height={viewportRows}>
       <Box
         borderStyle="round"
         borderColor={toneToColor('info')}
         flexDirection="column"
         width={columns}
-        height={rows}
+        height={viewportRows}
         paddingX={1}
       >
         {renderStatusStrip(headerState, state, uiState)}
@@ -2142,7 +2144,7 @@ function LiveView({ renderer }: { renderer: InkLiveRunRenderer }): React.JSX.Ele
           renderer.getIterationTimeline(),
           toasts,
           columns,
-          rows,
+          viewportRows,
         )}
         {renderFooterStrip()}
       </Box>
@@ -2178,19 +2180,17 @@ export class InkLiveRunRenderer {
 
     this.app = render(<LiveView renderer={this} />, { exitOnCtrlC: false });
     this.timer = setInterval(() => {
-      if (!this.state.running) {
-        return;
-      }
-      this.stateStore.tickFrame();
-      this.state = this.stateStore.getSnapshot();
       const changed = this.pruneExpiredToasts();
-      if (changed) {
-        // keep render in sync while toasts auto-dismiss
+      if (this.state.running) {
+        this.stateStore.tickFrame();
+        this.state = this.stateStore.getSnapshot();
         this.emit();
         return;
       }
-      this.emit();
-    }, 120);
+      if (changed) {
+        this.emit();
+      }
+    }, LIVE_RENDER_TICK_MS);
   }
 
   subscribe = (listener: Listener): (() => void) => {
