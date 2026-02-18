@@ -341,6 +341,7 @@ export async function runIteration(
   reviewerCommand: string,
   beadsSnapshot: BeadsSnapshot,
   prompt: string,
+  promptPath: string,
   command: string,
   logDir: string,
   activeChildren: Set<ChildProcess>,
@@ -355,8 +356,21 @@ export async function runIteration(
   const runs = buildRuns(iteration, options.parallelAgents, logDir, provider, options, prompt);
   const liveRendererEnabled = Boolean(liveRenderer?.isEnabled());
   const startedAt = Date.now();
-  const runContext = {
+  const model = options.model.trim();
+  const runContext: RunContext = {
     startedAt,
+    loopLabel: `${provider.displayName} Loop`,
+    provider: provider.name,
+    project: options.projectRoot,
+    projectKey: options.projectKey,
+    commandPath: command,
+    promptPath,
+    logDir,
+    maxIterations: stateMaxIterations,
+    model: model.length > 0 ? model : undefined,
+    reasoningEffort: options.reasoningEffort,
+    parallelAgents: options.parallelAgents,
+    yolo: options.yolo,
     command: `${command} ${summarizeArgsForLog(runs[0].args)}`,
     batch: `target ${runs.length} parallel agent(s), staged startup`,
     agentLogPaths: new Map<number, string>(),

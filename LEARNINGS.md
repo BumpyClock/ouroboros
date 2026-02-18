@@ -46,3 +46,4 @@
 - 2026-02-17: Ink TUI full-screen parity improved by adding explicit `parallel-overview`/`parallel-detail`/`merge-progress`/`conflict-resolution` views plus `w`/`m`/`Esc`/`a`/`r`/`s` routing; keep view bounds synced to live agent count/iteration max to avoid stale selection indices.
 - 2026-02-17: For true full-screen terminal UX, replace stacked boxes with one persistent shell frame (`status strip` + `split panes` + `shortcut footer`) and window left-pane rows around selection to prevent overflow in short terminals.
 - 2026-02-17: Full-screen Ink shell can flicker if forced redraw runs at 120ms; use ~1s renderer tick and keep frame height under terminal rows (`rows - 1`) to avoid constant repaint flashing.
+- 2026-02-18: Carry startup summary metadata in `RunContext` (provider/project/model/paths/limits/yolo) so rich and ANSI TUI surfaces can show stable loop context without relying on pre-run console-only headers.

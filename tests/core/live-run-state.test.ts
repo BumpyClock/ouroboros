@@ -24,12 +24,16 @@ describe('LiveRunStateStore', () => {
       startedAt: 1,
       command: 'codex run',
       batch: 'target 2',
+      provider: 'codex',
+      project: '/workspace/ouroboros',
+      projectKey: 'ouroboros-1c0b07168d',
       agentLogPaths: new Map([[1, '/tmp/a1.log']]),
     });
 
     const snapshot = store.getSnapshot();
     expect(snapshot.iteration).toBe(4);
     expect(snapshot.runContext?.agentLogPaths.get(1)).toBe('/tmp/a1.log');
+    expect(snapshot.runContext?.projectKey).toBe('ouroboros-1c0b07168d');
   });
 
   it('replaces iteration summary atomically each iteration', () => {

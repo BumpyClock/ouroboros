@@ -4,6 +4,7 @@ import {
   buildAgentNotchLine,
   buildInitialTuiInteractionState,
   buildIterationStripParts,
+  buildRunContextInfoLines,
   formatAgentTitle,
   transitionTuiInteractionState,
 } from '../../tui/tui';
@@ -93,6 +94,43 @@ describe('Ink TUI rendering helpers', () => {
       retryCount: 11,
       failedCount: 1,
     });
+  });
+
+  it('maps loop startup metadata into tagged run-context rows', () => {
+    const lines = buildRunContextInfoLines({
+      startedAt: 1,
+      command: 'codex run --all',
+      batch: 'target 1',
+      agentLogPaths: new Map(),
+      loopLabel: 'Codex Loop',
+      provider: 'codex',
+      project: 'C:/Users/adity/Projects/ouroboros',
+      projectKey: 'ouroboros-1c0b07168d',
+      commandPath: 'C:/Users/adity/AppData/Local/pnpm/codex.cmd',
+      promptPath: 'C:/Users/adity/Projects/ouroboros/.ai_agents/prompt.md',
+      logDir: 'C:/Users/adity/.ouroborus/logs/ouroboros/2026-02-18',
+      maxIterations: 40,
+      model: 'gpt-5.3-codex-spark',
+      reasoningEffort: 'high',
+      parallelAgents: 1,
+      yolo: true,
+    });
+
+    expect(lines.map((line) => line.label)).toEqual([
+      'LOOP',
+      'PROVIDER',
+      'PROJECT',
+      'PROJECT_KEY',
+      'COMMAND',
+      'PROMPT',
+      'LOGS',
+      'LIMIT',
+      'MODEL',
+      'EFFORT',
+      'PARALLEL',
+      'YOLO',
+    ]);
+    expect(lines.find((line) => line.label === 'YOLO')?.value).toBe('enabled');
   });
 });
 

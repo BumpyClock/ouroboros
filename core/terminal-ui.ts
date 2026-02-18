@@ -166,6 +166,46 @@ function buildRunContextLines(state: LiveRunState, commandWidth: number): string
     `${badge('BATCH', 'muted')} ${formatShort(runContext.batch, 80)}`,
   ].join(' ');
 
+  const metadataLines: string[] = [];
+  const appendLine = (
+    label: string,
+    value: string | null | undefined,
+    tone: Tone = 'neutral',
+  ): void => {
+    if (!value) {
+      return;
+    }
+    metadataLines.push(
+      `${badge(label, 'muted')} ${colorize(formatShort(value, Math.max(28, commandWidth)), toneColor(tone))}`,
+    );
+  };
+  appendLine('LOOP', runContext.loopLabel, 'info');
+  appendLine('PROVIDER', runContext.provider);
+  appendLine('PROJECT', runContext.project);
+  appendLine('PROJECT_KEY', runContext.projectKey);
+  appendLine('COMMAND', runContext.commandPath ?? runContext.command);
+  appendLine('PROMPT', runContext.promptPath);
+  appendLine('LOGS', runContext.logDir);
+  appendLine(
+    'LIMIT',
+    typeof runContext.maxIterations === 'number'
+      ? `max iterations: ${runContext.maxIterations}`
+      : null,
+  );
+  appendLine('MODEL', runContext.model);
+  appendLine(
+    'EFFORT',
+    runContext.reasoningEffort ? `reasoning_effort=${runContext.reasoningEffort}` : null,
+  );
+  appendLine(
+    'PARALLEL',
+    typeof runContext.parallelAgents === 'number' ? String(runContext.parallelAgents) : null,
+    typeof runContext.parallelAgents === 'number' && runContext.parallelAgents > 1
+      ? 'warn'
+      : 'neutral',
+  );
+  appendLine('YOLO', runContext.yolo ? 'enabled' : 'disabled', runContext.yolo ? 'warn' : 'muted');
+
   const logLines = [...runContext.agentLogPaths.entries()]
     .sort(([left], [right]) => left - right)
     .map(
@@ -175,7 +215,7 @@ function buildRunContextLines(state: LiveRunState, commandWidth: number): string
   if (logLines.length === 0) {
     logLines.push(`${badge('LOGS', 'muted')} unavailable`);
   }
-  return [contextLine, ...logLines];
+  return [contextLine, ...metadataLines, ...logLines];
 }
 
 export function progressBar(current: number, total: number): string {

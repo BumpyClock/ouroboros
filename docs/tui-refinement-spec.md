@@ -54,6 +54,10 @@
   - top status strip (run readiness, active view, iteration progress, elapsed seconds)
   - middle split panes (left navigation list + right detail surface)
   - bottom shortcut strip (global and view-specific keyboard hints)
+- The right detail surface includes a run-context metadata block with startup tags:
+  - `LOOP`, `PROVIDER`, `PROJECT`, `PROJECT_KEY`
+  - `COMMAND`, `PROMPT`, `LOGS`, `LIMIT`
+  - `MODEL`, `EFFORT`, `PARALLEL`, `YOLO`
 - Left pane content is mode-driven:
   - tasks/reviewer: per-agent task rows
   - iterations: iteration rows

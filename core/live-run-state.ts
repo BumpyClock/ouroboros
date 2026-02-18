@@ -26,6 +26,18 @@ export type RunContext = {
   command: string;
   batch: string;
   agentLogPaths: Map<number, string>;
+  loopLabel?: string;
+  provider?: string;
+  project?: string;
+  projectKey?: string;
+  commandPath?: string;
+  promptPath?: string;
+  logDir?: string;
+  maxIterations?: number;
+  model?: string;
+  reasoningEffort?: string;
+  parallelAgents?: number;
+  yolo?: boolean;
 };
 
 export type IterationSummary = {

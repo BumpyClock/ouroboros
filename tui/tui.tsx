@@ -571,6 +571,52 @@ function renderIterationSummary(state: LiveRunState): React.JSX.Element[] {
   return rows;
 }
 
+export type RunContextInfoLine = {
+  key: string;
+  label: string;
+  value: string;
+  tone: Tone;
+};
+
+export function buildRunContextInfoLines(context: RunContext): RunContextInfoLine[] {
+  const lines: RunContextInfoLine[] = [];
+  const pushLine = (key: string, label: string, value: string | null | undefined, tone: Tone) => {
+    if (value === null || value === undefined || value === '') {
+      return;
+    }
+    lines.push({ key, label, value, tone });
+  };
+
+  pushLine('loop', 'LOOP', context.loopLabel, 'info');
+  pushLine('provider', 'PROVIDER', context.provider, 'neutral');
+  pushLine('project', 'PROJECT', context.project, 'neutral');
+  pushLine('project-key', 'PROJECT_KEY', context.projectKey, 'neutral');
+  pushLine('command', 'COMMAND', context.commandPath ?? context.command, 'neutral');
+  pushLine('prompt', 'PROMPT', context.promptPath, 'neutral');
+  pushLine('logs', 'LOGS', context.logDir, 'neutral');
+  pushLine(
+    'limit',
+    'LIMIT',
+    typeof context.maxIterations === 'number' ? `max iterations: ${context.maxIterations}` : null,
+    'neutral',
+  );
+  pushLine('model', 'MODEL', context.model, 'neutral');
+  pushLine(
+    'effort',
+    'EFFORT',
+    context.reasoningEffort ? `reasoning_effort=${context.reasoningEffort}` : null,
+    'neutral',
+  );
+  pushLine(
+    'parallel',
+    'PARALLEL',
+    typeof context.parallelAgents === 'number' ? String(context.parallelAgents) : null,
+    typeof context.parallelAgents === 'number' && context.parallelAgents > 1 ? 'warn' : 'neutral',
+  );
+  pushLine('yolo', 'YOLO', context.yolo ? 'enabled' : 'disabled', context.yolo ? 'warn' : 'muted');
+  return lines;
+}
+
 function renderRunContext(state: LiveRunState): React.JSX.Element[] {
   const context = state.runContext;
   if (!context) {
@@ -584,20 +630,39 @@ function renderRunContext(state: LiveRunState): React.JSX.Element[] {
     ];
   }
   const startAt = new Date(context.startedAt).toLocaleTimeString();
+  const columns = process.stdout.columns ?? 120;
+  const rowWidth = Math.max(24, columns - 42);
   const rows: React.JSX.Element[] = [
     <Text key="runctx-main">
       {renderStatusBadge('RUNCTX', 'info')} {renderStatusBadge('START', 'muted')}{' '}
       <StatusText tone="neutral" text={`${startAt} |`} /> {renderStatusBadge('RUN', 'muted')}{' '}
-      <StatusText tone="neutral" text={context.command} /> {renderStatusBadge('BATCH', 'muted')}{' '}
-      <StatusText tone="neutral" text={context.batch} />
+      <StatusText tone="neutral" text={formatShort(context.command, rowWidth)} />{' '}
+      {renderStatusBadge('BATCH', 'muted')}{' '}
+      <StatusText tone="neutral" text={formatShort(context.batch, rowWidth)} />
     </Text>,
   ];
+  for (const line of buildRunContextInfoLines(context)) {
+    rows.push(
+      <Text key={`runctx-meta-${line.key}`}>
+        {renderStatusBadge(line.label, 'muted')}{' '}
+        <StatusText tone={line.tone} text={formatShort(line.value, rowWidth)} />
+      </Text>,
+    );
+  }
   for (const [agentId, logPath] of [...context.agentLogPaths.entries()].sort(
     ([left], [right]) => left - right,
   )) {
     rows.push(
       <Text key={`runctx-log-${agentId}`}>
-        {renderStatusBadge(`A${agentId}LOG`, 'muted')} <StatusText tone="muted" text={logPath} />
+        {renderStatusBadge(`A${agentId}LOG`, 'muted')}{' '}
+        <StatusText tone="muted" text={formatShort(logPath, rowWidth)} />
+      </Text>,
+    );
+  }
+  if (context.agentLogPaths.size === 0) {
+    rows.push(
+      <Text key="runctx-no-logs">
+        {renderStatusBadge('LOGS', 'muted')} <StatusText tone="muted" text="unavailable" />
       </Text>,
     );
   }

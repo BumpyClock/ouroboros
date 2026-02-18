@@ -222,6 +222,7 @@ export async function runLoopController(
         input.reviewerCommand,
         beadsSnapshot,
         prompt,
+        promptPath,
         command,
         logDir,
         activeChildren,

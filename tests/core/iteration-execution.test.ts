@@ -154,6 +154,7 @@ async function runIterationWithLine(
       'mock',
       snapshot,
       'prompt',
+      '.ai_agents/prompt.md',
       'mock',
       process.cwd(),
       new Set(),
