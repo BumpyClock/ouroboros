@@ -1313,6 +1313,21 @@ function renderFullScreenBody(
     );
     body.push(
       <Box
+        key="detail-runctx"
+        marginTop={1}
+        borderStyle="single"
+        borderColor={toneToColor('muted')}
+        flexDirection="column"
+        paddingX={1}
+      >
+        <Text>
+          <StatusText tone="info" text="Run Context" />
+        </Text>
+        {renderRunContext(state)}
+      </Box>,
+    );
+    body.push(
+      <Box
         key="detail-description"
         marginTop={1}
         borderStyle="single"

@@ -48,3 +48,4 @@
 - 2026-02-17: Full-screen Ink shell can flicker if forced redraw runs at 120ms; use ~1s renderer tick and keep frame height under terminal rows (`rows - 1`) to avoid constant repaint flashing.
 - 2026-02-18: Carry startup summary metadata in `RunContext` (provider/project/model/paths/limits/yolo) so rich and ANSI TUI surfaces can show stable loop context without relying on pre-run console-only headers.
 - 2026-02-18: In rich TTY mode, suppress pre-run startup banner (`[LOOP]...[YOLO]`) and keep those fields inside the TUI details panel only; retain banner for `--show-raw` and non-TTY runs.
+- 2026-02-18: Full-screen `tasks`/`reviewer` detail pane must explicitly render `renderRunContext(state)`; building metadata alone is insufficient because the left list and right detail surfaces are separate render paths.
