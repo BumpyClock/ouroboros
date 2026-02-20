@@ -3,7 +3,7 @@ import { execSync } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
 import * as path from 'node:path';
 import type { ProviderAdapter } from '../providers/types';
-import { extractReferencedBeadIds } from './beads';
+import { extractReferencedTaskIds } from './beads';
 import type {
   AgentReviewPhase,
   IterationSummary,
@@ -32,11 +32,11 @@ import {
 } from './terminal-ui';
 import { formatShort } from './text';
 import type {
-  BeadIssue,
-  BeadsSnapshot,
   CliOptions,
   PreviewEntry,
   RunResult,
+  TaskIssue,
+  TasksSnapshot,
   Tone,
   UsageSummary,
 } from './types';
@@ -45,7 +45,7 @@ export type IterationLiveRenderer = {
   isEnabled(): boolean;
   setIteration(iteration: number): void;
   update(agentId: number, entry: PreviewEntry): void;
-  setBeadsSnapshot(snapshot: BeadsSnapshot | null): void;
+  setTasksSnapshot(snapshot: TasksSnapshot | null): void;
   setAgentLogPath(agentId: number, path: string): void;
   setRunContext(context: RunContext): void;
   setIterationSummary(summary: IterationSummary): void;
@@ -55,7 +55,7 @@ export type IterationLiveRenderer = {
   markIterationRetry(iteration: number): void;
   setIterationOutcome(iteration: number, outcome: 'success' | 'failed'): void;
   setLoopPhase(phase: LoopPhase): void;
-  setAgentPickedBead(agentId: number, issue: BeadIssue): void;
+  setAgentPickedTask(agentId: number, issue: TaskIssue): void;
   setAgentQueued(agentId: number, message: string): void;
   setAgentLaunching(agentId: number, message: string): void;
   setAgentActiveTab(agentId: number, tab: LiveRunAgentTab): void;
@@ -63,6 +63,42 @@ export type IterationLiveRenderer = {
   clearAgentReviewPhase(agentId: number): void;
   stop(message: string, tone?: Tone): void;
 };
+
+type LegacyIterationLiveRenderer = {
+  setBeadsSnapshot?: (snapshot: TasksSnapshot | null) => void;
+  setAgentPickedBead?: (agentId: number, issue: TaskIssue) => void;
+};
+
+function setRendererTasksSnapshot(
+  renderer: IterationLiveRenderer | null,
+  snapshot: TasksSnapshot | null,
+): void {
+  if (!renderer) {
+    return;
+  }
+  const compatRenderer = renderer as IterationLiveRenderer & LegacyIterationLiveRenderer;
+  if (typeof compatRenderer.setTasksSnapshot === 'function') {
+    compatRenderer.setTasksSnapshot(snapshot);
+    return;
+  }
+  compatRenderer.setBeadsSnapshot?.(snapshot);
+}
+
+function setRendererPickedTask(
+  renderer: IterationLiveRenderer | null,
+  agentId: number,
+  issue: TaskIssue,
+): void {
+  if (!renderer) {
+    return;
+  }
+  const compatRenderer = renderer as IterationLiveRenderer & LegacyIterationLiveRenderer;
+  if (typeof compatRenderer.setAgentPickedTask === 'function') {
+    compatRenderer.setAgentPickedTask(agentId, issue);
+    return;
+  }
+  compatRenderer.setAgentPickedBead?.(agentId, issue);
+}
 
 type ActiveSpinnerStopRef = {
   value: ((message: string, tone?: Tone) => void) | null;
@@ -76,7 +112,7 @@ export type SlotReviewOutcome = {
 };
 
 export type AggregatedIterationOutput = {
-  pickedByAgent: Map<number, BeadIssue>;
+  pickedByAgent: Map<number, TaskIssue>;
   usageAggregate: UsageSummary | null;
   failed: Array<{
     status: number | null;
@@ -87,16 +123,16 @@ export type AggregatedIterationOutput = {
   reviewOutcomes: Map<number, SlotReviewOutcome>;
 };
 
-function findMatchedRemainingBeadIssue(
+function findMatchedRemainingTaskIssue(
   text: string,
-  remainingBeadIds: Set<string>,
-  beadsById: Map<string, BeadIssue>,
-): BeadIssue | null {
-  const matchedIds = extractReferencedBeadIds(text, remainingBeadIds);
+  remainingTaskIds: Set<string>,
+  tasksById: Map<string, TaskIssue>,
+): TaskIssue | null {
+  const matchedIds = extractReferencedTaskIds(text, remainingTaskIds);
   if (matchedIds.length === 0) {
     return null;
   }
-  return beadsById.get(matchedIds[0]) ?? null;
+  return tasksById.get(matchedIds[0]) ?? null;
 }
 
 function captureGitDiff(): string {
@@ -115,7 +151,7 @@ export type SlotReviewInput = {
   agentId: number;
   iteration: number;
   implementResult: RunResult;
-  pickedBead: BeadIssue;
+  pickedTask: TaskIssue;
   options: CliOptions;
   provider: ProviderAdapter;
   reviewerProvider: ProviderAdapter;
@@ -128,12 +164,15 @@ export type SlotReviewInput = {
   liveRenderer: IterationLiveRenderer | null;
 };
 
-export async function runSlotReviewLoop(input: SlotReviewInput): Promise<SlotReviewOutcome> {
+export async function runSlotReviewLoop(
+  input: SlotReviewInput,
+  runAgentProcessFn: typeof runAgentProcess = runAgentProcess,
+): Promise<SlotReviewOutcome> {
   const {
     agentId,
     iteration,
     implementResult,
-    pickedBead,
+    pickedTask,
     options,
     provider,
     reviewerProvider,
@@ -166,17 +205,17 @@ export async function runSlotReviewLoop(input: SlotReviewInput): Promise<SlotRev
       liveRenderer?.setAgentReviewPhase(agentId, {
         phase: 'reviewing',
         fixAttempt,
-        beadId: pickedBead.id,
+        taskId: pickedTask.id,
       });
       liveRenderer?.setAgentLogPath(agentId, reviewLogPath);
 
       if (!liveRendererEnabled) {
-        console.log(`${badge(`A${agentId}`, 'muted')} ${phase} for bead ${pickedBead.id}`);
+        console.log(`${badge(`A${agentId}`, 'muted')} ${phase} for task ${pickedTask.id}`);
       }
 
       const gitDiff = captureGitDiff();
       const reviewerContext = buildReviewerContext({
-        bead: pickedBead,
+        task: pickedTask,
         implementerOutput: lastImplementOutput.slice(0, 50_000),
         implementerLogPath: lastImplementLogPath,
         gitDiff,
@@ -194,7 +233,7 @@ export async function runSlotReviewLoop(input: SlotReviewInput): Promise<SlotRev
       );
 
       let trackedChild: ChildProcess | null = null;
-      const reviewResult = await runAgentProcess({
+      const reviewResult = await runAgentProcessFn({
         prompt: fullReviewerPrompt,
         command: reviewerCommand,
         args: reviewerArgs,
@@ -271,21 +310,21 @@ export async function runSlotReviewLoop(input: SlotReviewInput): Promise<SlotRev
       liveRenderer?.setAgentReviewPhase(agentId, {
         phase: 'fixing',
         fixAttempt: fixAttempt + 1,
-        beadId: pickedBead.id,
+        taskId: pickedTask.id,
       });
       liveRenderer?.setAgentLogPath(agentId, fixLogPath);
 
       if (!liveRendererEnabled) {
         console.log(
-          `${badge(`A${agentId}`, 'info')} fix attempt ${fixAttempt + 1}/${maxFix} for bead ${pickedBead.id}`,
+          `${badge(`A${agentId}`, 'info')} fix attempt ${fixAttempt + 1}/${maxFix} for task ${pickedTask.id}`,
         );
       }
 
-      const fixPrompt = `The reviewer found drift in your implementation of bead ${pickedBead.id}: ${pickedBead.title}\n\nReviewer feedback:\n${verdict.followUpPrompt}\n\nPlease fix the issues described above.`;
+      const fixPrompt = `The reviewer found drift in your implementation of task ${pickedTask.id}: ${pickedTask.title}\n\nReviewer feedback:\n${verdict.followUpPrompt}\n\nPlease fix the issues described above.`;
       const fixArgs = provider.buildExecArgs(fixPrompt, fixLastMessagePath, options);
 
       let fixTrackedChild: ChildProcess | null = null;
-      const fixResult = await runAgentProcess({
+      const fixResult = await runAgentProcessFn({
         prompt: fixPrompt,
         command,
         args: fixArgs,
@@ -339,7 +378,7 @@ export async function runIteration(
   provider: ProviderAdapter,
   reviewerProvider: ProviderAdapter,
   reviewerCommand: string,
-  beadsSnapshot: BeadsSnapshot,
+  tasksSnapshot: TasksSnapshot,
   prompt: string,
   promptPath: string,
   command: string,
@@ -350,7 +389,7 @@ export async function runIteration(
   reviewerPromptPath?: string,
 ): Promise<{
   results: RunResult[];
-  pickedByAgent: Map<number, BeadIssue>;
+  pickedByAgent: Map<number, TaskIssue>;
   reviewOutcomes: Map<number, SlotReviewOutcome>;
 }> {
   const runs = buildRuns(iteration, options.parallelAgents, logDir, provider, options, prompt);
@@ -378,7 +417,7 @@ export async function runIteration(
   liveRenderer?.setRunContext(runContext);
   liveRenderer?.setLoopNotice('iteration started', 'info');
   liveRenderer?.setLoopPhase('starting');
-  liveRenderer?.setBeadsSnapshot(beadsSnapshot);
+  setRendererTasksSnapshot(liveRenderer, tasksSnapshot);
 
   const startedAtLabel = new Date(startedAt).toLocaleTimeString();
   if (!liveRendererEnabled) {
@@ -412,9 +451,9 @@ export async function runIteration(
 
   const liveSeen = new Set<string>();
   const liveCountByAgent = new Map<number, number>();
-  const pickedByAgent = new Map<number, BeadIssue>();
+  const pickedByAgent = new Map<number, TaskIssue>();
   const reviewOutcomes = new Map<number, SlotReviewOutcome>();
-  const remainingBeadIds = new Set(beadsSnapshot.remainingIssues.map((issue) => issue.id));
+  const remainingTaskIds = new Set(tasksSnapshot.remainingIssues.map((issue) => issue.id));
   const reviewerPrompt =
     options.reviewEnabled && reviewerPromptPath && existsSync(reviewerPromptPath)
       ? readFileSync(reviewerPromptPath, 'utf8')
@@ -424,7 +463,7 @@ export async function runIteration(
       if (liveRendererEnabled) {
         liveRenderer?.setAgentLaunching(
           run.agentId,
-          'launching now, waiting for first picked bead',
+          'launching now, waiting for first picked task',
         );
       }
       continue;
@@ -433,7 +472,7 @@ export async function runIteration(
     if (liveRendererEnabled) {
       liveRenderer?.setAgentQueued(
         run.agentId,
-        `waiting to spawn until A${previousAgentId} picked a bead`,
+        `waiting to spawn until A${previousAgentId} picked a task`,
       );
     }
   }
@@ -471,13 +510,13 @@ export async function runIteration(
     if (runIndex > 0) {
       await waitForPicked(runIndex);
       if (liveRendererEnabled) {
-        liveRenderer?.setAgentLaunching(run.agentId, `launching after A${runIndex} picked a bead`);
+        liveRenderer?.setAgentLaunching(run.agentId, `launching after A${runIndex} picked a task`);
       } else {
         console.log(
           `${badge(
             'SPAWN',
             'muted',
-          )} launching agent ${run.agentId} after A${runIndex} picked a bead`,
+          )} launching agent ${run.agentId} after A${runIndex} picked a task`,
         );
       }
     }
@@ -485,7 +524,7 @@ export async function runIteration(
     const launchedRun = (async (): Promise<RunResult> => {
       let trackedChild: ChildProcess | null = null;
       let readinessReleased = false;
-      let pickedBeadSet = false;
+      let pickedTaskSet = false;
       const releasePickedReadinessOnce = () => {
         if (readinessReleased) {
           return;
@@ -494,13 +533,13 @@ export async function runIteration(
         releasePickedReadiness();
       };
 
-      const markPickedBead = (issue: BeadIssue) => {
-        if (pickedBeadSet) {
+      const markPickedTask = (issue: TaskIssue) => {
+        if (pickedTaskSet) {
           return;
         }
         pickedByAgent.set(run.agentId, issue);
-        pickedBeadSet = true;
-        liveRenderer?.setAgentPickedBead(run.agentId, issue);
+        pickedTaskSet = true;
+        setRendererPickedTask(liveRenderer, run.agentId, issue);
         releasePickedReadinessOnce();
       };
 
@@ -525,24 +564,24 @@ export async function runIteration(
             if (options.showRaw) {
               return;
             }
-            const matchedFromRawLine = findMatchedRemainingBeadIssue(
+            const matchedFromRawLine = findMatchedRemainingTaskIssue(
               line,
-              remainingBeadIds,
-              beadsSnapshot.byId,
+              remainingTaskIds,
+              tasksSnapshot.byId,
             );
             if (matchedFromRawLine) {
-              markPickedBead(matchedFromRawLine);
+              markPickedTask(matchedFromRawLine);
             }
 
             const previewEntries = provider.previewEntriesFromLine(line);
             for (const entry of previewEntries) {
-              const matchedFromEntry = findMatchedRemainingBeadIssue(
+              const matchedFromEntry = findMatchedRemainingTaskIssue(
                 entry.text,
-                remainingBeadIds,
-                beadsSnapshot.byId,
+                remainingTaskIds,
+                tasksSnapshot.byId,
               );
               if (matchedFromEntry) {
-                markPickedBead(matchedFromEntry);
+                markPickedTask(matchedFromEntry);
               }
             }
 
@@ -580,19 +619,19 @@ export async function runIteration(
           },
         });
 
-        if (!pickedBeadSet) {
+        if (!pickedTaskSet) {
           const combined = `${result.stdout}\n${result.stderr}`;
-          const fallbackIssue = findMatchedRemainingBeadIssue(
+          const fallbackIssue = findMatchedRemainingTaskIssue(
             combined,
-            remainingBeadIds,
-            beadsSnapshot.byId,
+            remainingTaskIds,
+            tasksSnapshot.byId,
           );
           if (fallbackIssue) {
-            markPickedBead(fallbackIssue);
+            markPickedTask(fallbackIssue);
           }
         }
 
-        if (!pickedBeadSet) {
+        if (!pickedTaskSet) {
           releasePickedReadinessOnce();
         }
 
@@ -603,14 +642,14 @@ export async function runIteration(
           result,
         };
 
-        // Run slot-local review/fix loop if review enabled and bead was picked
-        const pickedBead = pickedByAgent.get(run.agentId);
-        if (options.reviewEnabled && reviewerPrompt && pickedBead && result.status === 0) {
+        // Run slot-local review/fix loop if review enabled and a task was picked
+        const pickedTask = pickedByAgent.get(run.agentId);
+        if (options.reviewEnabled && reviewerPrompt && pickedTask && result.status === 0) {
           const outcome = await runSlotReviewLoop({
             agentId: run.agentId,
             iteration,
             implementResult: implementRunResult,
-            pickedBead,
+            pickedTask,
             options,
             provider,
             reviewerProvider,
@@ -659,8 +698,8 @@ export function shouldStopFromProviderOutput(
 export function aggregateIterationOutput(params: {
   provider: ProviderAdapter;
   results: RunResult[];
-  beadsSnapshot: BeadsSnapshot;
-  pickedByAgent: Map<number, BeadIssue>;
+  tasksSnapshot: TasksSnapshot;
+  pickedByAgent: Map<number, TaskIssue>;
   liveRenderer: IterationLiveRenderer | null;
   previewLines: number;
   reviewOutcomes: Map<number, SlotReviewOutcome>;
@@ -668,7 +707,7 @@ export function aggregateIterationOutput(params: {
   const {
     provider,
     results,
-    beadsSnapshot,
+    tasksSnapshot,
     pickedByAgent,
     liveRenderer,
     previewLines,
@@ -679,7 +718,7 @@ export function aggregateIterationOutput(params: {
   let usageAggregate: UsageSummary | null = null;
   let stopDetected = false;
 
-  const remainingBeadIds = new Set(beadsSnapshot.remainingIssues.map((issue) => issue.id));
+  const remainingTaskIds = new Set(tasksSnapshot.remainingIssues.map((issue) => issue.id));
   for (const entry of results) {
     const combined = `${entry.result.stdout}\n${entry.result.stderr}`.trim();
     const context = results.length > 1 ? `agent ${entry.agentId}` : undefined;
@@ -752,10 +791,10 @@ export function aggregateIterationOutput(params: {
     }
 
     if (!pickedByAgent.has(entry.agentId)) {
-      const fallbackIssue = findMatchedRemainingBeadIssue(
+      const fallbackIssue = findMatchedRemainingTaskIssue(
         combined,
-        remainingBeadIds,
-        beadsSnapshot.byId,
+        remainingTaskIds,
+        tasksSnapshot.byId,
       );
       if (fallbackIssue) {
         pickedByAgent.set(entry.agentId, fallbackIssue);
@@ -764,7 +803,7 @@ export function aggregateIterationOutput(params: {
     const picked = pickedByAgent.get(entry.agentId);
     if (picked && !liveRenderer?.isEnabled()) {
       console.log(
-        `${badge(`A${entry.agentId}`, 'muted')} picked bead ${picked.id}: ${picked.title}`,
+        `${badge(`A${entry.agentId}`, 'muted')} picked task ${picked.id}: ${picked.title}`,
       );
     }
 

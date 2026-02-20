@@ -1,6 +1,6 @@
 # ouroboros
 
-Provider-agnostic multi-agent loop runner with a live Ink TUI, staged parallel startup, and beads-aware progress.
+Provider-agnostic multi-agent loop runner with a live OpenTUI renderer, staged parallel startup, and TSQ task-aware progress.
 
 Supported providers:
 
@@ -18,7 +18,7 @@ bun ouroboros.ts --help
 
 - In TTY rich mode (`showRaw = false`), iteration lifecycle is rendered inline in live panels:
   - run context (`START`/`RUN`/`BATCH`/agent logs)
-  - iteration summary (`TOKENS`, picked beads, stop/retry/pause state)
+  - iteration summary (`TOKENS`, picked tasks, stop/retry/pause state)
   - per-iteration progress and agent status
 - In non-TTY environments and when `--show-raw` is enabled, behavior is legacy row-by-row output.
 

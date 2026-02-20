@@ -1,8 +1,8 @@
 import type { ChildProcess } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
 import type { ProviderAdapter } from '../providers/types';
-import { InkLiveRunRenderer } from '../tui/tui';
-import { loadBeadsSnapshot } from './beads';
+import { OpenTuiLiveRunRenderer } from '../tui/tui';
+import { loadBeadsSnapshot, loadTasksSnapshot } from './beads';
 import {
   aggregateIterationOutput,
   type IterationLiveRenderer,
@@ -13,7 +13,7 @@ import type { IterationSummary } from './live-run-state';
 import { isCircuitBroken, loadIterationState, sleep, writeIterationState } from './state';
 import { ANSI, badge, colorize, LiveRunRenderer, printSection } from './terminal-ui';
 import { formatShort } from './text';
-import type { BeadIssue, BeadsSnapshot, CliOptions, RunResult, Tone } from './types';
+import type { CliOptions, RunResult, TaskIssue, TasksSnapshot, Tone } from './types';
 
 type ActiveSpinnerStopRef = {
   value: ((message: string, tone?: Tone) => void) | null;
@@ -38,35 +38,71 @@ type LoopControllerInput = {
   shutdownProbe: ShutdownProbe;
 };
 
-export function shouldIgnoreStopMarkerForNoBeads(params: {
+export type LoopControllerDependencies = {
+  loadIterationState: typeof loadIterationState;
+  isCircuitBroken: typeof isCircuitBroken;
+  writeIterationState: typeof writeIterationState;
+  sleep: typeof sleep;
+  loadTasksSnapshot?: typeof loadTasksSnapshot;
+  loadBeadsSnapshot?: typeof loadBeadsSnapshot;
+  runIteration: typeof runIteration;
+  createLiveRenderer: (
+    options: CliOptions,
+    iteration: number,
+    stateMaxIterations: number,
+    agentIds: number[],
+  ) => IterationLiveRenderer | null;
+};
+
+export function shouldIgnoreStopMarkerForNoTasks(params: {
   stopDetected: boolean;
-  beadsSnapshot: Pick<BeadsSnapshot, 'available' | 'remaining'>;
+  tasksSnapshot: Pick<TasksSnapshot, 'available' | 'remaining'>;
   pickedCount: number;
 }): boolean {
-  if (!params.stopDetected || !params.beadsSnapshot.available) {
+  if (!params.stopDetected || !params.tasksSnapshot.available) {
     return false;
   }
-  return params.pickedCount === 0 || params.beadsSnapshot.remaining <= params.pickedCount;
+  return params.pickedCount === 0 || params.tasksSnapshot.remaining <= params.pickedCount;
 }
 
-export function buildTopLevelScopePrompt(prompt: string, topLevelBeadId?: string): string {
-  if (!topLevelBeadId) {
+export const shouldIgnoreStopMarkerForNoBeads = (params: {
+  stopDetected: boolean;
+  beadsSnapshot: Pick<TasksSnapshot, 'available' | 'remaining'>;
+  pickedCount: number;
+}): boolean =>
+  shouldIgnoreStopMarkerForNoTasks({
+    stopDetected: params.stopDetected,
+    tasksSnapshot: params.beadsSnapshot,
+    pickedCount: params.pickedCount,
+  });
+
+export function buildTopLevelScopePrompt(prompt: string, topLevelTaskId?: string): string {
+  if (!topLevelTaskId) {
     return prompt;
   }
-  const topLevelGuidance = `\n\n## Top-level scope\n- Work only on beads that are direct children of ${topLevelBeadId}.\n- If no remaining scoped beads exist, emit \`no_beads_available\` and stop.\n`;
+  const topLevelGuidance = `\n\n## Top-level scope\n- Work only on tasks that are direct children of ${topLevelTaskId}.\n- If no remaining scoped tasks exist, emit \`no_tasks_available\` and stop.\n`;
   return `${prompt}${topLevelGuidance}`;
 }
 
 export function shouldStopFromTopLevelExhaustion(params: {
+  taskMode?: CliOptions['taskMode'];
+  topLevelTaskId?: string;
+  tasksSnapshot?: Pick<TasksSnapshot, 'available' | 'remaining'>;
   beadMode?: CliOptions['beadMode'];
   topLevelBeadId?: string;
-  beadsSnapshot: Pick<BeadsSnapshot, 'available' | 'remaining'>;
+  beadsSnapshot?: Pick<TasksSnapshot, 'available' | 'remaining'>;
 }): boolean {
+  const taskMode = params.taskMode ?? params.beadMode;
+  const topLevelTaskId = params.topLevelTaskId ?? params.topLevelBeadId;
+  const tasksSnapshot = params.tasksSnapshot ?? params.beadsSnapshot;
+  if (!tasksSnapshot) {
+    return false;
+  }
   return (
-    params.beadMode === 'top-level' &&
-    Boolean(params.topLevelBeadId) &&
-    params.beadsSnapshot.available &&
-    params.beadsSnapshot.remaining <= 0
+    taskMode === 'top-level' &&
+    Boolean(topLevelTaskId) &&
+    tasksSnapshot.available &&
+    tasksSnapshot.remaining <= 0
   );
 }
 
@@ -90,16 +126,32 @@ function createLiveRenderer(
     return new LiveRunRenderer(iteration, stateMaxIterations, agentIds, options.previewLines);
   }
   try {
-    return new InkLiveRunRenderer(iteration, stateMaxIterations, agentIds, options.previewLines);
+    return new OpenTuiLiveRunRenderer(
+      iteration,
+      stateMaxIterations,
+      agentIds,
+      options.previewLines,
+    );
   } catch (error) {
     const fallbackReason =
       error instanceof Error ? formatShort(error.message, 120) : 'unknown error';
     console.log(
-      `${badge('TUI', 'warn')} Ink renderer unavailable, falling back (${fallbackReason})`,
+      `${badge('TUI', 'warn')} OpenTUI renderer unavailable, falling back (${fallbackReason})`,
     );
     return new LiveRunRenderer(iteration, stateMaxIterations, agentIds, options.previewLines);
   }
 }
+
+const defaultLoopControllerDependencies: LoopControllerDependencies = {
+  loadIterationState,
+  isCircuitBroken,
+  writeIterationState,
+  sleep,
+  loadTasksSnapshot,
+  loadBeadsSnapshot,
+  runIteration,
+  createLiveRenderer,
+};
 
 function printInitialSummary(
   provider: ProviderAdapter,
@@ -129,14 +181,14 @@ function printInitialSummary(
   );
 }
 
-function printBeadsSnapshot(snapshot: BeadsSnapshot): void {
+function printTasksSnapshot(snapshot: TasksSnapshot): void {
   if (!snapshot.available) {
     const suffix = snapshot.error ? ` (${formatShort(snapshot.error, 120)})` : '';
-    console.log(`${badge('BEADS', 'warn')} unavailable${suffix}`);
+    console.log(`${badge('TASKS', 'warn')} unavailable${suffix}`);
     return;
   }
   console.log(
-    `${badge('BEADS', 'info')} remaining ${snapshot.remaining} | in_progress ${snapshot.inProgress} | open ${snapshot.open} | blocked ${snapshot.blocked} | closed ${snapshot.closed}`,
+    `${badge('TASKS', 'info')} remaining ${snapshot.remaining} | in_progress ${snapshot.inProgress} | open ${snapshot.open} | blocked ${snapshot.blocked} | closed ${snapshot.closed}`,
   );
   for (const issue of snapshot.remainingIssues.slice(0, 3)) {
     const assignee = issue.assignee ? ` @${issue.assignee}` : '';
@@ -146,6 +198,7 @@ function printBeadsSnapshot(snapshot: BeadsSnapshot): void {
 
 export async function runLoopController(
   input: LoopControllerInput,
+  dependencies: LoopControllerDependencies = defaultLoopControllerDependencies,
 ): Promise<IterationLiveRenderer | null> {
   const {
     options,
@@ -159,8 +212,12 @@ export async function runLoopController(
     shutdownProbe,
   } = input;
 
-  const state = loadIterationState(statePath, options.iterationLimit, options.iterationsSet);
-  if (isCircuitBroken(state)) {
+  const state = dependencies.loadIterationState(
+    statePath,
+    options.iterationLimit,
+    options.iterationsSet,
+  );
+  if (dependencies.isCircuitBroken(state)) {
     console.log(`Circuit breaker hit: max_iterations (${state.max_iterations}) already reached`);
     return null;
   }
@@ -176,8 +233,12 @@ export async function runLoopController(
   let reachedCircuit = false;
   let terminalLoopPhase: 'completed' | 'stopped' | 'failed' | null = null;
   const agentIds = Array.from({ length: options.parallelAgents }, (_, index) => index + 1);
-  const topLevelBeadId = options.beadMode === 'top-level' ? options.topLevelBeadId : undefined;
-  const liveRenderer = createLiveRenderer(
+  const taskMode = options.taskMode ?? options.beadMode;
+  const topLevelTaskId =
+    taskMode === 'top-level' ? (options.topLevelTaskId ?? options.topLevelBeadId) : undefined;
+  const loadSnapshot =
+    dependencies.loadTasksSnapshot ?? dependencies.loadBeadsSnapshot ?? loadTasksSnapshot;
+  const liveRenderer = dependencies.createLiveRenderer(
     options,
     state.current_iteration + 1,
     state.max_iterations,
@@ -189,47 +250,47 @@ export async function runLoopController(
     }
 
     const basePrompt = readFileSync(promptPath, 'utf8');
-    const prompt = buildTopLevelScopePrompt(basePrompt, topLevelBeadId);
+    const prompt = buildTopLevelScopePrompt(basePrompt, topLevelTaskId);
     state.current_iteration += 1;
-    writeIterationState(statePath, state);
+    dependencies.writeIterationState(statePath, state);
 
     const iteration = state.current_iteration;
     liveRenderer?.setIteration(iteration);
     let results: RunResult[];
-    let pickedByAgent = new Map<number, BeadIssue>();
+    let pickedByAgent = new Map<number, TaskIssue>();
     let iterationReviewOutcomes = new Map<number, SlotReviewOutcome>();
-    const beadsSnapshot = await loadBeadsSnapshot(options.projectRoot, topLevelBeadId);
+    const tasksSnapshot = await loadSnapshot(options.projectRoot, topLevelTaskId);
     if (
       shouldStopFromTopLevelExhaustion({
-        beadMode: options.beadMode,
-        topLevelBeadId,
-        beadsSnapshot,
+        taskMode,
+        topLevelTaskId,
+        tasksSnapshot,
       })
     ) {
       if (liveRenderer?.isEnabled()) {
         liveRenderer.setLoopNotice(
-          `top-level scope exhausted: ${topLevelBeadId ?? 'unavailable'}`,
+          `top-level scope exhausted: ${topLevelTaskId ?? 'unavailable'}`,
           'success',
         );
       } else {
-        const topLevelHint = topLevelBeadId ? ` for ${topLevelBeadId}` : '';
-        console.log(`${badge('BEADS', 'success')} top-level scoped work exhausted${topLevelHint}`);
+        const topLevelHint = topLevelTaskId ? ` for ${topLevelTaskId}` : '';
+        console.log(`${badge('TASKS', 'success')} top-level scoped work exhausted${topLevelHint}`);
       }
       terminalLoopPhase = 'completed';
       break;
     }
     if (!liveRenderer?.isEnabled()) {
-      printBeadsSnapshot(beadsSnapshot);
+      printTasksSnapshot(tasksSnapshot);
     }
     try {
-      const iterationRun = await runIteration(
+      const iterationRun = await dependencies.runIteration(
         iteration,
         state.max_iterations,
         options,
         provider,
         input.reviewerProvider,
         input.reviewerCommand,
-        beadsSnapshot,
+        tasksSnapshot,
         prompt,
         promptPath,
         command,
@@ -264,7 +325,7 @@ export async function runLoopController(
     const aggregatedOutput = aggregateIterationOutput({
       provider,
       results,
-      beadsSnapshot,
+      tasksSnapshot,
       pickedByAgent,
       liveRenderer,
       previewLines: options.previewLines,
@@ -293,7 +354,7 @@ export async function runLoopController(
           if (liveRenderer?.isEnabled()) {
             liveRenderer.setPauseState(remaining * 1000);
           }
-          await sleep(1000);
+          await dependencies.sleep(1000);
         }
         if (liveRenderer?.isEnabled()) {
           liveRenderer.setPauseState(null);
@@ -323,6 +384,7 @@ export async function runLoopController(
 
     const summary: IterationSummary = {
       usage: usageAggregate,
+      pickedTasksByAgent: pickedByAgent,
       pickedBeadsByAgent: pickedByAgent,
       notice: null,
       noticeTone: 'muted',
@@ -330,9 +392,9 @@ export async function runLoopController(
     liveRenderer?.setIterationSummary(summary);
 
     const pickedCount = pickedByAgent.size;
-    const shouldIgnoreStopMarker = shouldIgnoreStopMarkerForNoBeads({
+    const shouldIgnoreStopMarker = shouldIgnoreStopMarkerForNoTasks({
       stopDetected,
-      beadsSnapshot,
+      tasksSnapshot,
       pickedCount,
     });
     if (shouldIgnoreStopMarker) {
@@ -344,7 +406,7 @@ export async function runLoopController(
         );
       } else {
         console.log(
-          `${badge('DELAY', 'warn')} stop marker ignored because this iteration picked ${pickedCount} bead(s)`,
+          `${badge('DELAY', 'warn')} stop marker ignored because this iteration picked ${pickedCount} task(s)`,
         );
       }
       continue;
@@ -379,7 +441,7 @@ export async function runLoopController(
         if (liveRenderer?.isEnabled()) {
           liveRenderer.setPauseState(remaining);
         }
-        await sleep(1000);
+        await dependencies.sleep(1000);
       }
       if (liveRenderer?.isEnabled()) {
         liveRenderer.setPauseState(null);
@@ -398,7 +460,7 @@ export async function runLoopController(
   if (liveRenderer?.isEnabled()) {
     if (terminalLoopPhase === 'failed' || terminalLoopPhase === 'stopped') {
       liveRenderer.setLoopPhase(terminalLoopPhase);
-    } else if (!stoppedByProviderMarker && isCircuitBroken(state)) {
+    } else if (!stoppedByProviderMarker && dependencies.isCircuitBroken(state)) {
       liveRenderer.setLoopNotice(
         `max iterations (${state.max_iterations}) reached`,
         reachedCircuit ? 'warn' : 'success',
@@ -407,7 +469,7 @@ export async function runLoopController(
     } else {
       liveRenderer.setLoopPhase('completed');
     }
-  } else if (!stoppedByProviderMarker && isCircuitBroken(state)) {
+  } else if (!stoppedByProviderMarker && dependencies.isCircuitBroken(state)) {
     console.log(`${badge('CIRCUIT', 'warn')} max_iterations (${state.max_iterations}) reached`);
   }
 

@@ -10,8 +10,9 @@ Project documentation index.
 - [`testing.md`](./testing.md): test directory layout, naming convention, and exception policy.
 - [`provider-adapter-boundary.md`](./provider-adapter-boundary.md): provider boundary and shared parsing/retry ownership rules.
 - [`learned/rich-tui-iteration-lifecycle.md`](./learned/rich-tui-iteration-lifecycle.md): loop lifecycle rendering decisions.
+- [`learned/opentui-migration-plan.md`](./learned/opentui-migration-plan.md): source-backed plan to replace Ink renderer with OpenTUI.
 - [`learned/claude-stream-json-verbose.md`](./learned/claude-stream-json-verbose.md): Claude print-mode `stream-json` requires `--verbose`.
 - [`learned/review-loop-hardening.md`](./learned/review-loop-hardening.md): non-zero reviewer/fixer exits and JSONL validity/fallback policy.
-- [`learned/tui-refinement-verification.md`](./learned/tui-refinement-verification.md): TUI bead-10 refinement verification scope and cross-platform runtime constraints.
-- [`learned/claude-bead-pick-detection.md`](./learned/claude-bead-pick-detection.md): staged launch bead detection for Claude stream output.
+- [`learned/tui-refinement-verification.md`](./learned/tui-refinement-verification.md): TUI task-10 refinement verification scope and cross-platform runtime constraints.
+- [`learned/claude-bead-pick-detection.md`](./learned/claude-bead-pick-detection.md): staged launch task-pick detection for Claude stream output.
 - [`learned/claude-tool-use-classification.md`](./learned/claude-tool-use-classification.md): classify Claude tool calls using nested content type, not only top-level event type.

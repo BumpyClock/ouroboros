@@ -1,5 +1,5 @@
 import { isRecord, safeJsonParse } from './json';
-import type { BeadIssue } from './types';
+import type { TaskIssue } from './types';
 
 export type ReviewVerdict = 'pass' | 'drift';
 
@@ -75,7 +75,8 @@ export function isReviewFailure(value: ReviewResult | ReviewFailure): value is R
 }
 
 export type ReviewerContextParams = {
-  bead: BeadIssue;
+  task?: TaskIssue;
+  bead?: TaskIssue;
   implementerOutput: string;
   implementerLogPath: string;
   gitDiff: string;
@@ -88,7 +89,7 @@ export type ReviewerContextParams = {
  * Build the context block appended to the reviewer prompt for a single slot review.
  *
  * Includes:
- * - Bead metadata (id, title, status, priority)
+ * - Task metadata (id, title, status, priority)
  * - Implementer combined output (stdout+stderr)
  * - Implementer log path reference
  * - Git diff snapshot
@@ -96,14 +97,18 @@ export type ReviewerContextParams = {
  * - Fix attempt context when reviewing after a fix pass
  */
 export function buildReviewerContext(params: ReviewerContextParams): string {
-  const { bead, implementerOutput, implementerLogPath, gitDiff, parallelAgents } = params;
+  const task = params.task ?? params.bead;
+  if (!task) {
+    throw new Error('buildReviewerContext requires task metadata');
+  }
+  const { implementerOutput, implementerLogPath, gitDiff, parallelAgents } = params;
 
   const sections: string[] = [];
 
-  // Bead metadata
-  const priorityLabel = bead.priority !== undefined ? ` (priority: ${bead.priority})` : '';
+  // Task metadata
+  const priorityLabel = task.priority !== undefined ? ` (priority: ${task.priority})` : '';
   sections.push(
-    `## Bead Under Review\n- **ID**: ${bead.id}\n- **Title**: ${bead.title}\n- **Status**: ${bead.status}${priorityLabel}`,
+    `## Task Under Review\n- **ID**: ${task.id}\n- **Title**: ${task.title}\n- **Status**: ${task.status}${priorityLabel}`,
   );
 
   // Fix attempt context
@@ -128,13 +133,13 @@ export function buildReviewerContext(params: ReviewerContextParams): string {
   // Parallel agent warning
   if (parallelAgents > 1) {
     sections.push(
-      `## Warning: Parallel Agents Active\nThis iteration runs ${parallelAgents} agents in parallel. The git diff may include changes from other agents working on different beads. Focus your review only on changes relevant to bead **${bead.id}**.`,
+      `## Warning: Parallel Agents Active\nThis iteration runs ${parallelAgents} agents in parallel. The git diff may include changes from other agents working on different tasks. Focus your review only on changes relevant to task **${task.id}**.`,
     );
   }
 
   // Response contract
   sections.push(
-    '## Response Contract\nYou MUST respond with a single JSON object and nothing else:\n```json\n{ "verdict": "pass" | "drift", "followUpPrompt": "..." }\n```\n- `verdict`: `"pass"` if implementation matches bead requirements, `"drift"` if it does not.\n- `followUpPrompt`: When `"pass"`, a brief summary. When `"drift"`, specific instructions for the developer to fix the issues found.',
+    '## Response Contract\nYou MUST respond with a single JSON object and nothing else:\n```json\n{ "verdict": "pass" | "drift", "followUpPrompt": "..." }\n```\n- `verdict`: `"pass"` if implementation matches task requirements, `"drift"` if it does not.\n- `followUpPrompt`: When `"pass"`, a brief summary. When `"drift"`, specific instructions for the developer to fix the issues found.',
   );
 
   return sections.join('\n\n');

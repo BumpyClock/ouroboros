@@ -11,7 +11,7 @@ implement → review → [pass] → done
 ```
 
 1. Implementation runs as normal for each agent slot.
-2. If `reviewEnabled` is true, a bead was picked, and implementation exits 0, the reviewer agent evaluates the output.
+2. If `reviewEnabled` is true, a task was picked, and implementation exits 0, the reviewer agent evaluates the output.
 3. Reviewer must emit a strict JSON verdict: `{"verdict": "pass" | "drift", "followUpPrompt": "..."}`.
 4. On `pass`, the slot succeeds.
 5. On `drift`, a fix agent runs with the reviewer's `followUpPrompt`.
@@ -25,7 +25,7 @@ Review is **skipped** when any of these are true:
 
 - `reviewEnabled` is false (default)
 - No reviewer prompt path is resolved
-- No bead was picked by the agent
+- No task was picked by the agent
 - Implementation exited non-zero
 
 ## Failure policy
@@ -58,7 +58,7 @@ or
 
 The reviewer receives context built by `buildReviewerContext`:
 
-- Bead metadata (id, title, status, priority)
+- Task metadata (id, title, status, priority)
 - Implementer output (capped at 50k chars)
 - Git diff snapshot (capped at 50k chars)
 - Parallel-agent warning when `parallelAgents > 1` (diff may include unrelated changes)
@@ -67,16 +67,16 @@ The reviewer receives context built by `buildReviewerContext`:
 
 ## Stop-marker exclusion
 
-Stop-marker detection (`hasStopMarker`) only runs on implementation and fix agent outputs. Reviewer output is excluded — a reviewer quoting `no_beads_available` in analysis does not terminate the loop.
+Stop-marker detection (`hasStopMarker`) only runs on implementation and fix agent outputs. Reviewer output is excluded - a reviewer quoting `no_tasks_available` (or legacy `no_beads_available`) in analysis does not terminate the loop.
 
 ## Lifecycle phases
 
 When the live renderer is active, agents show review-specific status:
 
-- `reviewing` — reviewer agent is running (shows `REVIEW` badge with bead id)
+- `reviewing` — reviewer agent is running (shows `REVIEW` badge with task id)
 - `fixing` — fix agent is running after drift (shows `FIX` badge with attempt count)
 
-These phases are surfaced via `setAgentReviewPhase`/`clearAgentReviewPhase` on `LiveRunStateStore` and consumed by both ANSI and Ink renderers.
+These phases are surfaced via `setAgentReviewPhase`/`clearAgentReviewPhase` on `LiveRunStateStore` and consumed by both ANSI and OpenTUI renderers.
 
 ## Prompt resolution
 
@@ -106,7 +106,7 @@ ouroboros --review --provider codex --reviewer-provider claude --reviewer-model 
 
 ## Provider/model resolution contract
 
-Source of truth: [config.md](./config.md#reviewer-providermodel-resolution-contract-bead-11-source-of-truth).
+Source of truth: [config.md](./config.md#reviewer-providermodel-resolution-contract-task-11-source-of-truth).
 
 - `reviewerProvider` defaults to primary `provider` when unset.
 - `reviewerModel` defaults to primary `model` when reviewer provider matches primary; otherwise to the reviewer provider's default model.

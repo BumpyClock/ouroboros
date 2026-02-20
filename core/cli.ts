@@ -8,6 +8,8 @@ type CliOverrides = {
   provider?: string;
   reviewerProvider?: string;
   reviewerCommand?: string;
+  taskMode?: 'auto' | 'top-level';
+  topLevelTaskId?: string;
   beadMode?: 'auto' | 'top-level';
   topLevelBeadId?: string;
   iterationLimit?: number;
@@ -31,7 +33,7 @@ type CliOverrides = {
   forceInitPrompts?: boolean;
 };
 
-const beadModeValues = new Set(['auto', 'top-level']);
+const taskModeValues = new Set(['auto', 'top-level']);
 
 function parsePositiveInt(value: string | undefined, fallback: number): number {
   const parsed = Number.parseInt(value ?? '', 10);
@@ -43,16 +45,24 @@ function parseNonNegativeInt(value: string | undefined, fallback: number): numbe
   return Number.isNaN(parsed) || parsed < 0 ? fallback : parsed;
 }
 
-function parseBeadMode(value: string | undefined): 'auto' | 'top-level' {
+function parseTaskMode(value: string | undefined): 'auto' | 'top-level' {
   const normalized = value?.trim().toLowerCase();
-  if (!normalized || !beadModeValues.has(normalized)) {
+  if (!normalized || !taskModeValues.has(normalized)) {
     throw new Error('Unsupported bead mode. Expected "auto" or "top-level".');
   }
   return normalized;
 }
 
-function parseTopLevelBeadId(value: string | undefined): string | undefined {
+function parseTopLevelTaskId(value: string | undefined): string | undefined {
   const trimmed = (value ?? '').trim();
+  return trimmed === '' ? undefined : trimmed;
+}
+
+function normalizeOptionalString(value: unknown): string | undefined {
+  if (typeof value !== 'string') {
+    return undefined;
+  }
+  const trimmed = value.trim();
   return trimmed === '' ? undefined : trimmed;
 }
 
@@ -72,11 +82,15 @@ function parseCliOverrides(argv: string[]): CliOverrides {
     } else if (arg === '--reviewer-command') {
       overrides.reviewerCommand = argv[i + 1];
       i += 1;
-    } else if (arg === '--bead-mode') {
-      overrides.beadMode = parseBeadMode(argv[i + 1]);
+    } else if (arg === '--task-mode' || arg === '--bead-mode') {
+      const parsed = parseTaskMode(argv[i + 1]);
+      overrides.taskMode = parsed;
+      overrides.beadMode = parsed;
       i += 1;
-    } else if (arg === '--top-level-bead') {
-      overrides.topLevelBeadId = parseTopLevelBeadId(argv[i + 1]);
+    } else if (arg === '--top-level-task' || arg === '--top-level-bead') {
+      const parsed = parseTopLevelTaskId(argv[i + 1]);
+      overrides.topLevelTaskId = parsed;
+      overrides.topLevelBeadId = parsed;
       i += 1;
     } else if (arg === '--prompt' || arg === '-p') {
       overrides.developerPromptPath = argv[i + 1];
@@ -152,8 +166,10 @@ export function printUsage(): void {
 
 Options:
   --provider <name>        Agent provider. default: codex (supported: ${providers})
-      --bead-mode <auto|top-level>  Bead selection mode. default: auto
-      --top-level-bead <id>  Target bead id when --bead-mode top-level is active
+      --task-mode <auto|top-level>  Task selection mode. default: auto
+      --top-level-task <id>  Target task id when --task-mode top-level is active
+      --bead-mode <auto|top-level>  Alias for --task-mode
+      --top-level-bead <id>  Alias for --top-level-task
   -p, --prompt <path>      Developer prompt file path (fallback: .ai_agents/prompts/developer.md, .ai_agents/prompt.md, docs/prompts/developer.default.md)
   -n, --iterations <n>     Max loops. default: 50
   -l, --preview <n>        Number of recent messages shown. default: 3
@@ -224,18 +240,33 @@ export function parseArgs(argv = process.argv.slice(2)): CliOptions {
     provider.name,
   ) as string;
   const reviewerProvider = getProviderAdapter(reviewerProviderName);
+  const reviewerModelOverride = normalizeOptionalString(cli.reviewerModel);
+  const reviewerModelFromConfig = normalizeOptionalString(config.runtimeConfig.reviewerModel);
   const reviewerModel = pick(
-    cli.reviewerModel,
-    config.runtimeConfig.reviewerModel,
+    reviewerModelOverride,
+    reviewerModelFromConfig,
     reviewerProvider.name === provider.name ? model : reviewerProvider.defaults.model,
   ) as string;
   const reviewerCommand = pick(cli.reviewerCommand, config.runtimeConfig.reviewerCommand);
-  const beadMode = parseBeadMode(pick(cli.beadMode, config.runtimeConfig.beadMode, 'auto'));
-  const topLevelBeadId = parseTopLevelBeadId(
-    pick(cli.topLevelBeadId, config.runtimeConfig.topLevelBeadId),
+  const taskMode = parseTaskMode(
+    pick(
+      cli.taskMode,
+      cli.beadMode,
+      config.runtimeConfig.taskMode,
+      config.runtimeConfig.beadMode,
+      'auto',
+    ),
   );
-  if (beadMode === 'top-level' && !topLevelBeadId) {
-    throw new Error('Top-level mode requires --top-level-bead');
+  const topLevelTaskId = parseTopLevelTaskId(
+    pick(
+      cli.topLevelTaskId,
+      cli.topLevelBeadId,
+      config.runtimeConfig.topLevelTaskId,
+      config.runtimeConfig.topLevelBeadId,
+    ),
+  );
+  if (taskMode === 'top-level' && !topLevelTaskId) {
+    throw new Error('Top-level mode requires --top-level-bead (alias: --top-level-task)');
   }
   const iterationsSet = cli.iterationsSet || config.runtimeConfig.iterationLimit !== undefined;
 
@@ -272,8 +303,10 @@ export function parseArgs(argv = process.argv.slice(2)): CliOptions {
       config.runtimeConfig.reviewMaxFixAttempts,
       5,
     ) as number,
-    beadMode,
-    topLevelBeadId,
+    taskMode,
+    topLevelTaskId,
+    beadMode: taskMode,
+    topLevelBeadId: topLevelTaskId,
     theme,
     developerPromptPath: pick(
       cli.developerPromptPath,

@@ -45,4 +45,4 @@ Default prompt content must not require side-effect-heavy repo operations unless
 - history rewrite
 - unrelated repo-wide refactors
 
-Default prompts should bias toward bounded, single-bead, verification-backed work.
+Default prompts should bias toward bounded, single-task, verification-backed work.

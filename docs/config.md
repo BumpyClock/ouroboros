@@ -68,8 +68,8 @@ Supported keys:
 - `developerPromptPath` (optional string)
 - `reviewerPromptPath` (optional string)
 - `theme` (string; builtin name or file path)
-- `beadMode` (`auto` | `top-level`; default: `auto`)
-- `topLevelBeadId` (string; required when `beadMode = "top-level"`)
+- `beadMode` (`auto` | `top-level`; default: `auto`) - legacy key name for task scope mode
+- `topLevelBeadId` (string; required when `beadMode = "top-level"`) - legacy key name for the top-level task id
 
 Values are normalized into runtime types. Invalid keys are ignored.
 
@@ -83,13 +83,13 @@ Values are normalized into runtime types. Invalid keys are ignored.
   - `ansi` with `reset`, `bold`, `dim`, `border`, `title`, `panel`, `tone` (or `tones`)
   - `ink` with `border`, `title`, `panel`, `tone` (or `tones`)
 
-`beadMode` behavior:
+Task scope mode behavior (`beadMode` legacy key name):
 
-- `auto` (default): existing default bead selection behavior.
-- `top-level`: Ouroboros targets the configured bead id only. Use `topLevelBeadId` to pin execution.
+- `auto` (default): existing default task selection behavior.
+- `top-level`: Ouroboros targets the configured top-level task id only. Use `topLevelBeadId` to pin execution.
 - In `auto` mode, `topLevelBeadId` does not alter scope; `--top-level-bead` is ignored unless `--bead-mode` is `top-level`.
 - CLI precedence: `--bead-mode` and `--top-level-bead` override config values for both keys.
-- In top-level mode, loop exits cleanly when no remaining direct child beads remain in scope.
+- In top-level mode, loop exits cleanly when no remaining direct child tasks remain in scope.
 - Runtime prompt injection enforces top-level scope boundaries for developer agent prompts at run time; auto mode retains existing behavior.
 
 `top-level` mode requires both:
@@ -119,11 +119,11 @@ When `--review` is enabled, each agent slot runs a review/fix cycle after implem
 6. Malformed reviewer output (non-JSON, invalid verdict) fails the slot immediately.
 7. Reviewer/fixer process non-zero exit status fails the slot immediately (no extra review/fix continuation).
 
-Review is skipped when `reviewEnabled` is false (default), no reviewer prompt exists, no bead was picked, or implementation exited non-zero.
+Review is skipped when `reviewEnabled` is false (default), no reviewer prompt exists, no task was picked, or implementation exited non-zero.
 
-## Reviewer provider/model resolution contract (bead 11 source of truth)
+## Reviewer provider/model resolution contract (task 11 source of truth)
 
-Status: contract defined in `ouroboros-11.1`; CLI/config resolution lands in `ouroboros-11.2`; runtime execution wiring continues in `ouroboros-11.3+`.
+Status: contract defined in `ouroboros-11.1`; CLI/config resolution lands in `ouroboros-11.2`; runtime execution wiring continues in `ouroboros-11.3+` (legacy tracker ids retained).
 
 Terms:
 
@@ -166,14 +166,13 @@ ouroboros --review --provider codex --reviewer-provider claude --reviewer-model 
 ouroboros --review --provider codex --reviewer-provider claude --reviewer-command /opt/claude/bin/claude --reviewer-model sonnet
 ```
 
-## Bead snapshot trust model
+## Task snapshot trust model
 
-- Bead snapshots are loaded from `bd --readonly list --json --all --limit 0 --no-pager`.
-- If `--readonly` is unsupported by the local `bd` version, runtime falls back to `bd list --json --all --limit 0 --no-pager`.
-- In `top-level` bead mode, snapshot loading adds `--parent <topLevelBeadId>` on both command variants to limit work to direct child beads.
+- Task snapshots are loaded from `tsq list --json`.
+- In `top-level` mode, snapshot loading filters tasks in-memory to direct children (`parent_id === topLevelBeadId`).
 - Snapshot commands are time-bounded (5s) to avoid startup/iteration stalls and prolonged lock contention.
-- Snapshot is available when the `bd` command succeeds (JSON parse errors are treated as empty, available snapshots).
-- No-bead stop-marker suppression applies only when this snapshot is available.
+- Snapshot is available when the `tsq` command succeeds (JSON parse errors are treated as empty, available snapshots).
+- No-task stop-marker suppression applies only when this snapshot is available.
 
 For full lifecycle details and verdict contract, see [`review-loop.md`](./review-loop.md).
 

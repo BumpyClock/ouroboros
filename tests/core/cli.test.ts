@@ -1,19 +1,7 @@
-import { afterAll, beforeAll, beforeEach, describe, expect, it, mock } from 'bun:test';
+import { afterEach, beforeEach, describe, expect, it, mock } from 'bun:test';
 import { getProviderAdapter } from '../../providers/registry';
 
 let runtimeConfig: Record<string, unknown> = {};
-
-mock.module('../../core/config', () => ({
-  loadOuroborosConfig: () => ({
-    globalConfigPath: '/home/test/.ouroboros/config.toml',
-    projectConfigPath: '/repo/.ouroboros/config.toml',
-    projectRoot: '/repo',
-    projectKey: 'repo-key',
-    globalConfig: {},
-    projectConfig: {},
-    runtimeConfig,
-  }),
-}));
 
 let parseArgs: ((argv?: string[]) => import('../../core/types').CliOptions) | null = null;
 
@@ -33,16 +21,26 @@ function parseWithConfig(
 }
 
 describe('parseArgs reviewer provider/model resolution', () => {
-  beforeAll(async () => {
-    const mod = await import('../../core/cli');
+  beforeEach(async () => {
+    runtimeConfig = {};
+    mock.module('../../core/config', () => ({
+      loadOuroborosConfig: () => ({
+        globalConfigPath: '/home/test/.ouroboros/config.toml',
+        projectConfigPath: '/repo/.ouroboros/config.toml',
+        projectRoot: '/repo',
+        projectKey: 'repo-key',
+        globalConfig: {},
+        projectConfig: {},
+        runtimeConfig,
+      }),
+    }));
+    const mod = await import(
+      `../../core/cli.ts?cli-test-${Date.now()}-${Math.random().toString(36).slice(2)}`
+    );
     parseArgs = mod.parseArgs;
   });
 
-  beforeEach(() => {
-    runtimeConfig = {};
-  });
-
-  afterAll(() => {
+  afterEach(() => {
     mock.restore();
   });
 
@@ -218,7 +216,7 @@ describe('parseArgs reviewer provider/model resolution', () => {
     ).toThrow(/Unknown theme "does-not-exist"\./);
   });
 
-  it('supports bead mode from config and CLI override', () => {
+  it('supports task scope mode from config and CLI override (legacy bead flags)', () => {
     const fromConfig = parseWithConfig([], {
       provider: 'codex',
       model: 'gpt-5-primary',
@@ -239,7 +237,7 @@ describe('parseArgs reviewer provider/model resolution', () => {
     expect(fromCli.beadMode).toBe('auto');
   });
 
-  it('defaults to auto when bead mode is unset', () => {
+  it('defaults to auto when task scope mode is unset', () => {
     const options = parseWithConfig(['--review'], {
       provider: 'codex',
       model: 'gpt-5-primary',
@@ -249,13 +247,13 @@ describe('parseArgs reviewer provider/model resolution', () => {
     expect(options.topLevelBeadId).toBe(undefined);
   });
 
-  it('throws when top-level mode is used without a top-level bead id', () => {
+  it('throws when top-level mode is used without a top-level task id', () => {
     expect(() =>
       parseWithConfig(['--bead-mode', 'top-level'], { provider: 'codex', model: 'gpt-5-primary' }),
     ).toThrow(/Top-level mode requires --top-level-bead/);
   });
 
-  it('throws when top-level mode uses a blank top-level bead id', () => {
+  it('throws when top-level mode uses a blank top-level task id', () => {
     expect(() =>
       parseWithConfig(['--bead-mode', 'top-level', '--top-level-bead', '   '], {
         provider: 'codex',
@@ -264,13 +262,13 @@ describe('parseArgs reviewer provider/model resolution', () => {
     ).toThrow(/Top-level mode requires --top-level-bead/);
   });
 
-  it('throws when config contains an invalid bead mode', () => {
+  it('throws when config contains an invalid task scope mode', () => {
     expect(() =>
       parseWithConfig([], { provider: 'codex', model: 'gpt-5-primary', beadMode: 'invalid-mode' }),
     ).toThrow(/Unsupported bead mode/);
   });
 
-  it('accepts top-level mode when CLI provides top-level bead id', () => {
+  it('accepts top-level mode when CLI provides top-level task id', () => {
     const options = parseWithConfig(
       ['--bead-mode', 'top-level', '--top-level-bead', 'ouroboros-12'],
       { provider: 'codex', model: 'gpt-5-primary' },

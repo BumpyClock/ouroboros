@@ -1,6 +1,6 @@
 import { spawn } from 'node:child_process';
 import { safeJsonParse, toRecord } from './json';
-import type { BeadIssue, BeadsSnapshot } from './types';
+import type { TaskIssue, TasksSnapshot } from './types';
 
 type ShellResult = {
   status: number | null;
@@ -8,31 +8,15 @@ type ShellResult = {
   stderr: string;
 };
 
-const BD_LIST_ARGS_READONLY = [
-  '--readonly',
-  'list',
-  '--json',
-  '--all',
-  '--limit',
-  '0',
-  '--no-pager',
-];
-const BD_LIST_ARGS = ['list', '--json', '--all', '--limit', '0', '--no-pager'];
-const BD_LIST_TIMEOUT_MS = 5000;
+const TSQ_LIST_ARGS = ['list', '--json'];
+const TSQ_LIST_TIMEOUT_MS = 5000;
 
-function buildListArgs(useReadonly: boolean, topLevelBeadId?: string): string[] {
-  const args = useReadonly ? [...BD_LIST_ARGS_READONLY] : [...BD_LIST_ARGS];
-  if (!topLevelBeadId) {
-    return args;
-  }
-  const listIndex = args.indexOf('list') + 1;
-  args.splice(listIndex, 0, '--parent', topLevelBeadId);
-  return args;
+function buildListArgs(): string[] {
+  return [...TSQ_LIST_ARGS];
 }
 
-function buildListSource(useReadonly: boolean, topLevelBeadId?: string): string {
-  const args = buildListArgs(useReadonly, topLevelBeadId);
-  return `bd ${args.join(' ')}`;
+function buildListSource(): string {
+  return `tsq ${buildListArgs().join(' ')}`;
 }
 
 function runCommand(
@@ -81,7 +65,7 @@ function runCommand(
       settle({
         status: null,
         stdout,
-        stderr: `${stderr}${stderr ? '\n' : ''}bd command timed out after ${timeoutMs}ms`,
+        stderr: `${stderr}${stderr ? '\n' : ''}${command} command timed out after ${timeoutMs}ms`,
       });
     }, timeoutMs);
   });
@@ -95,8 +79,24 @@ function extractIssueArray(payload: unknown): unknown[] {
   if (!record) {
     return [];
   }
-  const candidates = [record.issues, record.items, record.data, record.results];
+  const candidates = [record.tasks, record.issues, record.items, record.results];
   for (const candidate of candidates) {
+    if (Array.isArray(candidate)) {
+      return candidate;
+    }
+  }
+  const dataRecord = toRecord(record.data);
+  if (!dataRecord) {
+    return [];
+  }
+  const nestedCandidates = [
+    dataRecord.tasks,
+    dataRecord.issues,
+    dataRecord.items,
+    dataRecord.results,
+    dataRecord.data,
+  ];
+  for (const candidate of nestedCandidates) {
     if (Array.isArray(candidate)) {
       return candidate;
     }
@@ -116,7 +116,7 @@ function toNumberValue(value: unknown): number | undefined {
   return Number.isFinite(parsed) ? parsed : undefined;
 }
 
-function normalizeIssue(raw: unknown): BeadIssue | null {
+function normalizeIssue(raw: unknown): TaskIssue | null {
   const record = toRecord(raw);
   if (!record) {
     return null;
@@ -136,7 +136,18 @@ function normalizeIssue(raw: unknown): BeadIssue | null {
   };
 }
 
-function sortRemaining(issues: BeadIssue[]): BeadIssue[] {
+function isTaskWithinTopLevelScope(raw: unknown, topLevelTaskId?: string): boolean {
+  if (!topLevelTaskId) {
+    return true;
+  }
+  const record = toRecord(raw);
+  if (!record) {
+    return false;
+  }
+  return toStringValue(record.parent_id) === topLevelTaskId;
+}
+
+function sortRemaining(issues: TaskIssue[]): TaskIssue[] {
   return [...issues].sort((left, right) => {
     const leftPriority = left.priority ?? -1;
     const rightPriority = right.priority ?? -1;
@@ -147,7 +158,7 @@ function sortRemaining(issues: BeadIssue[]): BeadIssue[] {
   });
 }
 
-function createSnapshot(projectRoot: string, source: string, issues: BeadIssue[]): BeadsSnapshot {
+function createSnapshot(projectRoot: string, source: string, issues: TaskIssue[]): TasksSnapshot {
   const byId = new Map(issues.map((issue) => [issue.id, issue]));
   const closed = issues.filter((issue) => issue.status === 'closed').length;
   const open = issues.filter((issue) => issue.status === 'open').length;
@@ -171,10 +182,12 @@ function createSnapshot(projectRoot: string, source: string, issues: BeadIssue[]
   };
 }
 
-const BEAD_ID_PATTERN = /\b[a-z][a-z0-9]*(?:-[a-z0-9.]+)+\b/gi;
+const TASK_ID_PATTERN = /\b[a-z][a-z0-9]*(?:-[a-z0-9.]+)+\b/gi;
 const EXPLICIT_PICK_PATTERNS = [
   /updated issue:\s*([a-z][a-z0-9]*(?:-[a-z0-9.]+)+)\b/gi,
+  /updated task:\s*([a-z][a-z0-9]*(?:-[a-z0-9.]+)+)\b/gi,
   /\bbd\s+update\s+([a-z][a-z0-9]*(?:-[a-z0-9.]+)+)\b/gi,
+  /\btsq\s+update\s+([a-z][a-z0-9]*(?:-[a-z0-9.]+)+)\b/gi,
 ];
 
 function collectKnownIdsFromMatches(matches: Iterable<string>, knownIds: Set<string>): string[] {
@@ -198,7 +211,7 @@ function collectKnownIdsByPattern(text: string, knownIds: Set<string>, pattern: 
   return collectKnownIdsFromMatches(matches, knownIds);
 }
 
-export function extractReferencedBeadIds(text: string, knownIds: Set<string>): string[] {
+export function extractReferencedTaskIds(text: string, knownIds: Set<string>): string[] {
   for (const pattern of EXPLICIT_PICK_PATTERNS) {
     const explicitMatches = collectKnownIdsByPattern(text, knownIds, pattern);
     if (explicitMatches.length > 0) {
@@ -206,7 +219,7 @@ export function extractReferencedBeadIds(text: string, knownIds: Set<string>): s
     }
   }
 
-  const genericMatches = text.match(BEAD_ID_PATTERN) ?? [];
+  const genericMatches = text.match(TASK_ID_PATTERN) ?? [];
   const genericKnownIds = collectKnownIdsFromMatches(genericMatches, knownIds);
   if (genericKnownIds.length === 1) {
     return genericKnownIds;
@@ -218,7 +231,7 @@ function createUnavailableSnapshot(
   projectRoot: string,
   source: string,
   error: string,
-): BeadsSnapshot {
+): TasksSnapshot {
   return {
     available: false,
     source,
@@ -236,49 +249,41 @@ function createUnavailableSnapshot(
   };
 }
 
-function isReadonlyFlagUnsupported(stderr: string, stdout: string): boolean {
-  const combined = `${stderr}\n${stdout}`.toLowerCase();
-  return combined.includes('unknown flag: --readonly');
-}
-
-export async function loadBeadsSnapshot(
+export async function loadTasksSnapshot(
   projectRoot: string,
-  topLevelBeadId?: string,
-): Promise<BeadsSnapshot> {
+  topLevelTaskId?: string,
+): Promise<TasksSnapshot> {
   try {
-    let source = buildListSource(true, topLevelBeadId);
-    let result = await runCommand(
-      'bd',
-      buildListArgs(true, topLevelBeadId),
-      projectRoot,
-      BD_LIST_TIMEOUT_MS,
-    );
-    if (result.status !== 0 && isReadonlyFlagUnsupported(result.stderr, result.stdout)) {
-      source = buildListSource(false, topLevelBeadId);
-      result = await runCommand(
-        'bd',
-        buildListArgs(false, topLevelBeadId),
-        projectRoot,
-        BD_LIST_TIMEOUT_MS,
-      );
-    }
+    const source = buildListSource();
+    const result = await runCommand('tsq', buildListArgs(), projectRoot, TSQ_LIST_TIMEOUT_MS);
 
     if (result.status !== 0) {
       return createUnavailableSnapshot(
         projectRoot,
         source,
-        result.stderr.trim() || result.stdout.trim() || `bd exited with status ${result.status}`,
+        result.stderr.trim() || result.stdout.trim() || `tsq exited with status ${result.status}`,
       );
     }
 
     const parsed = safeJsonParse(result.stdout);
-    const rawIssues = extractIssueArray(parsed);
+    const rawIssues = extractIssueArray(parsed).filter((issue) =>
+      isTaskWithinTopLevelScope(issue, topLevelTaskId),
+    );
     const issues = rawIssues
       .map(normalizeIssue)
-      .filter((issue): issue is BeadIssue => issue !== null);
+      .filter((issue): issue is TaskIssue => issue !== null);
     return createSnapshot(projectRoot, source, issues);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    return createUnavailableSnapshot(projectRoot, buildListSource(true, topLevelBeadId), message);
+    return createUnavailableSnapshot(projectRoot, buildListSource(), message);
   }
+}
+
+export const extractReferencedBeadIds = extractReferencedTaskIds;
+
+export async function loadBeadsSnapshot(
+  projectRoot: string,
+  topLevelBeadId?: string,
+): Promise<TasksSnapshot> {
+  return loadTasksSnapshot(projectRoot, topLevelBeadId);
 }

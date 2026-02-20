@@ -49,7 +49,7 @@ describe('Ink TUI rendering helpers', () => {
     expect(small).toContain('ouroboros-10.7 ·');
     expect(small).not.toMatch(/\[A\d+\]/);
 
-    expect(formatAgentTitle(null, 20)).toBe('no bead picked');
+    expect(formatAgentTitle(null, 20)).toBe('no task picked');
   });
 
   it('renders agent notch header line with top label', () => {

@@ -1,5 +1,5 @@
 import { formatShort } from './text';
-import type { BeadIssue, BeadsSnapshot, PreviewEntry, Tone, UsageSummary } from './types';
+import type { PreviewEntry, TaskIssue, TasksSnapshot, Tone, UsageSummary } from './types';
 
 export const LIVE_SPINNER_FRAMES = ['-', '\\', '|', '/'] as const;
 
@@ -42,7 +42,8 @@ export type RunContext = {
 
 export type IterationSummary = {
   usage: UsageSummary | null;
-  pickedBeadsByAgent: Map<number, BeadIssue>;
+  pickedTasksByAgent: Map<number, TaskIssue>;
+  pickedBeadsByAgent?: Map<number, TaskIssue>;
   notice: string | null;
   noticeTone: Tone;
 };
@@ -61,7 +62,8 @@ export type AgentSpawnState = {
 export type AgentReviewPhase = {
   phase: 'reviewing' | 'fixing';
   fixAttempt: number;
-  beadId: string;
+  taskId: string;
+  beadId?: string;
 };
 
 export type LiveRunAgentTab = 'dev' | 'review';
@@ -87,8 +89,10 @@ export type LiveRunState = {
   agentActiveTab: Map<number, LiveRunAgentTab>;
   agentTabRestore: Map<number, LiveRunAgentTab>;
   iterationMarkers: Map<number, IterationMarkerState>;
-  beadsSnapshot: BeadsSnapshot | null;
-  agentPickedBeads: Map<number, BeadIssue>;
+  tasksSnapshot: TasksSnapshot | null;
+  beadsSnapshot: TasksSnapshot | null;
+  agentPickedTasks: Map<number, TaskIssue>;
+  agentPickedBeads: Map<number, TaskIssue>;
   runContext: RunContext | null;
   lastIterationSummary: IterationSummary | null;
   loopPhase: LoopPhase;
@@ -114,7 +118,8 @@ export type LiveRunHeaderState = {
 };
 
 export type LiveRunAgentSelector = {
-  pickedBead: BeadIssue | null;
+  pickedTask: TaskIssue | null;
+  pickedBead: TaskIssue | null;
   statusLabel: string;
   statusTone: Tone;
   statusText: string;
@@ -169,6 +174,7 @@ function createInitialState(
   if (iteration > 0) {
     iterationMarkers.set(iteration, { retryCount: 0, outcome: null });
   }
+  const agentPickedTasks = new Map<number, TaskIssue>();
   return {
     startedAt: Date.now(),
     frameIndex: 0,
@@ -185,8 +191,10 @@ function createInitialState(
     agentActiveTab: activeTabs,
     agentTabRestore: new Map<number, LiveRunAgentTab>(),
     iterationMarkers,
+    tasksSnapshot: null,
     beadsSnapshot: null,
-    agentPickedBeads: new Map<number, BeadIssue>(),
+    agentPickedTasks,
+    agentPickedBeads: agentPickedTasks,
     runContext: null,
     lastIterationSummary: null,
     loopPhase: 'starting',
@@ -261,7 +269,7 @@ export class LiveRunStateStore {
 
   getAgentSelector(agentId: number, now = Date.now()): LiveRunAgentSelector {
     const snapshot = this.state.agentState.get(agentId);
-    const pickedBead = this.state.agentPickedBeads.get(agentId) ?? null;
+    const pickedTask = this.state.agentPickedTasks.get(agentId) ?? null;
     const spawn = this.state.agentSpawnState.get(agentId);
     const review = this.state.agentReviewPhase.get(agentId) ?? null;
     const activeTab = this.state.agentActiveTab.get(agentId) ?? 'dev';
@@ -270,7 +278,8 @@ export class LiveRunStateStore {
     if (!snapshot) {
       if (spawn?.phase === 'launching') {
         return {
-          pickedBead,
+          pickedTask,
+          pickedBead: pickedTask,
           statusLabel: 'SPAWN',
           statusTone: 'info',
           statusText: 'launch in progress',
@@ -286,7 +295,8 @@ export class LiveRunStateStore {
       }
       if (spawn?.phase === 'queued') {
         return {
-          pickedBead,
+          pickedTask,
+          pickedBead: pickedTask,
           statusLabel: 'QUEUED',
           statusTone: 'warn',
           statusText: 'awaiting launch',
@@ -301,7 +311,8 @@ export class LiveRunStateStore {
         };
       }
       return {
-        pickedBead,
+        pickedTask,
+        pickedBead: pickedTask,
         statusLabel: 'WAIT',
         statusTone: 'muted',
         statusText: 'waiting for events',
@@ -322,12 +333,13 @@ export class LiveRunStateStore {
     if (review) {
       const isFixing = review.phase === 'fixing';
       return {
-        pickedBead,
+        pickedTask,
+        pickedBead: pickedTask,
         statusLabel: isFixing ? 'FIX' : 'REVIEW',
         statusTone: isFixing ? 'warn' : 'info',
         statusText: isFixing
-          ? `fix attempt ${review.fixAttempt} for ${review.beadId}`
-          : `reviewing ${review.beadId}`,
+          ? `fix attempt ${review.fixAttempt} for ${review.taskId}`
+          : `reviewing ${review.taskId}`,
         detailText: `updated ${ageSeconds}s ago`,
         activeTab,
         restoreTab,
@@ -340,7 +352,8 @@ export class LiveRunStateStore {
     }
 
     return {
-      pickedBead,
+      pickedTask,
+      pickedBead: pickedTask,
       statusLabel: 'EVENTS',
       statusTone: 'muted',
       statusText: `events ${snapshot.totalEvents}`,
@@ -436,22 +449,32 @@ export class LiveRunStateStore {
     this.emit();
   }
 
-  setBeadsSnapshot(snapshot: BeadsSnapshot | null): void {
+  setTasksSnapshot(snapshot: TasksSnapshot | null): void {
     this.state = {
       ...this.state,
+      tasksSnapshot: snapshot,
       beadsSnapshot: snapshot,
     };
     this.emit();
   }
 
-  setAgentPickedBead(agentId: number, issue: BeadIssue): void {
-    const nextPicked = new Map(this.state.agentPickedBeads);
+  setBeadsSnapshot(snapshot: TasksSnapshot | null): void {
+    this.setTasksSnapshot(snapshot);
+  }
+
+  setAgentPickedTask(agentId: number, issue: TaskIssue): void {
+    const nextPicked = new Map(this.state.agentPickedTasks);
     nextPicked.set(agentId, issue);
     this.state = {
       ...this.state,
+      agentPickedTasks: nextPicked,
       agentPickedBeads: nextPicked,
     };
     this.emit();
+  }
+
+  setAgentPickedBead(agentId: number, issue: TaskIssue): void {
+    this.setAgentPickedTask(agentId, issue);
   }
 
   setAgentLogPath(agentId: number, path: string): void {
@@ -482,11 +505,15 @@ export class LiveRunStateStore {
   }
 
   setIterationSummary(summary: IterationSummary): void {
+    const pickedTasksByAgent = new Map(
+      summary.pickedTasksByAgent ?? summary.pickedBeadsByAgent ?? new Map<number, TaskIssue>(),
+    );
     this.state = {
       ...this.state,
       lastIterationSummary: {
         ...summary,
-        pickedBeadsByAgent: new Map(summary.pickedBeadsByAgent),
+        pickedTasksByAgent,
+        pickedBeadsByAgent: pickedTasksByAgent,
       },
     };
     this.emit();
@@ -544,7 +571,12 @@ export class LiveRunStateStore {
   setAgentReviewPhase(agentId: number, phase: AgentReviewPhase): void {
     const hadReviewPhase = this.state.agentReviewPhase.has(agentId);
     const nextReview = new Map(this.state.agentReviewPhase);
-    nextReview.set(agentId, phase);
+    const taskId = phase.taskId || phase.beadId || 'unknown-task';
+    nextReview.set(agentId, {
+      ...phase,
+      taskId,
+      beadId: phase.beadId ?? taskId,
+    });
     const nextTabs = new Map(this.state.agentActiveTab);
     const nextRestoreTabs = new Map(this.state.agentTabRestore);
     if (!hadReviewPhase) {

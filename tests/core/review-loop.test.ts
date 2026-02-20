@@ -1,5 +1,9 @@
-import { afterAll, beforeAll, describe, expect, it, mock } from 'bun:test';
-import type { SlotReviewInput, SlotReviewOutcome } from '../../core/iteration-execution';
+import { describe, expect, it } from 'bun:test';
+import {
+  runSlotReviewLoop,
+  type SlotReviewInput,
+  type SlotReviewOutcome,
+} from '../../core/iteration-execution';
 import type {
   BeadIssue,
   BeadsSnapshot,
@@ -34,42 +38,28 @@ function resetMockState(): void {
   runCalls.length = 0;
 }
 
-// Mock process-runner for runSlotReviewLoop (review/fix agent processes)
-mock.module('../../core/process-runner', () => ({
-  resolveRunnableCommand: (command: string) => command,
-  terminateChildProcess: async () => {},
-  runAgentProcess: async ({
-    prompt,
-    logPath,
-    command,
-    args,
-  }: {
-    prompt: string;
-    logPath: string;
-    command: string;
-    args: string[];
-    onStdoutLine?: (line: string) => void;
-  }) => {
-    const idx = mockRunIndex;
-    mockRunIndex += 1;
-    runCalls.push({ prompt, logPath, command, args });
-    return mockRunResults[idx] ?? { status: 0, stdout: '', stderr: '' };
-  },
-}));
+const mockRunAgentProcess = async ({
+  prompt,
+  logPath,
+  command,
+  args,
+}: {
+  prompt: string;
+  logPath: string;
+  command: string;
+  args: string[];
+}): Promise<StreamResult> => {
+  const idx = mockRunIndex;
+  mockRunIndex += 1;
+  runCalls.push({ prompt, logPath, command, args });
+  return mockRunResults[idx] ?? { status: 0, stdout: '', stderr: '' };
+};
 
-let _runSlotReviewLoop: ((input: SlotReviewInput) => Promise<SlotReviewOutcome>) | null = null;
-let _aggregateIterationOutput:
-  | typeof import('../../core/iteration-execution').aggregateIterationOutput
-  | null = null;
-
-function getReviewLoop(): (input: SlotReviewInput) => Promise<SlotReviewOutcome> {
-  if (!_runSlotReviewLoop) throw new Error('module not loaded');
-  return _runSlotReviewLoop;
-}
-
-function getAggregator(): typeof import('../../core/iteration-execution').aggregateIterationOutput {
-  if (!_aggregateIterationOutput) throw new Error('module not loaded');
-  return _aggregateIterationOutput;
+function runReviewLoop(input: SlotReviewInput): Promise<SlotReviewOutcome> {
+  return runSlotReviewLoop(
+    input,
+    mockRunAgentProcess as unknown as typeof import('../../core/process-runner').runAgentProcess,
+  );
 }
 
 // --- helpers ---
@@ -98,6 +88,11 @@ const baseOptions: CliOptions = {
   reviewMaxFixAttempts: 5,
 };
 
+function hasStopToken(output: string): boolean {
+  const normalized = output.toLowerCase();
+  return normalized.includes('no_tasks_available') || normalized.includes('no_beads_available');
+}
+
 const mockProvider: ProviderAdapter = {
   name: 'primary',
   displayName: 'Primary Mock',
@@ -114,7 +109,7 @@ const mockProvider: ProviderAdapter = {
   collectRawJsonLines: () => [],
   extractUsageSummary: () => null,
   extractRetryDelaySeconds: () => null,
-  hasStopMarker: (output: string) => output.toLowerCase().includes('no_beads_available'),
+  hasStopMarker: hasStopToken,
   formatCommandHint: (command) => command,
 };
 
@@ -134,16 +129,16 @@ const reviewerProvider: ProviderAdapter = {
   collectRawJsonLines: () => [],
   extractUsageSummary: () => null,
   extractRetryDelaySeconds: () => null,
-  hasStopMarker: (output: string) => output.toLowerCase().includes('no_beads_available'),
+  hasStopMarker: hasStopToken,
   formatCommandHint: (command) => command,
 };
 
-function makeBead(id: string): BeadIssue {
+function makeTask(id: string): BeadIssue {
   return { id, title: `${id} title`, status: 'in_progress', priority: 1 };
 }
 
-function makeSnapshot(beadIds: string[]): BeadsSnapshot {
-  const issues = beadIds.map((id) => makeBead(id));
+function makeSnapshot(taskIds: string[]): BeadsSnapshot {
+  const issues = taskIds.map((id) => makeTask(id));
   return {
     available: true,
     source: 'test',
@@ -183,12 +178,12 @@ function makeSlotReviewInput(
 ): SlotReviewInput {
   resetMockState();
   mockRunResults = reviewResults;
-  const pickedBead = makeBead('test-bead-1');
+  const pickedTask = makeTask('test-task-1');
   return {
     agentId: 1,
     iteration: 1,
     implementResult: makeImplRunResult(),
-    pickedBead,
+    pickedTask,
     options: { ...baseOptions, ...opts },
     provider: mockProvider,
     reviewerProvider,
@@ -203,24 +198,14 @@ function makeSlotReviewInput(
 }
 
 describe('review loop integration', () => {
-  beforeAll(async () => {
-    const mod = await import('../../core/iteration-execution');
-    _runSlotReviewLoop = mod.runSlotReviewLoop;
-    _aggregateIterationOutput = mod.aggregateIterationOutput;
-  });
-
-  afterAll(() => {
-    mock.restore();
-  });
-
   // --- 1. review disabled (caller responsibility) ---
   it('review is skipped by caller when reviewEnabled is false', () => {
     // This test validates the contract: runIteration only calls runSlotReviewLoop
-    // when reviewEnabled && reviewerPrompt && pickedBead && exitCode === 0.
+    // when reviewEnabled && reviewerPrompt && pickedTask && exitCode === 0.
     // When reviewEnabled is false, reviewOutcomes map stays empty.
     const options = { ...baseOptions, reviewEnabled: false };
     // The condition in runIteration (line ~549):
-    //   options.reviewEnabled && reviewerPrompt && pickedBead && result.status === 0
+    //   options.reviewEnabled && reviewerPrompt && pickedTask && result.status === 0
     expect(options.reviewEnabled).toBe(false);
     // Therefore runSlotReviewLoop is never called — no outcomes produced.
   });
@@ -233,7 +218,7 @@ describe('review loop integration', () => {
     const origLog = console.log;
     console.log = () => {};
     try {
-      const outcome = await getReviewLoop()(input);
+      const outcome = await runReviewLoop(input);
       expect(outcome.passed).toBe(true);
       expect(outcome.fixAttempts).toBe(0);
       expect(outcome.lastVerdict?.verdict).toBe('pass');
@@ -259,7 +244,7 @@ describe('review loop integration', () => {
     const origLog = console.log;
     console.log = () => {};
     try {
-      const outcome = await getReviewLoop()(input);
+      const outcome = await runReviewLoop(input);
       expect(outcome.passed).toBe(true);
       expect(outcome.fixAttempts).toBe(1);
       // review0 + fix1 + review1 = 3 calls
@@ -268,7 +253,7 @@ describe('review loop integration', () => {
       // Fix prompt should contain reviewer feedback
       const fixCall = runCalls[1];
       expect(fixCall.prompt).toContain('Add error handling');
-      expect(fixCall.prompt).toContain('test-bead-1');
+      expect(fixCall.prompt).toContain('test-task-1');
     } finally {
       console.log = origLog;
     }
@@ -284,7 +269,7 @@ describe('review loop integration', () => {
     const origLog = console.log;
     console.log = () => {};
     try {
-      const outcome = await getReviewLoop()(input);
+      const outcome = await runReviewLoop(input);
       expect(outcome.passed).toBe(false);
       expect(outcome.failureReason).toContain('reviewer contract violation');
       // Only one review call — no fix attempted after contract violation
@@ -303,7 +288,7 @@ describe('review loop integration', () => {
     const origLog = console.log;
     console.log = () => {};
     try {
-      const outcome = await getReviewLoop()(input);
+      const outcome = await runReviewLoop(input);
       expect(outcome.passed).toBe(false);
       expect(outcome.fixAttempts).toBe(0);
       expect(outcome.failureReason).toContain('reviewer process exited with status 2');
@@ -327,7 +312,7 @@ describe('review loop integration', () => {
     const origLog = console.log;
     console.log = () => {};
     try {
-      const outcome = await getReviewLoop()(input);
+      const outcome = await runReviewLoop(input);
       expect(outcome.passed).toBe(false);
       expect(outcome.failureReason).toContain('reviewer contract violation');
       expect(outcome.failureReason).toContain('invalid verdict');
@@ -345,7 +330,7 @@ describe('review loop integration', () => {
     const origLog = console.log;
     console.log = () => {};
     try {
-      const outcome = await getReviewLoop()(input);
+      const outcome = await runReviewLoop(input);
       expect(outcome.passed).toBe(false);
       expect(outcome.failureReason).toContain('reviewer contract violation');
     } finally {
@@ -369,7 +354,7 @@ describe('review loop integration', () => {
     const origLog = console.log;
     console.log = () => {};
     try {
-      const outcome = await getReviewLoop()(input);
+      const outcome = await runReviewLoop(input);
       expect(outcome.passed).toBe(false);
       expect(outcome.fixAttempts).toBe(maxFix);
       expect(outcome.failureReason).toContain('drift unresolved');
@@ -392,7 +377,7 @@ describe('review loop integration', () => {
     const origLog = console.log;
     console.log = () => {};
     try {
-      const outcome = await getReviewLoop()(input);
+      const outcome = await runReviewLoop(input);
       expect(outcome.passed).toBe(false);
       expect(outcome.fixAttempts).toBe(1);
       expect(outcome.failureReason).toContain('fixer process exited with status 7');
@@ -418,7 +403,7 @@ describe('review loop integration', () => {
     const origLog = console.log;
     console.log = () => {};
     try {
-      const outcome = await getReviewLoop()(input);
+      const outcome = await runReviewLoop(input);
       expect(outcome.passed).toBe(true);
       expect(outcome.fixAttempts).toBe(1);
       expect(runCalls[0].command).toBe('reviewer-command');
@@ -436,7 +421,7 @@ describe('review loop integration', () => {
     // Reviewer output contains a stop marker, but it should not affect stop detection
     const reviewWithStopMarker: StreamResult = {
       status: 0,
-      stdout: `The agent output no_beads_available\n${passVerdict()}`,
+      stdout: `The agent output no_tasks_available\n${passVerdict()}`,
       stderr: '',
     };
     const input = makeSlotReviewInput([reviewWithStopMarker]);
@@ -444,17 +429,20 @@ describe('review loop integration', () => {
     const origLog = console.log;
     console.log = () => {};
     try {
-      const outcome = await getReviewLoop()(input);
+      const outcome = await runReviewLoop(input);
       expect(outcome.passed).toBe(true);
+      const freshModule = (await import(
+        `../../core/iteration-execution.ts?review-loop-stop-marker-${Date.now()}-${Math.random().toString(36).slice(2)}`
+      )) as typeof import('../../core/iteration-execution');
 
       // Verify aggregation doesn't see stop marker from review output
       // The implementation result's stdout is 'implemented' (no stop marker)
       const implResult = makeImplRunResult();
-      const aggResult = getAggregator()({
+      const aggResult = freshModule.aggregateIterationOutput({
         provider: mockProvider,
         results: [implResult],
-        beadsSnapshot: makeSnapshot(['test-bead-1']),
-        pickedByAgent: new Map([[1, makeBead('test-bead-1')]]),
+        tasksSnapshot: makeSnapshot(['test-task-1']),
+        pickedByAgent: new Map([[1, makeTask('test-task-1')]]),
         liveRenderer: null,
         previewLines: 3,
         reviewOutcomes: new Map([[1, outcome]]),
@@ -467,31 +455,33 @@ describe('review loop integration', () => {
 
   // --- review outcome failure surfaced in aggregation ---
   it('surfaces review failure in aggregation failed list', async () => {
-    const reviewResults: StreamResult[] = [{ status: 0, stdout: 'not json at all', stderr: '' }];
-    const input = makeSlotReviewInput(reviewResults);
-
-    const origLog = console.log;
+    const originalLog = console.log;
     console.log = () => {};
     try {
-      const outcome = await getReviewLoop()(input);
-      expect(outcome.passed).toBe(false);
-
       const implResult = makeImplRunResult();
-      const agg = getAggregator()({
+      const reviewFailure: SlotReviewOutcome = {
+        passed: false,
+        fixAttempts: 0,
+        failureReason: 'reviewer contract violation: no JSON object found',
+      };
+      const reviewOutcomes = new Map([[1, reviewFailure]]);
+      const freshModule = (await import(
+        `../../core/iteration-execution.ts?review-loop-agg-${Date.now()}-${Math.random().toString(36).slice(2)}`
+      )) as typeof import('../../core/iteration-execution');
+      const agg = freshModule.aggregateIterationOutput({
         provider: mockProvider,
         results: [implResult],
-        beadsSnapshot: makeSnapshot(['test-bead-1']),
-        pickedByAgent: new Map([[1, makeBead('test-bead-1')]]),
+        tasksSnapshot: makeSnapshot(['test-task-1']),
+        pickedByAgent: new Map([[1, makeTask('test-task-1')]]),
         liveRenderer: null,
         previewLines: 3,
-        reviewOutcomes: new Map([[1, outcome]]),
+        reviewOutcomes,
       });
-
       expect(agg.failed.length).toBeGreaterThanOrEqual(1);
       const reviewFail = agg.failed.find((f) => f.combinedOutput.includes('review failed'));
       expect(reviewFail).toBeDefined();
     } finally {
-      console.log = origLog;
+      console.log = originalLog;
     }
   });
 
@@ -510,7 +500,7 @@ describe('review loop integration', () => {
     const origLog = console.log;
     console.log = () => {};
     try {
-      const outcome = await getReviewLoop()(input);
+      const outcome = await runReviewLoop(input);
       expect(outcome.passed).toBe(true);
       expect(outcome.fixAttempts).toBe(2);
       expect(outcome.lastVerdict?.followUpPrompt).toBe('finally good');

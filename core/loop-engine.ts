@@ -2,10 +2,7 @@ import type { ChildProcess } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { getProviderAdapter } from '../providers/registry';
 import type { ProviderAdapter } from '../providers/types';
-import {
-  type IterationLiveRenderer,
-  shouldStopFromProviderOutput as shouldStopFromProviderOutputInternal,
-} from './iteration-execution';
+import type { IterationLiveRenderer } from './iteration-execution';
 import { runLoopController } from './loop-controller';
 import { resolveRunLogDirectory } from './loop-runs';
 import { resolveRunnableCommand } from './process-runner';
@@ -20,15 +17,38 @@ type ActiveSpinnerStopRef = {
   value: ((message: string, tone?: Tone) => void) | null;
 };
 
+export type RunLoopDependencies = {
+  getProviderAdapter: typeof getProviderAdapter;
+  resolveRunnableCommand: typeof resolveRunnableCommand;
+  runLoopController: typeof runLoopController;
+};
+
+const defaultRunLoopDependencies: RunLoopDependencies = {
+  getProviderAdapter,
+  resolveRunnableCommand,
+  runLoopController,
+};
+
 export function shouldStopFromProviderOutput(
   provider: ProviderAdapter,
   previewEntries: PreviewEntry[],
   lastMessageOutput: string,
 ): boolean {
-  return shouldStopFromProviderOutputInternal(provider, previewEntries, lastMessageOutput);
+  if (provider.hasStopMarker(lastMessageOutput)) {
+    return true;
+  }
+  return previewEntries.some(
+    (entry) =>
+      (entry.kind === 'assistant' || entry.kind === 'message') &&
+      provider.hasStopMarker(entry.text),
+  );
 }
 
-export async function runLoop(options: CliOptions, provider: ProviderAdapter): Promise<void> {
+export async function runLoop(
+  options: CliOptions,
+  provider: ProviderAdapter,
+  dependencies: RunLoopDependencies = defaultRunLoopDependencies,
+): Promise<void> {
   const cwd = process.cwd();
   setTheme(resolveTheme(options.theme ?? 'default', cwd));
 
@@ -48,14 +68,14 @@ export async function runLoop(options: CliOptions, provider: ProviderAdapter): P
   }
   const statePath = resolveIterationStatePath(cwd);
   const logDir = resolveRunLogDirectory(cwd, options.logDir);
-  const command = resolveRunnableCommand(options.command, provider.formatCommandHint);
-  const reviewerProvider = getProviderAdapter(options.reviewerProvider);
+  const command = dependencies.resolveRunnableCommand(options.command, provider.formatCommandHint);
+  const reviewerProvider = dependencies.getProviderAdapter(options.reviewerProvider);
   const reviewerCommandTemplate =
     options.reviewerCommand ??
     (options.reviewerProvider === provider.name
       ? options.command
       : reviewerProvider.defaults.command);
-  const reviewerCommand = resolveRunnableCommand(
+  const reviewerCommand = dependencies.resolveRunnableCommand(
     reviewerCommandTemplate,
     reviewerProvider.formatCommandHint,
   );
@@ -70,7 +90,7 @@ export async function runLoop(options: CliOptions, provider: ProviderAdapter): P
 
   let liveRenderer: IterationLiveRenderer | null = null;
   try {
-    liveRenderer = await runLoopController({
+    liveRenderer = await dependencies.runLoopController({
       options,
       provider,
       reviewerProvider,

@@ -13,17 +13,17 @@ Date: 2026-02-17
 - Tracked as not-in-scope in this phase so we can ship terminal clarity first.
 
 ## Core parity (must-have)
-| Area | Reference behavior | Ouroboros current | Gap | Status / bead mapping |
+| Area | Reference behavior | Ouroboros current | Gap | Status / task mapping |
 | --- | --- | --- | --- | --- |
 | Live status shell | RunApp prints loop header and iteration context; cards/panels render agent/task activity (`RunApp.tsx`, `Header.tsx`, `Footer.tsx`) | `tui/tui.tsx` renders run header + per-slot cards + agent summaries (`renderHeader`, `renderAgentCard`) and `core/terminal-ui.ts` mirrors ANSI | Keep coherent, low-noise, cross-platform baseline and align both renderers | Done (10.1-10.5); 10.6 still open for ANSI fallback polish |
-| Agent identity and card structure | Per-slot identity and task context in the reference panels (`LeftPanel.tsx`, parallel views use worker identifiers) | Ouroboros cards use `Agent <id>` notch and `<bead id> · <title>` title formatting (`buildAgentNotchLine`, `formatAgentTitle`) | Preserve readability for quick slot scan and status parsing in compact terminals | Done (`ouroboros-10.3` and `10.4`) |
+| Agent identity and card structure | Per-slot identity and task context in the reference panels (`LeftPanel.tsx`, parallel views use worker identifiers) | Ouroboros cards use `Agent <id>` notch and `<task id> · <title>` title formatting (`buildAgentNotchLine`, `formatAgentTitle`) | Preserve readability for quick slot scan and status parsing in compact terminals | Done (`ouroboros-10.3` and `10.4`) |
 | Dev/Review split | Reference has dedicated review phases and status detail in dedicated panels (`IterationStatus`, fix/review flows in run loop) | Ouroboros has Dev/Review selector per-agent and review auto-switch in state + renderer (`setAgentReviewPhase`, `agentActiveTab`, `renderAgentCard`) | No separate external panel needed; this is already in-place and complete in 10.x path | Done (`ouroboros-10.4`) |
 | Iteration strip + retry/failure context | Reference merge/history overlays encode run progress over time and failure events in list views | Ouroboros `buildIterationStripParts` / `buildIterationStrip` produce compact modes with R/F counts and markers | Keep semantics stable; complete for parity baseline | Done (`ouroboros-10.5`) |
 
 ## Enhanced parity (next)
-| Area | Reference behavior | Ouroboros current | Gap | Target bead |
+| Area | Reference behavior | Ouroboros current | Gap | Target task |
 | --- | --- | --- | --- | --- |
-| View state machine | RunApp supports tasks/iterations/iteration-detail/parallel-views (`ViewMode` type and render branches in `RunApp.tsx`) | Ouroboros has single loop-oriented render mode (`InkLiveRunRenderer` + `TerminalLiveRunRenderer`) without explicit user view modes | Add explicit view-state model and keyboard routing for tasks/iterations/drilldown/parallel views | `ouroboros-13.2` |
+| View state machine | RunApp supports tasks/iterations/iteration-detail/parallel-views (`ViewMode` type and render branches in `RunApp.tsx`) | Ouroboros has single loop-oriented render mode (`OpenTuiLiveRunRenderer` + `TerminalLiveRunRenderer`) without explicit user view modes | Add explicit view-state model and keyboard routing for tasks/iterations/drilldown/parallel views | `ouroboros-13.2` |
 | Iteration history list | `IterationHistoryView.tsx` shows per-iteration outcomes, pending entries, and selection flow | Ouroboros currently has only compact last-iteration summary and no global iteration list component | Build an iteration list model and navigation model tied to loop iteration state | `ouroboros-13.2` |
 | Iteration detail drilldown | `IterationDetailView.tsx` exposes task/agent context, timeline, output, and status metadata | Ouroboros currently has aggregate summaries and live row preview only | Add read-only drilldown to show current/rerun context and prior output slice | `ouroboros-13.3` |
 | Parallel worker panel | `ParallelProgressView.tsx`, `WorkerDetailView.tsx`, `MergeProgressView.tsx` expose worker progress, active task details, and merge progress | Ouroboros currently has no worker/merge entities in runtime or renderer | Build worker/merge domain mapping and render states from loop runtime snapshot | `ouroboros-13.3` |
@@ -31,13 +31,13 @@ Date: 2026-02-17
 | Interaction affordances | Reference `tui-guide.mdx` lists shortcut map (`w`, `m`, arrows, Enter, `Esc`, `?`) and modal workflows | Ouroboros currently has no keyboard router in renderer; controls are loop-level only | Add parser-safe keyboard router and help/overlay text model | `ouroboros-13.2` |
 
 ## Advanced parity (later)
-| Area | Reference behavior | Ouroboros current | Gap | Target bead |
+| Area | Reference behavior | Ouroboros current | Gap | Target task |
 | --- | --- | --- | --- | --- |
 | Remote tabs & instance management | `TabBar.tsx` supports connected/connecting/reconnecting status, alias-based remote metrics, numeric tab switch | No reference remote state model in Ouroboros loop/runtime stack | Deferred as explicit non-goal for this phase | `ouroboros-13.7` (revisit scope) |
 | Detailed task/dependency metadata | Reference iter detail surfaces dependency links, sandbox mode, execution model, timeline, output files | Ouroboros currently does not persist/display execution metadata side panel | Deferred until iteration detail surfaces enough runtime artifacts | `ouroboros-13.3` and `13.7` |
 
 ## Mapping of existing `ouroboros-10.x` work into this parity roadmap
-| Bead | Contribution |
+| Task | Contribution |
 | --- | --- |
 | `ouroboros-10.2` | Added per-agent tab state and retry/failure timeline foundation |
 | `ouroboros-10.3` | Added notch header and canonical `<id> · <title>` agent title formatting |
@@ -53,7 +53,7 @@ Date: 2026-02-17
 5. `ouroboros-13.4`: conflict/merge operational overlays.
 6. `ouroboros-13.5`+: UX overlays/theme once interaction is stable.
 
-## Bead status snapshot (source of truth)
+## Task status snapshot (source of truth)
 - `ouroboros-13.1` status: this planning document is live and tracks current parity targets as loop implementation shifts. Last parity refresh: 2026-02-17.
 - `ouroboros-13.1` action completed: documented session-level ownership and tracking assumptions used by the parity roadmap.
 - `ouroboros-13.2`: in progress per active parity work on view-state and interaction routing.
@@ -79,7 +79,7 @@ Date: 2026-02-17
 
 ## Implementation notes (current session)
 
-- `ouroboros-13.3` now has Ink TUI multi-pane shell behavior with left live/task panel and right iteration history panel.
+- `ouroboros-13.3` now has OpenTUI multi-pane shell behavior with left live/task panel and right iteration history panel.
 - Focused pane navigation is explicit (`Tab` / `←` / `→`), with iteration detail drilldown via `Enter` from history focus.
 - `ouroboros-18i` adds Ralph-style full-screen view routing for `parallel-overview`, `parallel-detail`, `merge-progress`, and `conflict-resolution` in `tui/tui.tsx`.
 - `ouroboros-18i` extends keyboard parity with `w`/`m` toggles, `Esc` hierarchical back navigation, and conflict actions (`a`/`r`/`s`) with help text updates.

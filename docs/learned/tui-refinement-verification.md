@@ -1,4 +1,4 @@
-# TUI Refinement Verification (Bead 10/10.7)
+# TUI Refinement Verification (Task 10/10.7; legacy tracker IDs)
 
 ## What we verified
 - `core/live-run-state` tests already cover review-tab auto-switch/restore plus retry/failure marker counters.

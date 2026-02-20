@@ -127,21 +127,22 @@ describe('parseReviewerVerdict', () => {
 });
 
 describe('buildReviewerContext', () => {
-  const baseBead: BeadIssue = {
+  const baseTask: BeadIssue = {
     id: 'test-1',
     title: 'Fix login bug',
     status: 'in_progress',
     priority: 0,
   };
 
-  test('includes bead metadata', () => {
+  test('includes task metadata', () => {
     const context = buildReviewerContext({
-      bead: baseBead,
+      bead: baseTask,
       implementerOutput: 'done',
       implementerLogPath: '/logs/a1.jsonl',
       gitDiff: 'diff --git a/file.ts',
       parallelAgents: 1,
     });
+    expect(context).toContain('Task Under Review');
     expect(context).toContain('test-1');
     expect(context).toContain('Fix login bug');
     expect(context).toContain('in_progress');
@@ -150,7 +151,7 @@ describe('buildReviewerContext', () => {
 
   test('includes implementer output', () => {
     const context = buildReviewerContext({
-      bead: baseBead,
+      bead: baseTask,
       implementerOutput: 'build succeeded\nall tests pass',
       implementerLogPath: '/logs/a1.jsonl',
       gitDiff: '',
@@ -163,7 +164,7 @@ describe('buildReviewerContext', () => {
 
   test('shows no-output placeholder when empty', () => {
     const context = buildReviewerContext({
-      bead: baseBead,
+      bead: baseTask,
       implementerOutput: '',
       implementerLogPath: '/logs/a1.jsonl',
       gitDiff: '',
@@ -175,7 +176,7 @@ describe('buildReviewerContext', () => {
   test('includes git diff', () => {
     const diff = '+const x = 1;\n-const x = 2;';
     const context = buildReviewerContext({
-      bead: baseBead,
+      bead: baseTask,
       implementerOutput: 'ok',
       implementerLogPath: '/logs/a1.jsonl',
       gitDiff: diff,
@@ -186,7 +187,7 @@ describe('buildReviewerContext', () => {
 
   test('shows no-changes placeholder when diff empty', () => {
     const context = buildReviewerContext({
-      bead: baseBead,
+      bead: baseTask,
       implementerOutput: 'ok',
       implementerLogPath: '/logs/a1.jsonl',
       gitDiff: '  ',
@@ -197,7 +198,7 @@ describe('buildReviewerContext', () => {
 
   test('includes parallel agent warning when agents > 1', () => {
     const context = buildReviewerContext({
-      bead: baseBead,
+      bead: baseTask,
       implementerOutput: 'ok',
       implementerLogPath: '/logs/a1.jsonl',
       gitDiff: 'diff',
@@ -210,7 +211,7 @@ describe('buildReviewerContext', () => {
 
   test('omits parallel agent warning when single agent', () => {
     const context = buildReviewerContext({
-      bead: baseBead,
+      bead: baseTask,
       implementerOutput: 'ok',
       implementerLogPath: '/logs/a1.jsonl',
       gitDiff: 'diff',
@@ -221,7 +222,7 @@ describe('buildReviewerContext', () => {
 
   test('includes fix attempt context', () => {
     const context = buildReviewerContext({
-      bead: baseBead,
+      bead: baseTask,
       implementerOutput: 'ok',
       implementerLogPath: '/logs/a1.jsonl',
       gitDiff: 'diff',
@@ -235,7 +236,7 @@ describe('buildReviewerContext', () => {
 
   test('omits fix attempt section on first review (no fixAttempt)', () => {
     const context = buildReviewerContext({
-      bead: baseBead,
+      bead: baseTask,
       implementerOutput: 'ok',
       implementerLogPath: '/logs/a1.jsonl',
       gitDiff: 'diff',
@@ -246,7 +247,7 @@ describe('buildReviewerContext', () => {
 
   test('includes response contract instructions', () => {
     const context = buildReviewerContext({
-      bead: baseBead,
+      bead: baseTask,
       implementerOutput: 'ok',
       implementerLogPath: '/logs/a1.jsonl',
       gitDiff: 'diff',
@@ -258,9 +259,9 @@ describe('buildReviewerContext', () => {
   });
 
   test('omits priority label when undefined', () => {
-    const noPriorityBead: BeadIssue = { id: 'x-1', title: 'Test', status: 'open' };
+    const noPriorityTask: BeadIssue = { id: 'x-1', title: 'Test', status: 'open' };
     const context = buildReviewerContext({
-      bead: noPriorityBead,
+      bead: noPriorityTask,
       implementerOutput: 'ok',
       implementerLogPath: '/logs/a1.jsonl',
       gitDiff: 'diff',

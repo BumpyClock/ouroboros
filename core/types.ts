@@ -1,6 +1,7 @@
 export type ReasoningEffort = 'low' | 'medium' | 'high';
 
-export type BeadMode = 'auto' | 'top-level';
+export type TaskMode = 'auto' | 'top-level';
+export type BeadMode = TaskMode;
 
 export type CliOptions = {
   projectRoot: string;
@@ -23,6 +24,8 @@ export type CliOptions = {
   reviewEnabled: boolean;
   reviewMaxFixAttempts: number;
   theme?: string;
+  taskMode?: TaskMode;
+  topLevelTaskId?: string;
   beadMode?: BeadMode;
   topLevelBeadId?: string;
   developerPromptPath?: string;
@@ -70,15 +73,16 @@ export type RunResult = {
   result: StreamResult;
 };
 
-export type BeadIssue = {
+export type TaskIssue = {
   id: string;
   title: string;
   status: string;
   priority?: number;
   assignee?: string;
 };
+export type BeadIssue = TaskIssue;
 
-export type BeadsSnapshot = {
+export type TasksSnapshot = {
   available: boolean;
   source: string;
   projectRoot: string;
@@ -89,7 +93,8 @@ export type BeadsSnapshot = {
   blocked: number;
   closed: number;
   deferred: number;
-  remainingIssues: BeadIssue[];
-  byId: Map<string, BeadIssue>;
+  remainingIssues: TaskIssue[];
+  byId: Map<string, TaskIssue>;
   error?: string;
 };
+export type BeadsSnapshot = TasksSnapshot;

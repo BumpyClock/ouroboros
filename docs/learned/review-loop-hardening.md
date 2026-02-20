@@ -2,7 +2,7 @@
 
 Purpose:
 - document hardened failure handling in slot review/fix loop
-- capture JSONL bead snapshot trust model
+- capture task snapshot trust model
 
 ## Non-zero review/fix subprocess behavior
 
@@ -18,14 +18,13 @@ Observed implementation:
 - after reviewer pass/drift, fixer is executed only for drift.
 - if fixer status is non-zero, loop returns immediate hard failure.
 
-## Bead snapshot validity
+## Task snapshot validity
 
 Policy:
-- snapshot input comes from `bd --readonly list --json --all --limit 0 --no-pager`.
-- when `--readonly` is unsupported by local `bd`, loop falls back to `bd list --json --all --limit 0 --no-pager`.
+- snapshot input comes from `tsq list --json`.
 - command execution is timeout-bounded to avoid blocking loop startup and prolonged lock contention.
-- no-bead stop-marker suppression requires an available snapshot (`available: true`).
+- no-task stop-marker suppression requires an available snapshot (`available: true`).
 
 Observed implementation:
-- `loadBeadsSnapshot` returns `available: false` when `bd` exits non-zero or times out and includes an error message.
+- `loadBeadsSnapshot` returns `available: false` when `tsq` exits non-zero or times out and includes an error message.
 - `shouldIgnoreStopMarkerForNoBeads` returns `false` unless `beadsSnapshot.available === true`.

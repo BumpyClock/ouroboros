@@ -1,9 +1,11 @@
-import { afterEach, beforeEach, describe, expect, mock, test } from 'bun:test';
+import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import * as path from 'node:path';
+import { type RunLoopDependencies, runLoop } from '../../core/loop-engine';
 import { resolveBuiltinPromptPath } from '../../core/prompts';
 import type { CliOptions } from '../../core/types';
+import { getProviderAdapter as getRealProviderAdapter } from '../../providers/registry';
 import type { ProviderAdapter } from '../../providers/types';
 
 type CapturedLoopInput = {
@@ -33,36 +35,6 @@ const mockProvider: ProviderAdapter = {
   formatCommandHint: (command) => `mock:${command}`,
 };
 
-mock.module('../../core/process-runner', () => ({
-  resolveRunnableCommand: (command: string) => `resolved:${command}`,
-  runAgentProcess: async () => ({ status: 0, stdout: '', stderr: '' }),
-  terminateChildProcess: async () => {},
-}));
-
-mock.module('../../core/loop-controller', () => ({
-  runLoopController: async (input: {
-    options: CliOptions;
-    provider: ProviderAdapter;
-    reviewerProvider: ProviderAdapter;
-    promptPath: string;
-    reviewerPromptPath?: string;
-  }) => {
-    captured.promptPath = input.promptPath;
-    captured.reviewerPromptPath = input.reviewerPromptPath;
-    return null;
-  },
-}));
-
-mock.module('../../providers/registry', () => ({
-  getProviderAdapter: (name: string) => {
-    if (name === 'mock') {
-      return mockProvider;
-    }
-    throw new Error(`unexpected provider in test: ${name}`);
-  },
-  listProviderNames: () => 'mock',
-}));
-
 const baseOptions: CliOptions = {
   projectRoot: process.cwd(),
   projectKey: 'ouroboros',
@@ -84,68 +56,81 @@ const baseOptions: CliOptions = {
   reviewMaxFixAttempts: 5,
 };
 
+function buildDeps(): RunLoopDependencies {
+  captured.promptPath = undefined;
+  captured.reviewerPromptPath = undefined;
+  return {
+    getProviderAdapter: (name: string) => {
+      if (name === 'mock') {
+        return mockProvider;
+      }
+      return getRealProviderAdapter(name);
+    },
+    resolveRunnableCommand: (command: string) => `resolved:${command}`,
+    runLoopController: async (input) => {
+      captured.promptPath = input.promptPath;
+      captured.reviewerPromptPath = input.reviewerPromptPath;
+      return null;
+    },
+  };
+}
+
 describe('runLoop prompt-resolution regression coverage', () => {
-  let loopEngineModule: typeof import('../../core/loop-engine') | null = null;
   let originalCwd: string;
   let tmpDir: string;
 
-  beforeEach(async () => {
-    loopEngineModule = await import('../../core/loop-engine');
-    captured.promptPath = undefined;
-    captured.reviewerPromptPath = undefined;
+  beforeEach(() => {
     originalCwd = process.cwd();
     tmpDir = mkdtempSync(path.join(tmpdir(), 'ouroboros-prompt-resolution-'));
     process.chdir(tmpDir);
   });
 
   afterEach(() => {
-    process.chdir(originalCwd);
-    rmSync(tmpDir, { recursive: true, force: true });
+    if (originalCwd) {
+      process.chdir(originalCwd);
+    }
+    if (tmpDir) {
+      rmSync(tmpDir, { recursive: true, force: true });
+    }
   });
 
   test('uses built-in prompts when no local prompt files exist', async () => {
-    if (!loopEngineModule) {
-      throw new Error('failed to import loop-engine module');
-    }
-    await loopEngineModule.runLoop(
+    await runLoop(
       {
         ...baseOptions,
         developerPromptPath: undefined,
         reviewerPromptPath: undefined,
       },
       mockProvider,
+      buildDeps(),
     );
     expect(captured.promptPath).toBe(resolveBuiltinPromptPath('developer'));
     expect(captured.reviewerPromptPath).toBe(resolveBuiltinPromptPath('reviewer'));
   });
 
   test('throws clear startup error for missing explicit developer prompt path', async () => {
-    if (!loopEngineModule) {
-      throw new Error('failed to import loop-engine module');
-    }
-    await expect(() =>
-      loopEngineModule.runLoop(
+    await expect(
+      runLoop(
         {
           ...baseOptions,
           reviewEnabled: false,
           developerPromptPath: 'missing/developer.md',
         },
         mockProvider,
+        buildDeps(),
       ),
     ).rejects.toThrow(/No developer prompt found/);
   });
 
   test('throws clear startup error for missing explicit reviewer prompt path', async () => {
-    if (!loopEngineModule) {
-      throw new Error('failed to import loop-engine module');
-    }
-    await expect(() =>
-      loopEngineModule.runLoop(
+    await expect(
+      runLoop(
         {
           ...baseOptions,
           reviewerPromptPath: 'missing/reviewer.md',
         },
         mockProvider,
+        buildDeps(),
       ),
     ).rejects.toThrow(/Reviewer prompt file not found/);
   });

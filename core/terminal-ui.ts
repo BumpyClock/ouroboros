@@ -12,7 +12,7 @@ import {
 } from './live-run-state';
 import { formatShort, wrapText } from './text';
 import { defaultTheme, type ThemeDefinition } from './theme';
-import type { BeadIssue, BeadsSnapshot, PreviewEntry, Tone, UsageSummary } from './types';
+import type { PreviewEntry, TaskIssue, TasksSnapshot, Tone, UsageSummary } from './types';
 
 const SPINNER_FRAMES = LIVE_SPINNER_FRAMES;
 
@@ -120,11 +120,11 @@ function buildIterationSummaryLines(
     lines.push(`${badge('TOKENS', 'muted')} no usage summary`);
   }
 
-  if (summary.pickedBeadsByAgent.size > 0) {
-    for (const agentId of Array.from(summary.pickedBeadsByAgent.keys()).sort(
+  if (summary.pickedTasksByAgent.size > 0) {
+    for (const agentId of Array.from(summary.pickedTasksByAgent.keys()).sort(
       (left, right) => left - right,
     )) {
-      const picked = summary.pickedBeadsByAgent.get(agentId);
+      const picked = summary.pickedTasksByAgent.get(agentId);
       if (!picked) {
         continue;
       }
@@ -133,7 +133,7 @@ function buildIterationSummaryLines(
       );
     }
   } else {
-    lines.push(`${badge('A', 'muted')} no picked beads`);
+    lines.push(`${badge('A', 'muted')} no picked tasks`);
   }
 
   if (summary.notice) {
@@ -301,20 +301,28 @@ export class LiveRunRenderer {
     this.render();
   }
 
-  setBeadsSnapshot(snapshot: BeadsSnapshot | null): void {
-    this.stateStore.setBeadsSnapshot(snapshot);
+  setTasksSnapshot(snapshot: TasksSnapshot | null): void {
+    this.stateStore.setTasksSnapshot(snapshot);
     if (!this.enabled || !this.stateStore.isRunning()) {
       return;
     }
     this.render();
   }
 
-  setAgentPickedBead(agentId: number, issue: BeadIssue): void {
-    this.stateStore.setAgentPickedBead(agentId, issue);
+  setBeadsSnapshot(snapshot: TasksSnapshot | null): void {
+    this.setTasksSnapshot(snapshot);
+  }
+
+  setAgentPickedTask(agentId: number, issue: TaskIssue): void {
+    this.stateStore.setAgentPickedTask(agentId, issue);
     if (!this.enabled || !this.stateStore.isRunning()) {
       return;
     }
     this.render();
+  }
+
+  setAgentPickedBead(agentId: number, issue: TaskIssue): void {
+    this.setAgentPickedTask(agentId, issue);
   }
 
   setAgentLogPath(agentId: number, path: string): void {
@@ -464,7 +472,7 @@ export class LiveRunRenderer {
     const snapshot = state.agentState.get(agentId);
     const width = terminalWidth();
     const cardWidth = Math.max(36, Math.min(width - 24, 110));
-    const picked = selector.pickedBead;
+    const picked = selector.pickedTask;
     const titleColor = picked ? ANSI.green : ANSI.dim;
     const titleText = colorize(formatAgentTitle(picked, Math.max(16, cardWidth - 22)), titleColor);
     const reviewMode = selector.activeTab === 'review';
@@ -504,24 +512,24 @@ export class LiveRunRenderer {
     ];
   }
 
-  private buildBeadsLines(state: LiveRunState): string[] {
-    if (!state.beadsSnapshot) {
+  private buildTasksLines(state: LiveRunState): string[] {
+    if (!state.tasksSnapshot) {
       return [];
     }
-    if (!state.beadsSnapshot.available) {
-      const suffix = state.beadsSnapshot.error
-        ? ` ${colorize(`(${formatShort(state.beadsSnapshot.error, 100)})`, ANSI.dim)}`
+    if (!state.tasksSnapshot.available) {
+      const suffix = state.tasksSnapshot.error
+        ? ` ${colorize(`(${formatShort(state.tasksSnapshot.error, 100)})`, ANSI.dim)}`
         : '';
-      return [`${badge('BEADS', 'warn')} unavailable${suffix}`];
+      return [`${badge('TSQ', 'warn')} unavailable${suffix}`];
     }
 
-    const summary = `${badge('BEADS', 'info')} remaining ${colorize(
-      String(state.beadsSnapshot.remaining),
+    const summary = `${badge('TSQ', 'info')} tasks remaining ${colorize(
+      String(state.tasksSnapshot.remaining),
       ANSI.bold,
-    )} | in_progress ${state.beadsSnapshot.inProgress} | open ${state.beadsSnapshot.open} | blocked ${
-      state.beadsSnapshot.blocked
-    } | closed ${state.beadsSnapshot.closed}`;
-    const topRemaining = state.beadsSnapshot.remainingIssues.slice(0, 3).map((issue, index) => {
+    )} | in_progress ${state.tasksSnapshot.inProgress} | open ${state.tasksSnapshot.open} | blocked ${
+      state.tasksSnapshot.blocked
+    } | closed ${state.tasksSnapshot.closed}`;
+    const topRemaining = state.tasksSnapshot.remainingIssues.slice(0, 3).map((issue, index) => {
       const assignee = issue.assignee ? ` @${issue.assignee}` : '';
       return `  ${colorize(String(index + 1).padStart(2, ' '), ANSI.dim)} ${badge(
         'REM',
@@ -541,7 +549,7 @@ export class LiveRunRenderer {
       this.buildHeaderLine(),
       ...buildIterationSummaryLines(state, this.stateStore.getIterationTimeline()),
       ...buildRunContextLines(state, commandWidth),
-      ...this.buildBeadsLines(state),
+      ...this.buildTasksLines(state),
       ...state.agentIds.flatMap((agentId) => this.buildAgentLines(agentId, state)),
       ...buildIterationStripText(this.stateStore.getIterationTimeline(), terminalWidth()),
     ];
@@ -626,8 +634,8 @@ function buildAgentNotchLine(agentId: number, width: number): string {
   return `╭${header}${'─'.repeat(fillWidth)}╮`;
 }
 
-function formatAgentTitle(picked: BeadIssue | null, maxLength: number): string {
-  const fallback = 'no bead picked';
+function formatAgentTitle(picked: TaskIssue | null, maxLength: number): string {
+  const fallback = 'no task picked';
   if (maxLength <= 0) {
     return '';
   }

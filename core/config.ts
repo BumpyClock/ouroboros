@@ -124,18 +124,23 @@ function normalizeConfigRecord(input: Record<string, unknown>): PartialOptions {
     reviewEnabled: toBoolean(input.reviewEnabled),
     reviewMaxFixAttempts: toPositiveInt(input.reviewMaxFixAttempts),
     theme: parseString(input.theme),
-    beadMode: parseString(input.beadMode),
-    topLevelBeadId: parseString(input.topLevelBeadId),
+    taskMode: parseString(input.taskMode ?? input.beadMode),
+    topLevelTaskId: parseString(input.topLevelTaskId ?? input.topLevelBeadId),
+    beadMode: parseString(input.beadMode ?? input.taskMode),
+    topLevelBeadId: parseString(input.topLevelBeadId ?? input.topLevelTaskId),
     developerPromptPath: parseString(input.developerPromptPath),
     reviewerPromptPath: parseString(input.reviewerPromptPath),
   };
 }
 
 function mergeConfig(globalConfig: PartialOptions, projectConfig: PartialOptions): PartialOptions {
-  return {
-    ...globalConfig,
-    ...projectConfig,
-  };
+  const merged: PartialOptions = { ...globalConfig };
+  for (const [key, value] of Object.entries(projectConfig)) {
+    if (value !== undefined) {
+      (merged as Record<string, unknown>)[key] = value;
+    }
+  }
+  return merged;
 }
 
 export function loadOuroborosConfig(cwd = process.cwd()): LoadedConfig {

@@ -8,6 +8,9 @@
   "private": false,
   "type": "module",
   "scripts": {
+    "start": "bun ouroboros.ts",
+    "dev": "bun --watch ouroboros.ts",
+    "install:bin": "bun build --compile --outfile ouroboros ouroboros.ts",
     "format": "biome format --write . && biome check --write .",
     "lint": "biome lint .",
     "lint:fix": "biome check --write .",
@@ -16,10 +19,11 @@
     "doctor": "bun run format && bun run lint:fix && bun run lint:check"
   },
   "dependencies": {
-    "ink": "^6.7.0",
+    "@opentui/core": "0.1.80",
+    "@opentui/react": "0.1.80",
+    "@types/node": "^20.4.2",
     "react": "^19.2.0",
-    "react-devtools-core": "^7.0.1",
-    "@types/node": "^20.4.2"
+    "react-devtools-core": "^7.0.1"
   },
   "devDependencies": {
     "@biomejs/biome": "2.3.10"

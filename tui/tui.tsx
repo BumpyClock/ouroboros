@@ -1,4 +1,5 @@
-import { Box, render, Text, useInput } from 'ink';
+import { type CliRenderer, createCliRenderer, type KeyEvent } from '@opentui/core';
+import { createRoot, useKeyboard } from '@opentui/react';
 import React, { useState, useSyncExternalStore } from 'react';
 import {
   type AgentReviewPhase,
@@ -14,7 +15,7 @@ import {
 } from '../core/live-run-state';
 import { badge, toneInkColor } from '../core/terminal-ui';
 import { formatShort } from '../core/text';
-import type { BeadIssue, BeadsSnapshot, PreviewEntry, Tone, UsageSummary } from '../core/types';
+import type { PreviewEntry, TaskIssue, TasksSnapshot, Tone, UsageSummary } from '../core/types';
 import { buildPreviewRowKey } from './preview-row-key';
 
 type Toast = {
@@ -68,7 +69,7 @@ const TOAST_TTL_MS_BY_TONE: Record<Tone, number> = {
 const TOAST_REPEAT_GUARD_MS = 1500;
 const LIVE_RENDER_TICK_MS = 1000;
 
-export type InkInputKey = {
+export type TuiInputKey = {
   tab?: boolean;
   leftArrow?: boolean;
   rightArrow?: boolean;
@@ -76,7 +77,47 @@ export type InkInputKey = {
   downArrow?: boolean;
   return?: boolean;
   escape?: boolean;
+  ctrl?: boolean;
+  shift?: boolean;
+  meta?: boolean;
 };
+
+function inputFromKeyEvent(event: KeyEvent): string {
+  if (event.sequence && event.sequence.length === 1) {
+    return event.sequence;
+  }
+  if (event.name === 'space') {
+    return ' ';
+  }
+  if (event.name.length === 1) {
+    return event.name;
+  }
+  return '';
+}
+
+function mapTuiInputKey(event: KeyEvent): TuiInputKey {
+  return {
+    tab: event.name === 'tab',
+    leftArrow: event.name === 'left',
+    rightArrow: event.name === 'right',
+    upArrow: event.name === 'up',
+    downArrow: event.name === 'down',
+    return: event.name === 'enter' || event.name === 'return',
+    escape: event.name === 'escape',
+    ctrl: event.ctrl,
+    shift: event.shift,
+    meta: event.meta,
+  };
+}
+
+function useTuiInput(handler: (input: string, key: TuiInputKey) => void): void {
+  useKeyboard((event) => {
+    if (event.eventType === 'release') {
+      return;
+    }
+    handler(inputFromKeyEvent(event), mapTuiInputKey(event));
+  });
+}
 
 export type TuiInteractionState = {
   view: TuiView;
@@ -228,7 +269,7 @@ function syncTuiInteractionState(
 export function transitionTuiInteractionState(
   state: TuiInteractionState,
   input: string,
-  key: InkInputKey,
+  key: TuiInputKey,
 ): TuiInteractionState {
   const normalized = input.toLowerCase();
   if (key.escape) {
@@ -440,15 +481,12 @@ function StatusText({
   text: string;
   dim?: boolean;
 }): React.JSX.Element {
-  return (
-    <Text color={toneToColor(tone)} dimColor={dim}>
-      {text}
-    </Text>
-  );
+  const color = dim ? toneToColor('muted') : toneToColor(tone);
+  return <span fg={color}>{text}</span>;
 }
 
 function renderStatusBadge(label: string, tone: Tone): React.JSX.Element {
-  return <StatusText tone={tone} text={`[${label}]`} />;
+  return <span fg={toneToColor(tone)}>{`[${label}]`}</span>;
 }
 
 function _renderHeader(state: LiveRunHeaderState): React.JSX.Element {
@@ -458,11 +496,11 @@ function _renderHeader(state: LiveRunHeaderState): React.JSX.Element {
   const filled = Math.round(barWidth * state.ratio);
   const empty = Math.max(0, barWidth - filled);
   return (
-    <Box borderStyle="round" borderColor={toneToColor(tone)} paddingX={1} flexDirection="column">
-      <Text>
+    <box borderStyle="rounded" borderColor={toneToColor(tone)} paddingX={1} flexDirection="column">
+      <text>
         {renderStatusBadge('LIVE', tone)} <StatusText tone={tone} text={body} />
-      </Text>
-      <Text>
+      </text>
+      <text>
         {renderStatusBadge('ITERATION', 'info')}{' '}
         <StatusText tone="neutral" text={`${state.iteration}/${state.maxIterations} `} />
         <StatusText tone="info" text="[" />
@@ -470,14 +508,14 @@ function _renderHeader(state: LiveRunHeaderState): React.JSX.Element {
         <StatusText tone="muted" dim text={'-'.repeat(empty)} />
         <StatusText tone="info" text="]" />
         <StatusText tone="neutral" text={` ${state.percent}%`} />
-      </Text>
-    </Box>
+      </text>
+    </box>
   );
 }
 
 function renderUsageSummaryLine(usage: UsageSummary): React.JSX.Element {
   return (
-    <Text>
+    <text>
       {renderStatusBadge('TOKENS', 'muted')}{' '}
       <StatusText tone="neutral" text={`in ${usage.inputTokens.toLocaleString('en-US')}`} />
       {' | '}
@@ -487,24 +525,24 @@ function renderUsageSummaryLine(usage: UsageSummary): React.JSX.Element {
       />
       {' | '}
       <StatusText tone="neutral" text={`out ${usage.outputTokens.toLocaleString('en-US')}`} />
-    </Text>
+    </text>
   );
 }
 
 function renderIterationSummary(state: LiveRunState): React.JSX.Element[] {
   const summary = state.lastIterationSummary;
   const rows: React.JSX.Element[] = [
-    <Text key="summary-title">
+    <text key="summary-title">
       {renderStatusBadge('ITER SUM', 'info')}{' '}
       <StatusText tone="neutral" text="last iteration result" />
-    </Text>,
+    </text>,
   ];
 
   if (!summary) {
     rows.push(
-      <Text key="summary-pending">
+      <text key="summary-pending">
         <StatusText tone="muted" text="pending" />
-      </Text>,
+      </text>,
     );
     return rows;
   }
@@ -515,57 +553,57 @@ function renderIterationSummary(state: LiveRunState): React.JSX.Element[] {
     );
   } else {
     rows.push(
-      <Text key="summary-no-usage">
+      <text key="summary-no-usage">
         {renderStatusBadge('TOKENS', 'muted')} <StatusText tone="muted" text="no usage summary" />
-      </Text>,
+      </text>,
     );
   }
 
-  if (summary.pickedBeadsByAgent.size === 0) {
+  if (summary.pickedTasksByAgent.size === 0) {
     rows.push(
-      <Text key="summary-no-pick">
-        {renderStatusBadge('A', 'muted')} <StatusText tone="muted" text="no picked beads" />
-      </Text>,
+      <text key="summary-no-pick">
+        {renderStatusBadge('A', 'muted')} <StatusText tone="muted" text="no picked tasks" />
+      </text>,
     );
   } else {
-    for (const agentId of Array.from(summary.pickedBeadsByAgent.keys()).sort(
+    for (const agentId of Array.from(summary.pickedTasksByAgent.keys()).sort(
       (left, right) => left - right,
     )) {
-      const picked = summary.pickedBeadsByAgent.get(agentId);
+      const picked = summary.pickedTasksByAgent.get(agentId);
       if (!picked) {
         continue;
       }
       rows.push(
-        <Text key={`summary-pick-${agentId}`}>
+        <text key={`summary-pick-${agentId}`}>
           {renderStatusBadge(`A${agentId}`, 'info')}{' '}
           <StatusText tone="neutral" text={`${picked.id}: ${picked.title}`} />
-        </Text>,
+        </text>,
       );
     }
   }
 
   if (summary.notice) {
     rows.push(
-      <Text key="summary-notice">
+      <text key="summary-notice">
         {renderStatusBadge('NOTE', summary.noticeTone)}{' '}
         <StatusText tone={summary.noticeTone} text={summary.notice} />
-      </Text>,
+      </text>,
     );
   }
   if (state.retrySeconds !== null) {
     rows.push(
-      <Text key="summary-retry">
+      <text key="summary-retry">
         {renderStatusBadge('RETRY', 'warn')}{' '}
         <StatusText tone="warn" text={`next retry in ${state.retrySeconds}s`} />
-      </Text>,
+      </text>,
     );
   }
   if (state.pauseMs !== null) {
     rows.push(
-      <Text key="summary-pause">
+      <text key="summary-pause">
         {renderStatusBadge('PAUSE', 'muted')}{' '}
         <StatusText tone="muted" text={`waiting ${state.pauseMs}ms`} />
-      </Text>,
+      </text>,
     );
   }
   return rows;
@@ -621,98 +659,98 @@ function renderRunContext(state: LiveRunState): React.JSX.Element[] {
   const context = state.runContext;
   if (!context) {
     return [
-      <Text key="runctx-pending">
+      <text key="runctx-pending">
         {renderStatusBadge('RUNCTX', 'muted')} <StatusText tone="muted" text="no run context" />
-      </Text>,
-      <Text key="runctx-pending2">
+      </text>,
+      <text key="runctx-pending2">
         {renderStatusBadge('RUNCTX', 'muted')} <StatusText tone="muted" text="no log paths" />
-      </Text>,
+      </text>,
     ];
   }
   const startAt = new Date(context.startedAt).toLocaleTimeString();
   const columns = process.stdout.columns ?? 120;
   const rowWidth = Math.max(24, columns - 42);
   const rows: React.JSX.Element[] = [
-    <Text key="runctx-main">
+    <text key="runctx-main">
       {renderStatusBadge('RUNCTX', 'info')} {renderStatusBadge('START', 'muted')}{' '}
       <StatusText tone="neutral" text={`${startAt} |`} /> {renderStatusBadge('RUN', 'muted')}{' '}
       <StatusText tone="neutral" text={formatShort(context.command, rowWidth)} />{' '}
       {renderStatusBadge('BATCH', 'muted')}{' '}
       <StatusText tone="neutral" text={formatShort(context.batch, rowWidth)} />
-    </Text>,
+    </text>,
   ];
   for (const line of buildRunContextInfoLines(context)) {
     rows.push(
-      <Text key={`runctx-meta-${line.key}`}>
+      <text key={`runctx-meta-${line.key}`}>
         {renderStatusBadge(line.label, 'muted')}{' '}
         <StatusText tone={line.tone} text={formatShort(line.value, rowWidth)} />
-      </Text>,
+      </text>,
     );
   }
   for (const [agentId, logPath] of [...context.agentLogPaths.entries()].sort(
     ([left], [right]) => left - right,
   )) {
     rows.push(
-      <Text key={`runctx-log-${agentId}`}>
+      <text key={`runctx-log-${agentId}`}>
         {renderStatusBadge(`A${agentId}LOG`, 'muted')}{' '}
         <StatusText tone="muted" text={formatShort(logPath, rowWidth)} />
-      </Text>,
+      </text>,
     );
   }
   if (context.agentLogPaths.size === 0) {
     rows.push(
-      <Text key="runctx-no-logs">
+      <text key="runctx-no-logs">
         {renderStatusBadge('LOGS', 'muted')} <StatusText tone="muted" text="unavailable" />
-      </Text>,
+      </text>,
     );
   }
   return rows;
 }
 
-function renderBeads(state: LiveRunState): React.JSX.Element | null {
-  const beads = state.beadsSnapshot;
-  if (!beads) {
+function renderTasks(state: LiveRunState): React.JSX.Element | null {
+  const tasks = state.tasksSnapshot;
+  if (!tasks) {
     return null;
   }
 
-  if (!beads.available) {
-    const suffix = beads.error ? ` (${formatShort(beads.error, 80)})` : '';
+  if (!tasks.available) {
+    const suffix = tasks.error ? ` (${formatShort(tasks.error, 80)})` : '';
     return (
-      <Box marginTop={1} borderStyle="round" borderColor={toneToColor('warn')} paddingX={1}>
-        <Text>
-          {renderStatusBadge('BEADS', 'warn')}{' '}
+      <box marginTop={1} borderStyle="rounded" borderColor={toneToColor('warn')} paddingX={1}>
+        <text>
+          {renderStatusBadge('TSQ', 'warn')}{' '}
           <StatusText tone="warn" text={` unavailable${suffix}`} />
-        </Text>
-      </Box>
+        </text>
+      </box>
     );
   }
 
   return (
-    <Box
+    <box
       marginTop={1}
-      borderStyle="round"
+      borderStyle="rounded"
       borderColor={toneToColor('info')}
       paddingX={1}
       flexDirection="column"
     >
-      <Text>
-        {renderStatusBadge('BEADS', 'info')}{' '}
+      <text>
+        {renderStatusBadge('TSQ', 'info')}{' '}
         <StatusText
           tone="neutral"
-          text={` remaining ${beads.remaining} | in_progress ${beads.inProgress} | open ${beads.open} | blocked ${beads.blocked} | closed ${beads.closed}`}
+          text={` tasks remaining ${tasks.remaining} | in_progress ${tasks.inProgress} | open ${tasks.open} | blocked ${tasks.blocked} | closed ${tasks.closed}`}
         />
-      </Text>
-      {beads.remainingIssues.slice(0, 3).map((issue, index) => {
+      </text>
+      {tasks.remainingIssues.slice(0, 3).map((issue, index) => {
         const assignee = issue.assignee ? ` @${issue.assignee}` : '';
         return (
-          <Text key={issue.id}>
+          <text key={issue.id}>
             <StatusText tone="muted" dim text={` ${String(index + 1).padStart(2, ' ')}.`} />{' '}
             {renderStatusBadge('REM', 'muted')}{' '}
             <StatusText tone="neutral" text={` ${issue.id} ${issue.title}${assignee}`} />
-          </Text>
+          </text>
         );
       })}
-    </Box>
+    </box>
   );
 }
 
@@ -824,20 +862,20 @@ function renderIterationStrip(
       failedText,
     ];
     return (
-      <Box marginTop={1} borderStyle="round" borderColor={toneToColor('warn')} paddingX={1}>
-        <Text>{pieces.join(' | ')}</Text>
-      </Box>
+      <box marginTop={1} borderStyle="rounded" borderColor={toneToColor('warn')} paddingX={1}>
+        <text>{pieces.join(' | ')}</text>
+      </box>
     );
   }
 
   return (
-    <Box marginTop={1} borderStyle="round" borderColor={toneToColor('warn')} paddingX={1}>
-      <Text>
+    <box marginTop={1} borderStyle="rounded" borderColor={toneToColor('warn')} paddingX={1}>
+      <text>
         {prevCount > 0 ? <StatusText tone="muted" text={`Prev: ${prevCount} `} /> : null}
         {chipsText ? <StatusText tone="neutral" text={`${chipsText} `} /> : null}
         <StatusText tone="muted" text={` ${retryText}   ${failedText}`} />
-      </Text>
-    </Box>
+      </text>
+    </box>
   );
 }
 
@@ -870,9 +908,9 @@ function renderIterationHistoryList(
   );
   if (timeline.maxIterations <= 0) {
     rows.push(
-      <Text key="iter-history-empty">
+      <text key="iter-history-empty">
         <StatusText tone="muted" text="no iteration history yet" />
-      </Text>,
+      </text>,
     );
   } else {
     const target = safeSelectedIteration;
@@ -895,14 +933,14 @@ function renderIterationHistoryList(
       const tone: Tone = marker.failed ? 'error' : marker.succeeded ? 'success' : 'muted';
       const selectedPrefix = isSelected ? renderStatusBadge(focused ? '▶' : '·', 'info') : ' ';
       rows.push(
-        <Text key={`iter-${marker.iteration}`}>
+        <text key={`iter-${marker.iteration}`}>
           {selectedPrefix}
           <StatusText tone={tone} text={` ${chip.padEnd(8, ' ')} `} />
           <StatusText
             tone={isCurrent ? 'info' : 'neutral'}
             text={isCurrent ? 'current' : 'history'}
           />
-        </Text>,
+        </text>,
       );
     }
   }
@@ -911,16 +949,16 @@ function renderIterationHistoryList(
   const visibleQueueLimit = columns >= 110 ? 4 : columns >= 80 ? 3 : 2;
   const visibleQueue = queue.slice(Math.max(0, queue.length - visibleQueueLimit));
   rows.push(
-    <Text key="iter-queue-title">
+    <text key="iter-queue-title">
       {renderStatusBadge('QUEUE', 'warn')}{' '}
       <StatusText tone="muted" text={`retry/failure (${visibleQueue.length}/${queue.length})`} />
-    </Text>,
+    </text>,
   );
   if (visibleQueue.length === 0) {
     rows.push(
-      <Text key="iter-queue-empty">
+      <text key="iter-queue-empty">
         <StatusText tone="muted" text="queue clear" />
-      </Text>,
+      </text>,
     );
   } else {
     for (const marker of visibleQueue) {
@@ -929,33 +967,33 @@ function renderIterationHistoryList(
       const selectedPrefix = isSelected ? renderStatusBadge('▶', 'info') : ' ';
       const markerTone: Tone = marker.failed ? 'error' : 'warn';
       rows.push(
-        <Text key={`iter-queue-${marker.iteration}`}>
+        <text key={`iter-queue-${marker.iteration}`}>
           {selectedPrefix}{' '}
           <StatusText tone={markerTone} text={`I${String(marker.iteration).padStart(2, '0')}`} />{' '}
           <StatusText tone="muted" text={markerLabel} />
-        </Text>,
+        </text>,
       );
     }
   }
 
   const focusText = focused ? '[iter list focus]' : '[iter list]';
   return (
-    <Box
+    <box
       marginTop={1}
-      borderStyle="round"
+      borderStyle="rounded"
       borderColor={toneToColor('info')}
       paddingX={1}
       flexDirection="column"
     >
-      <Text>
+      <text>
         {renderStatusBadge('HISTORY', 'info')}{' '}
         <StatusText
           tone="muted"
           text={`${timeline.currentIteration}/${timeline.maxIterations} ${focusText}`}
         />
-      </Text>
+      </text>
       {rows}
-    </Box>
+    </box>
   );
 }
 
@@ -965,20 +1003,20 @@ function renderToastNotifications(toasts: Toast[]): React.JSX.Element | null {
   }
   const display = toasts.slice(-3);
   return (
-    <Box
+    <box
       marginTop={1}
-      borderStyle="round"
+      borderStyle="rounded"
       borderColor={toneToColor('warn')}
       paddingX={1}
       flexDirection="column"
     >
       {display.map((toast) => (
-        <Text key={toast.id}>
+        <text key={toast.id}>
           {renderStatusBadge('TOAST', toast.tone)}{' '}
           <StatusText tone={toast.tone} text={toast.message} />
-        </Text>
+        </text>
       ))}
-    </Box>
+    </box>
   );
 }
 
@@ -989,24 +1027,24 @@ function renderDashboard(
 ): React.JSX.Element {
   const queue = buildRetryFailureQueue(timeline);
   const queueLines = queue.slice(0, 3).map((entry) => (
-    <Text key={`dashboard-queue-${entry.iteration}`}>
+    <text key={`dashboard-queue-${entry.iteration}`}>
       <StatusText tone="muted" text={`${entry.iteration}:`} />{' '}
       <StatusText
         tone={entry.failed ? 'error' : 'warn'}
         text={entry.failed ? 'failed' : `R${entry.retryCount}`}
       />
-    </Text>
+    </text>
   ));
 
   return (
-    <Box
+    <box
       marginTop={1}
-      borderStyle="round"
+      borderStyle="rounded"
       borderColor={toneToColor('info')}
       paddingX={1}
       flexDirection="column"
     >
-      <Text>
+      <text>
         {renderStatusBadge('DASH', 'info')}{' '}
         <StatusText
           tone="neutral"
@@ -1016,20 +1054,20 @@ function renderDashboard(
           tone={state.running ? 'success' : 'muted'}
           text={state.running ? 'running' : 'stopped'}
         />
-      </Text>
-      <Text>
+      </text>
+      <text>
         {renderStatusBadge('QUEUE', queue.length > 0 ? 'warn' : 'muted')}{' '}
         <StatusText tone="neutral" text={`retry/failure markers: ${queue.length}`} />
-      </Text>
+      </text>
       {queueLines.length === 0 ? (
-        <Text>
+        <text>
           <StatusText tone="muted" text="queue empty" />
-        </Text>
+        </text>
       ) : (
         queueLines
       )}
       {renderRunContext(state).map((line) => line)}
-    </Box>
+    </box>
   );
 }
 
@@ -1038,19 +1076,19 @@ function renderViewHelp(helpVisible: boolean): React.JSX.Element | null {
     return null;
   }
   return (
-    <Box
+    <box
       marginTop={1}
-      borderStyle="round"
+      borderStyle="rounded"
       borderColor={toneToColor('info')}
       flexDirection="column"
       paddingX={1}
     >
       {DEFAULT_HELP_TEXT.map((line) => (
-        <Text key={line}>
+        <text key={line}>
           <StatusText tone="muted" text={line} />
-        </Text>
+        </text>
       ))}
-    </Box>
+    </box>
   );
 }
 
@@ -1101,7 +1139,7 @@ function leftPaneSelectionIndex(uiState: TuiInteractionState): number {
 
 function buildLeftPaneRows(
   state: LiveRunState,
-  renderer: InkLiveRunRenderer,
+  renderer: OpenTuiLiveRunRenderer,
   uiState: TuiInteractionState,
   timeline: LiveRunIterationTimeline,
   maxWidth: number,
@@ -1165,9 +1203,9 @@ function buildLeftPaneRows(
     }
     return state.agentIds.map((agentId, index) => {
       const selector = renderer.getAgentSelector(agentId);
-      const label = selector.pickedBead
-        ? `${selector.pickedBead.id} ${selector.pickedBead.title}`
-        : 'no bead picked';
+      const label = selector.pickedTask
+        ? `${selector.pickedTask.id} ${selector.pickedTask.title}`
+        : 'no task picked';
       return {
         key: `worker-${agentId}`,
         tone: selector.statusTone,
@@ -1182,9 +1220,9 @@ function buildLeftPaneRows(
   return state.agentIds.map((agentId) => {
     const selector = renderer.getAgentSelector(agentId);
     const taskTitle =
-      selector.pickedBead === null
-        ? 'no bead picked'
-        : `${selector.pickedBead.id} ${selector.pickedBead.title}`;
+      selector.pickedTask === null
+        ? 'no task picked'
+        : `${selector.pickedTask.id} ${selector.pickedTask.title}`;
     return {
       key: `task-agent-${agentId}`,
       tone: selector.statusTone,
@@ -1200,43 +1238,43 @@ function renderStatusStrip(
 ): React.JSX.Element {
   const readiness = state.running ? 'Ready' : headerState.statusMessage;
   return (
-    <Box
+    <box
       borderStyle="single"
       borderColor={toneToColor('info')}
       paddingX={1}
       flexDirection="row"
       justifyContent="space-between"
     >
-      <Text>
+      <text>
         <StatusText tone={state.running ? 'info' : headerState.tone} text={`◉ ${readiness}`} />
-      </Text>
-      <Text>
+      </text>
+      <text>
         <StatusText tone="info" text="ouroboros/tui" />{' '}
         <StatusText
           tone="muted"
           text={`${uiState.view} · ${headerState.iteration}/${headerState.maxIterations} · ${headerState.elapsedSeconds.toFixed(0)}s`}
         />
-      </Text>
-    </Box>
+      </text>
+    </box>
   );
 }
 
 function renderFooterStrip(): React.JSX.Element {
   return (
-    <Box borderStyle="single" borderColor={toneToColor('muted')} paddingX={1}>
-      <Text>
+    <box borderStyle="single" borderColor={toneToColor('muted')} paddingX={1}>
+      <text>
         <StatusText
           tone="muted"
           text="q:Quit  w:Workers  m:Merge  a/r/s:Conflict  Enter:Detail  Esc:Back  Tab:Focus  ↑↓:Navigate  ?:Help"
         />
-      </Text>
-    </Box>
+      </text>
+    </box>
   );
 }
 
 function renderFullScreenBody(
   state: LiveRunState,
-  renderer: InkLiveRunRenderer,
+  renderer: OpenTuiLiveRunRenderer,
   uiState: TuiInteractionState,
   timeline: LiveRunIterationTimeline,
   toasts: Toast[],
@@ -1269,24 +1307,24 @@ function renderFullScreenBody(
     const snapshot =
       selectedAgentId === null ? null : (state.agentState.get(selectedAgentId) ?? null);
     const title =
-      selector?.pickedBead === null || selector === null
-        ? 'no bead selected'
-        : `${selector.pickedBead.id} ${selector.pickedBead.title}`;
+      selector?.pickedTask === null || selector === null
+        ? 'no task selected'
+        : `${selector.pickedTask.id} ${selector.pickedTask.title}`;
     body.push(
-      <Text key="detail-title">
+      <text key="detail-title">
         <StatusText
           tone="success"
           text={`▸ ${formatShort(title, Math.max(20, rightPaneWidth - 6))}`}
         />
-      </Text>,
+      </text>,
     );
     body.push(
-      <Text key="detail-id">
-        <StatusText tone="muted" text={`ID: ${selector?.pickedBead?.id ?? 'n/a'}`} />
-      </Text>,
+      <text key="detail-id">
+        <StatusText tone="muted" text={`ID: ${selector?.pickedTask?.id ?? 'n/a'}`} />
+      </text>,
     );
     body.push(
-      <Box
+      <box
         key="detail-meta"
         marginTop={1}
         borderStyle="single"
@@ -1294,25 +1332,25 @@ function renderFullScreenBody(
         flexDirection="column"
         paddingX={1}
       >
-        <Text>
+        <text>
           <StatusText tone="muted" text="Status: " />
           <StatusText
             tone={selector?.statusTone ?? 'muted'}
             text={selector?.statusLabel ?? 'WAIT'}
           />
-        </Text>
-        <Text>
+        </text>
+        <text>
           <StatusText tone="muted" text="Phase: " />
           <StatusText tone="neutral" text={state.loopPhase} />
-        </Text>
-        <Text>
+        </text>
+        <text>
           <StatusText tone="muted" text="Iteration: " />
           <StatusText tone="neutral" text={`${state.iteration}/${state.maxIterations}`} />
-        </Text>
-      </Box>,
+        </text>
+      </box>,
     );
     body.push(
-      <Box
+      <box
         key="detail-runctx"
         marginTop={1}
         borderStyle="single"
@@ -1320,14 +1358,14 @@ function renderFullScreenBody(
         flexDirection="column"
         paddingX={1}
       >
-        <Text>
+        <text>
           <StatusText tone="info" text="Run Context" />
-        </Text>
+        </text>
         {renderRunContext(state)}
-      </Box>,
+      </box>,
     );
     body.push(
-      <Box
+      <box
         key="detail-description"
         marginTop={1}
         borderStyle="single"
@@ -1335,10 +1373,10 @@ function renderFullScreenBody(
         flexDirection="column"
         paddingX={1}
       >
-        <Text>
+        <text>
           <StatusText tone="info" text="Description" />
-        </Text>
-        <Text>
+        </text>
+        <text>
           <StatusText
             tone="muted"
             text={formatShort(
@@ -1346,11 +1384,11 @@ function renderFullScreenBody(
               Math.max(24, rightPaneWidth - 8),
             )}
           />
-        </Text>
-      </Box>,
+        </text>
+      </box>,
     );
     body.push(
-      <Box
+      <box
         key="detail-activity"
         marginTop={1}
         borderStyle="single"
@@ -1358,12 +1396,12 @@ function renderFullScreenBody(
         flexDirection="column"
         paddingX={1}
       >
-        <Text>
+        <text>
           <StatusText tone="info" text="Activity" />
-        </Text>
+        </text>
         {snapshot?.lines.length ? (
           snapshot.lines.map((line, index) => (
-            <Text key={buildPreviewRowKey(selectedAgentId ?? 0, index)}>
+            <text key={buildPreviewRowKey(selectedAgentId ?? 0, index)}>
               <StatusText
                 tone={line.tone}
                 text={formatShort(
@@ -1371,14 +1409,14 @@ function renderFullScreenBody(
                   Math.max(24, rightPaneWidth - 8),
                 )}
               />
-            </Text>
+            </text>
           ))
         ) : (
-          <Text>
+          <text>
             <StatusText tone="muted" text="No live events yet." />
-          </Text>
+          </text>
         )}
-      </Box>,
+      </box>,
     );
   } else if (uiState.view === 'iterations') {
     body.push(
@@ -1387,7 +1425,7 @@ function renderFullScreenBody(
   } else if (uiState.view === 'iteration-detail') {
     body.push(
       renderIterationDetail(state, renderer, uiState, timeline, rightPaneWidth) ?? (
-        <Text key="iter-detail-null" />
+        <text key="iter-detail-null" />
       ),
     );
   } else if (uiState.view === 'parallel-overview') {
@@ -1416,32 +1454,32 @@ function renderFullScreenBody(
   }
 
   return (
-    <Box flexGrow={1} flexDirection="row" marginTop={1}>
-      <Box
+    <box flexGrow={1} flexDirection="row" marginTop={1}>
+      <box
         width={leftPaneWidth}
         borderStyle="single"
         borderColor={toneToColor('muted')}
         flexDirection="column"
         paddingX={1}
       >
-        <Text>
+        <text>
           <StatusText tone="muted" text={leftPaneTitle(uiState.view)} />
-        </Text>
+        </text>
         {visibleRows.map((row, index) => {
           const absoluteIndex = paneRows.indexOf(row);
           const selected = absoluteIndex === selectedIndex;
           return (
-            <Text key={row.key}>
+            <text key={row.key}>
               <StatusText tone={selected ? 'info' : 'muted'} text={selected ? '▶ ' : '  '} />
               <StatusText tone={selected ? 'neutral' : row.tone} text={row.text} />
               {index === visibleRows.length - 1 && paneRows.length > visibleRows.length ? (
                 <StatusText tone="muted" text=" …" />
               ) : null}
-            </Text>
+            </text>
           );
         })}
-      </Box>
-      <Box
+      </box>
+      <box
         marginLeft={1}
         flexGrow={1}
         borderStyle="single"
@@ -1449,18 +1487,18 @@ function renderFullScreenBody(
         flexDirection="column"
         paddingX={1}
       >
-        <Text>
+        <text>
           <StatusText tone="muted" text={`Details [${uiState.view}] [Trace: full]`} />
-        </Text>
+        </text>
         {body}
-      </Box>
-    </Box>
+      </box>
+    </box>
   );
 }
 
 function renderIterationDetail(
   liveState: LiveRunState,
-  renderer: InkLiveRunRenderer,
+  renderer: OpenTuiLiveRunRenderer,
   state: TuiInteractionState,
   timeline: LiveRunIterationTimeline,
   columns: number,
@@ -1486,87 +1524,87 @@ function renderIterationDetail(
     : 'n/a';
   const loopNotice = liveState.loopNotice ?? 'none';
   const timelineRows: React.JSX.Element[] = [
-    <Text key="iter-event-start">
+    <text key="iter-event-start">
       <StatusText tone="info" text={`▶ ${startTime}`} />{' '}
       <StatusText tone="muted" text="iteration scope started" />
-    </Text>,
-    <Text key="iter-event-phase">
+    </text>,
+    <text key="iter-event-phase">
       <StatusText tone="neutral" text={`⚙ ${liveState.loopPhase}`} />{' '}
       <StatusText tone="muted" text="loop phase" />
-    </Text>,
-    <Text key="iter-event-notice">
+    </text>,
+    <text key="iter-event-notice">
       <StatusText tone={liveState.loopNoticeTone} text={`• ${loopNotice}`} />
-    </Text>,
+    </text>,
   ];
   if (marker?.failed) {
     timelineRows.push(
-      <Text key="iter-event-failed">
+      <text key="iter-event-failed">
         <StatusText tone="error" text="✗ iteration marked failed" />
-      </Text>,
+      </text>,
     );
   } else if (marker?.succeeded) {
     timelineRows.push(
-      <Text key="iter-event-ok">
+      <text key="iter-event-ok">
         <StatusText tone="success" text="✓ iteration marked success" />
-      </Text>,
+      </text>,
     );
   } else {
     timelineRows.push(
-      <Text key="iter-event-pending">
+      <text key="iter-event-pending">
         <StatusText tone="muted" text="○ iteration pending outcome" />
-      </Text>,
+      </text>,
     );
   }
   if (marker && marker.retryCount > 0) {
     timelineRows.push(
-      <Text key="iter-event-retry">
+      <text key="iter-event-retry">
         <StatusText tone="warn" text={`↻ retry count ${marker.retryCount}`} />
-      </Text>,
+      </text>,
     );
   }
 
   return (
-    <Box
+    <box
       marginTop={1}
-      borderStyle="round"
+      borderStyle="rounded"
       borderColor={toneToColor('warn')}
       flexDirection="column"
       paddingX={1}
     >
-      <Text>
+      <text>
         {renderStatusBadge('ITER-DETAIL', 'info')}{' '}
         <StatusText tone="neutral" text={iterationText} />
-      </Text>
-      <Text>
+      </text>
+      <text>
         <StatusText tone="muted" text={`${statusLine} · ${retryText}`} />
-      </Text>
-      <Text>
+      </text>
+      <text>
         {renderStatusBadge('TASK', 'muted')}{' '}
         <StatusText
           tone="neutral"
           text={`iter ${state.selectedIteration}/${timeline.maxIterations}`}
         />
-      </Text>
-      <Box
+      </text>
+      <box
         marginTop={1}
-        borderStyle="round"
+        borderStyle="rounded"
         borderColor={toneToColor('info')}
         flexDirection="column"
         paddingX={1}
       >
-        <Text>
+        <text>
           {renderStatusBadge('TIMELINE', 'info')} <StatusText tone="muted" text="event stream" />
-        </Text>
+        </text>
         {timelineRows}
-      </Box>
-      <Box
+      </box>
+      <box
         marginTop={1}
-        borderStyle="round"
+        borderStyle="rounded"
         borderColor={toneToColor('muted')}
         flexDirection="column"
         paddingX={1}
       >
-        <Text>
+        <text>
           {renderStatusBadge('AGENT', selectedAgentSelector?.statusTone ?? 'muted')}{' '}
           <StatusText
             tone="neutral"
@@ -1576,36 +1614,36 @@ function renderIterationDetail(
                 : `A${selectedAgentId} ${selectedAgentSelector?.statusLabel ?? 'WAIT'}`
             }
           />
-        </Text>
-        {selectedAgentSelector?.pickedBead ? (
-          <Text>
+        </text>
+        {selectedAgentSelector?.pickedTask ? (
+          <text>
             <StatusText
               tone="success"
-              text={`${selectedAgentSelector.pickedBead.id} · ${formatShort(selectedAgentSelector.pickedBead.title, Math.max(20, columns - 36))}`}
+              text={`${selectedAgentSelector.pickedTask.id} · ${formatShort(selectedAgentSelector.pickedTask.title, Math.max(20, columns - 36))}`}
             />
-          </Text>
+          </text>
         ) : (
-          <Text>
-            <StatusText tone="muted" text="no picked bead metadata" />
-          </Text>
+          <text>
+            <StatusText tone="muted" text="no picked task metadata" />
+          </text>
         )}
         {selectedAgentSnapshot?.lines.length ? (
           selectedAgentSnapshot.lines.map((line, index) => (
-            <Text key={buildPreviewRowKey(selectedAgentId ?? 0, index)}>
+            <text key={buildPreviewRowKey(selectedAgentId ?? 0, index)}>
               <StatusText
                 tone={line.tone}
                 text={`${line.label.toUpperCase()}: ${formatShort(line.text, Math.max(20, columns - 30))}`}
               />
-            </Text>
+            </text>
           ))
         ) : (
-          <Text>
+          <text>
             <StatusText tone="muted" text="no agent output lines for this slot yet" />
-          </Text>
+          </text>
         )}
-      </Box>
+      </box>
       {renderIterationStrip(timeline, columns)}
-    </Box>
+    </box>
   );
 }
 
@@ -1624,7 +1662,7 @@ function buildMergeQueueRows(timeline: LiveRunIterationTimeline): IterationQueue
 
 function renderParallelOverview(
   state: LiveRunState,
-  renderer: InkLiveRunRenderer,
+  renderer: OpenTuiLiveRunRenderer,
   uiState: TuiInteractionState,
   timeline: LiveRunIterationTimeline,
   columns: number,
@@ -1636,15 +1674,15 @@ function renderParallelOverview(
   );
   const mergeQueueRows = buildMergeQueueRows(timeline);
   return (
-    <Box key="parallel-overview" marginTop={1} flexDirection="column">
-      <Text>
+    <box key="parallel-overview" marginTop={1} flexDirection="column">
+      <text>
         {renderStatusBadge('WORKERS', 'info')}{' '}
         <StatusText tone="neutral" text={`(${state.agentIds.length}) group 1/1`} />
-      </Text>
+      </text>
       {state.agentIds.length === 0 ? (
-        <Text>
+        <text>
           <StatusText tone="muted" text="no workers yet" />
-        </Text>
+        </text>
       ) : (
         state.agentIds.map((agentId, index) => {
           const selector = renderer.getAgentSelector(agentId);
@@ -1657,36 +1695,36 @@ function renderParallelOverview(
               : selector.statusLabel === 'FIX'
                 ? '⚠'
                 : '▶';
-          const taskText = selector.pickedBead
-            ? `${selector.pickedBead.id} · ${formatShort(selector.pickedBead.title, Math.max(16, columns - 40))}`
-            : 'no bead picked';
+          const taskText = selector.pickedTask
+            ? `${selector.pickedTask.id} · ${formatShort(selector.pickedTask.title, Math.max(16, columns - 40))}`
+            : 'no task picked';
           return (
-            <Text key={`worker-${agentId}`}>
+            <text key={`worker-${agentId}`}>
               <StatusText tone={selected ? 'info' : 'muted'} text={selected ? '▸' : ' '} />{' '}
               <StatusText tone={selector.statusTone} text={`${indicator} W${index + 1}`} />{' '}
               <StatusText tone="muted" text={`[${state.iteration}/${state.maxIterations}]`} />{' '}
               <StatusText tone="neutral" text={taskText} />
-            </Text>
+            </text>
           );
         })
       )}
-      <Box
+      <box
         marginTop={1}
-        borderStyle="round"
+        borderStyle="rounded"
         borderColor={toneToColor('muted')}
         flexDirection="column"
         paddingX={1}
       >
-        <Text>
+        <text>
           <StatusText tone="muted" text="─── Merge Queue ───" />
-        </Text>
+        </text>
         {mergeQueueRows.length === 0 ? (
-          <Text>
+          <text>
             <StatusText tone="muted" text="queue empty" />
-          </Text>
+          </text>
         ) : (
           mergeQueueRows.slice(-6).map((row) => (
-            <Text key={`merge-queue-${row.iteration}`}>
+            <text key={`merge-queue-${row.iteration}`}>
               <StatusText tone={row.failed ? 'warn' : 'muted'} text={row.failed ? '⚡' : '⋯'} />{' '}
               <StatusText
                 tone="neutral"
@@ -1702,75 +1740,75 @@ function renderParallelOverview(
                       : 'queued'
                 }
               />
-            </Text>
+            </text>
           ))
         )}
-      </Box>
-    </Box>
+      </box>
+    </box>
   );
 }
 
 function renderParallelDetail(
   state: LiveRunState,
-  renderer: InkLiveRunRenderer,
+  renderer: OpenTuiLiveRunRenderer,
   uiState: TuiInteractionState,
   columns: number,
 ): React.JSX.Element {
   if (state.agentIds.length === 0) {
     return (
-      <Box key="parallel-detail-empty" marginTop={1}>
-        <Text>
+      <box key="parallel-detail-empty" marginTop={1}>
+        <text>
           <StatusText tone="muted" text="no worker selected" />
-        </Text>
-      </Box>
+        </text>
+      </box>
     );
   }
   const workerIndex = clampIndex(uiState.selectedWorkerIndex, 0, state.agentIds.length - 1);
   const workerAgentId = state.agentIds[workerIndex];
   const selector = renderer.getAgentSelector(workerAgentId);
   const snapshot = state.agentState.get(workerAgentId);
-  const title = selector.pickedBead
-    ? `${selector.pickedBead.id} · ${formatShort(selector.pickedBead.title, Math.max(20, columns - 24))}`
-    : 'no bead picked';
+  const title = selector.pickedTask
+    ? `${selector.pickedTask.id} · ${formatShort(selector.pickedTask.title, Math.max(20, columns - 24))}`
+    : 'no task picked';
   return (
-    <Box key="parallel-detail" marginTop={1} flexDirection="column">
-      <Text>
+    <box key="parallel-detail" marginTop={1} flexDirection="column">
+      <text>
         {renderStatusBadge('WORKER', 'info')}{' '}
         <StatusText tone="neutral" text={`W${workerIndex + 1} A${workerAgentId}`} />{' '}
         <StatusText tone={selector.statusTone} text={selector.statusLabel} />
-      </Text>
-      <Text>
+      </text>
+      <text>
         <StatusText tone="muted" text={`task ${title}`} />
-      </Text>
-      <Text>
+      </text>
+      <text>
         <StatusText tone="muted" text={`iteration ${state.iteration}/${state.maxIterations}`} />
-      </Text>
-      <Box
+      </text>
+      <box
         marginTop={1}
-        borderStyle="round"
+        borderStyle="rounded"
         borderColor={toneToColor('info')}
         flexDirection="column"
         paddingX={1}
       >
-        <Text>
+        <text>
           <StatusText tone="info" text="worker output" />
-        </Text>
+        </text>
         {snapshot?.lines.length ? (
           snapshot.lines.map((line, index) => (
-            <Text key={buildPreviewRowKey(workerAgentId, index)}>
+            <text key={buildPreviewRowKey(workerAgentId, index)}>
               <StatusText
                 tone={line.tone}
                 text={`${line.label.toUpperCase()}: ${formatShort(line.text, Math.max(20, columns - 30))}`}
               />
-            </Text>
+            </text>
           ))
         ) : (
-          <Text>
+          <text>
             <StatusText tone="muted" text="no output lines yet" />
-          </Text>
+          </text>
         )}
-      </Box>
-    </Box>
+      </box>
+    </box>
   );
 }
 
@@ -1781,28 +1819,28 @@ function renderMergeProgress(
   const mergeQueueRows = buildMergeQueueRows(timeline);
   const merged = timeline.markers.filter((marker) => marker.succeeded).length;
   return (
-    <Box key="merge-progress" marginTop={1} flexDirection="column">
-      <Text>
+    <box key="merge-progress" marginTop={1} flexDirection="column">
+      <text>
         {renderStatusBadge('MERGE', 'info')}{' '}
         <StatusText tone="neutral" text={`queue (${merged}/${timeline.maxIterations} merged)`} />
-      </Text>
-      <Text>
+      </text>
+      <text>
         <StatusText tone="muted" text="Backup: ouroboros/session-start/current" />
-      </Text>
-      <Box
+      </text>
+      <box
         marginTop={1}
-        borderStyle="round"
+        borderStyle="rounded"
         borderColor={toneToColor('muted')}
         flexDirection="column"
         paddingX={1}
       >
         {mergeQueueRows.length === 0 ? (
-          <Text>
+          <text>
             <StatusText tone="muted" text="no merge activity yet" />
-          </Text>
+          </text>
         ) : (
           mergeQueueRows.map((row) => (
-            <Text key={`merge-row-${row.iteration}`}>
+            <text key={`merge-row-${row.iteration}`}>
               <StatusText
                 tone={row.failed ? 'warn' : row.retryCount > 0 ? 'info' : 'success'}
                 text={row.failed ? '⚡' : row.retryCount > 0 ? '⟳' : '✓'}
@@ -1821,14 +1859,14 @@ function renderMergeProgress(
                       : 'merged'
                 }
               />
-            </Text>
+            </text>
           ))
         )}
-      </Box>
-      <Text>
+      </box>
+      <text>
         <StatusText tone="muted" text="Press a to open conflict panel when conflicts are present" />
-      </Text>
-    </Box>
+      </text>
+    </box>
   );
 }
 
@@ -1839,28 +1877,28 @@ function renderConflictResolutionPanel(
   const conflicts = timeline.markers.filter((marker) => marker.failed);
   const selected = clampIndex(uiState.selectedConflictIndex, 0, Math.max(0, conflicts.length - 1));
   return (
-    <Box
+    <box
       key="conflict-resolution"
       marginTop={1}
-      borderStyle="round"
+      borderStyle="rounded"
       borderColor={toneToColor('warn')}
       flexDirection="column"
       paddingX={1}
     >
-      <Text>
+      <text>
         {renderStatusBadge('CONFLICT', 'warn')}{' '}
         <StatusText
           tone="neutral"
           text={`resolution ${conflicts.length ? `${selected + 1}/${conflicts.length}` : '0/0'}`}
         />
-      </Text>
+      </text>
       {conflicts.length === 0 ? (
-        <Text>
+        <text>
           <StatusText tone="muted" text="no conflicted merges detected" />
-        </Text>
+        </text>
       ) : (
         conflicts.map((marker, index) => (
-          <Text key={`conflict-row-${marker.iteration}`}>
+          <text key={`conflict-row-${marker.iteration}`}>
             <StatusText
               tone={index === selected ? 'info' : 'muted'}
               text={index === selected ? '▸' : ' '}
@@ -1870,13 +1908,13 @@ function renderConflictResolutionPanel(
               text={`⚡ iteration-${String(marker.iteration).padStart(2, '0')}.patch`}
             />{' '}
             <StatusText tone="muted" text="unresolved" />
-          </Text>
+          </text>
         ))
       )}
-      <Text>
+      <text>
         <StatusText tone="muted" text="a accept · r retry AI · s skip task · Esc close" />
-      </Text>
-    </Box>
+      </text>
+    </box>
   );
 }
 
@@ -1897,7 +1935,7 @@ function renderCurrentAgentCard(
 
 function renderAgentListPanel(
   state: LiveRunState,
-  renderer: InkLiveRunRenderer,
+  renderer: OpenTuiLiveRunRenderer,
   uiState: TuiInteractionState,
   _columns: number,
 ): React.JSX.Element {
@@ -1906,15 +1944,15 @@ function renderAgentListPanel(
     safeAgentCount > 0 ? clampIndex(uiState.selectedAgentIndex, 0, safeAgentCount - 1) : -1;
   const isFocused = uiState.focusedPane === 'agents';
   return (
-    <Box flexDirection="column" marginRight={1} flexGrow={1}>
-      <Text>
+    <box flexDirection="column" marginRight={1} flexGrow={1}>
+      <text>
         {renderStatusBadge('LIVE', isFocused ? 'info' : 'muted')}{' '}
         <StatusText tone="muted" text={isFocused ? '[agent focus]' : '[agents]'} />
-      </Text>
+      </text>
       {safeAgentCount === 0 ? (
-        <Text>
+        <text>
           <StatusText tone="muted" text="no agents yet" />
-        </Text>
+        </text>
       ) : (
         state.agentIds.map((agentId, index) => {
           const selector = renderer.getAgentSelector(agentId);
@@ -1926,27 +1964,27 @@ function renderAgentListPanel(
           );
         })
       )}
-    </Box>
+    </box>
   );
 }
 
 function renderTaskSummaryPanel(state: LiveRunState, columns: number): React.JSX.Element {
   return (
-    <Box marginTop={1} flexDirection="column" width={Math.min(columns - 2, 120)}>
-      <Text>
+    <box marginTop={1} flexDirection="column" width={Math.min(columns - 2, 120)}>
+      <text>
         {renderStatusBadge('TASK', 'info')}{' '}
         <StatusText tone="neutral" text={`iteration ${state.iteration}/${state.maxIterations}`} />
-      </Text>
+      </text>
       {renderIterationSummary(state).map((line) => line)}
       {renderRunContext(state).map((line) => line)}
-      {renderBeads(state)}
-    </Box>
+      {renderTasks(state)}
+    </box>
   );
 }
 
 function _renderViewContent(
   state: LiveRunState,
-  renderer: InkLiveRunRenderer,
+  renderer: OpenTuiLiveRunRenderer,
   uiState: TuiInteractionState,
   timeline: LiveRunIterationTimeline,
   columns: number,
@@ -1955,25 +1993,25 @@ function _renderViewContent(
   if (view === 'iterations') {
     const focused = uiState.focusedPane === 'iterations';
     return [
-      <Box key="iter-view" marginTop={1} flexDirection="column">
-        <Text>
+      <box key="iter-view" marginTop={1} flexDirection="column">
+        <text>
           {renderStatusBadge('ITER', focused ? 'info' : 'muted')}{' '}
           <StatusText tone="muted" text={focused ? '[iteration focus]' : '[iterations]'} />
-        </Text>
+        </text>
         {renderIterationSummary(state).map((line) => line)}
         {renderIterationHistoryList(timeline, uiState.selectedIteration, columns, focused)}
-      </Box>,
+      </box>,
     ];
   }
 
   if (view === 'iteration-detail') {
     return [
-      <Box key="iter-detail" marginTop={1} flexDirection="column">
-        <Text>
+      <box key="iter-detail" marginTop={1} flexDirection="column">
+        <text>
           {renderStatusBadge('DETAIL', 'info')} selected iteration {uiState.selectedIteration}
-        </Text>
+        </text>
         {renderIterationDetail(state, renderer, uiState, timeline, columns)}
-      </Box>,
+      </box>,
     ];
   }
 
@@ -1995,9 +2033,9 @@ function _renderViewContent(
 
   if (view === 'reviewer') {
     return [
-      <Box key="reviewer-shell" marginTop={1} flexDirection="column">
-        <Text>{renderStatusBadge('VIEW', 'warn')} reviewer panel</Text>
-        <Box marginTop={1} flexDirection="column">
+      <box key="reviewer-shell" marginTop={1} flexDirection="column">
+        <text>{renderStatusBadge('VIEW', 'warn')} reviewer panel</text>
+        <box marginTop={1} flexDirection="column">
           {renderRunContext(state).map((line) => line)}
           {renderCurrentAgentCard(
             state,
@@ -2005,14 +2043,14 @@ function _renderViewContent(
             (agentId) => renderer.getAgentSelector(agentId),
             true,
           )}
-        </Box>
-      </Box>,
+        </box>
+      </box>,
     ];
   }
 
   if (columns < 100) {
     return [
-      <Box key="tasks-stack" marginTop={1} flexDirection="column">
+      <box key="tasks-stack" marginTop={1} flexDirection="column">
         {renderTaskSummaryPanel(state, columns)}
         {renderAgentListPanel(state, renderer, uiState, columns)}
         {renderIterationHistoryList(
@@ -2021,25 +2059,25 @@ function _renderViewContent(
           columns,
           uiState.focusedPane === 'iterations',
         )}
-      </Box>,
+      </box>,
     ];
   }
 
   return [
-    <Box key="tasks-layout" marginTop={1} flexDirection="row" width={columns - 2} gap={1}>
-      <Box width={Math.max(60, Math.floor(columns * 0.64))} flexDirection="column">
+    <box key="tasks-layout" marginTop={1} flexDirection="row" width={columns - 2} gap={1}>
+      <box width={Math.max(60, Math.floor(columns * 0.64))} flexDirection="column">
         {renderTaskSummaryPanel(state, columns)}
         {renderAgentListPanel(state, renderer, uiState, columns)}
-      </Box>
-      <Box flexDirection="column" flexGrow={1}>
+      </box>
+      <box flexDirection="column" flexGrow={1}>
         {renderIterationHistoryList(
           timeline,
           uiState.selectedIteration,
           columns,
           uiState.focusedPane === 'iterations',
         )}
-      </Box>
-    </Box>,
+      </box>
+    </box>,
   ];
 }
 
@@ -2052,8 +2090,8 @@ export function buildAgentNotchLine(agentId: number, cardWidth: number): string 
   return `╭${header}${'─'.repeat(fillWidth)}╮`;
 }
 
-export function formatAgentTitle(picked: BeadIssue | null, maxLength: number): string {
-  const fallback = 'no bead picked';
+export function formatAgentTitle(picked: TaskIssue | null, maxLength: number): string {
+  const fallback = 'no task picked';
   if (maxLength <= 0) {
     return '';
   }
@@ -2083,11 +2121,9 @@ function renderAgentTab(
   inactiveTone: Tone,
 ): React.JSX.Element {
   return isActive ? (
-    <Text color={activeTone}>{`[${label}]`}</Text>
+    <text fg={toneToColor(activeTone)}>{`[${label}]`}</text>
   ) : (
-    <Text color={inactiveTone} dimColor>
-      {` ${label} `}
-    </Text>
+    <text fg={toneToColor(inactiveTone)}>{` ${label} `}</text>
   );
 }
 
@@ -2098,7 +2134,7 @@ function renderAgentCard(
   selected = false,
 ): React.JSX.Element {
   const snapshot = state.agentState.get(agentId);
-  const picked = selector.pickedBead;
+  const picked = selector.pickedTask;
   const columns = process.stdout.columns ?? 120;
   const cardWidth = Math.max(48, Math.min(columns - 30, 120));
   const lineMax = Math.max(24, cardWidth - 18);
@@ -2129,22 +2165,22 @@ function renderAgentCard(
     : [];
 
   return (
-    <Box marginTop={1} flexDirection="column">
-      <Text color={toneToColor('muted')}>{buildAgentNotchLine(agentId, cardWidth)}</Text>
-      <Box
-        borderStyle="round"
+    <box marginTop={1} flexDirection="column">
+      <text fg={toneToColor('muted')}>{buildAgentNotchLine(agentId, cardWidth)}</text>
+      <box
+        borderStyle="rounded"
         borderColor={selected ? toneToColor('info') : toneToColor(tone)}
         paddingX={1}
         flexDirection="column"
         width={cardWidth}
       >
-        <Box>
-          {renderAgentTab('Dev', !selectedReview, toneToColor('info'), toneToColor('muted'))}
-          <Text> </Text>
-          {renderAgentTab('Review', selectedReview, toneToColor('warn'), toneToColor('muted'))}
-        </Box>
+        <box>
+          {renderAgentTab('Dev', !selectedReview, 'info', 'muted')}
+          <text> </text>
+          {renderAgentTab('Review', selectedReview, 'warn', 'muted')}
+        </box>
         {!snapshot ? (
-          <Text>
+          <text>
             <StatusText
               tone={pickedTitleTone}
               dim={!picked}
@@ -2157,10 +2193,15 @@ function renderAgentCard(
               text={` · iter ${state.iteration}/${state.maxIterations} · ${retryAttemptText}`}
             />
             <StatusText tone="muted" text={` · ${ageSeconds}s ago`} />
-            {selected ? ` ${renderStatusBadge('>', 'info')}` : null}
-          </Text>
+            {selected ? (
+              <>
+                <span> </span>
+                {renderStatusBadge('>', 'info')}
+              </>
+            ) : null}
+          </text>
         ) : (
-          <Text>
+          <text>
             <StatusText
               tone={pickedTitleTone}
               dim={!picked}
@@ -2171,21 +2212,26 @@ function renderAgentCard(
             <StatusText tone="muted" text={` · iter ${state.iteration}/${state.maxIterations}`} />{' '}
             <StatusText tone="muted" text={` · ${retryAttemptText}`} />{' '}
             <StatusText tone="muted" dim text={` · ${ageSeconds}s ago`} />
-            {selected ? ` ${renderStatusBadge('>', 'info')}` : null}
-          </Text>
+            {selected ? (
+              <>
+                <span> </span>
+                {renderStatusBadge('>', 'info')}
+              </>
+            ) : null}
+          </text>
         )}
         {previewLines.map((line, rowIndex) => (
-          <Text key={buildPreviewRowKey(agentId, rowIndex)}>
+          <text key={buildPreviewRowKey(agentId, rowIndex)}>
             <StatusText tone="muted" dim text="  " /> {renderStatusBadge(line.label, line.tone)}{' '}
             <StatusText tone={line.tone} text={` ${line.text}`} />
-          </Text>
+          </text>
         ))}
-      </Box>
-    </Box>
+      </box>
+    </box>
   );
 }
 
-function LiveView({ renderer }: { renderer: InkLiveRunRenderer }): React.JSX.Element {
+function LiveView({ renderer }: { renderer: OpenTuiLiveRunRenderer }): React.JSX.Element {
   const state = useSyncExternalStore(
     renderer.subscribe,
     renderer.getSnapshot,
@@ -2199,7 +2245,7 @@ function LiveView({ renderer }: { renderer: InkLiveRunRenderer }): React.JSX.Ele
   const rows = process.stdout.rows ?? 40;
   const viewportRows = Math.max(18, rows - 1);
 
-  useInput((input, key) => {
+  useTuiInput((input, key) => {
     const isCtrlC = (key.ctrl && input.toLowerCase() === 'c') || input === '\u0003';
     const isQuitKey = input.toLowerCase() === 'q';
     if (isCtrlC || isQuitKey) {
@@ -2213,9 +2259,9 @@ function LiveView({ renderer }: { renderer: InkLiveRunRenderer }): React.JSX.Ele
     }
   });
   return (
-    <Box flexDirection="column" width={columns} height={viewportRows}>
-      <Box
-        borderStyle="round"
+    <box flexDirection="column" width={columns} height={viewportRows}>
+      <box
+        borderStyle="rounded"
         borderColor={toneToColor('info')}
         flexDirection="column"
         width={columns}
@@ -2233,18 +2279,20 @@ function LiveView({ renderer }: { renderer: InkLiveRunRenderer }): React.JSX.Ele
           viewportRows,
         )}
         {renderFooterStrip()}
-      </Box>
-    </Box>
+      </box>
+    </box>
   );
 }
 
-export class InkLiveRunRenderer {
+export class OpenTuiLiveRunRenderer {
   private readonly enabled: boolean;
   private state: LiveRunState;
   private readonly stateStore: LiveRunStateStore;
   private uiState: TuiInteractionState;
   private timer: NodeJS.Timeout | null = null;
-  private app: ReturnType<typeof render> | null = null;
+  private cliRenderer: CliRenderer | null = null;
+  private root: ReturnType<typeof createRoot> | null = null;
+  private mountCancelled = false;
   private toasts: Toast[] = [];
   private toastCounter = 1;
   private quitRequested = false;
@@ -2265,7 +2313,7 @@ export class InkLiveRunRenderer {
       return;
     }
 
-    this.app = render(<LiveView renderer={this} />, { exitOnCtrlC: false });
+    void this.initializeRoot();
     this.timer = setInterval(() => {
       const changed = this.pruneExpiredToasts();
       if (this.state.running) {
@@ -2287,6 +2335,34 @@ export class InkLiveRunRenderer {
     };
   };
 
+  private async initializeRoot(): Promise<void> {
+    try {
+      const renderer = await createCliRenderer({ exitOnCtrlC: true });
+      if (this.mountCancelled || this.quitRequested) {
+        renderer.destroy();
+        return;
+      }
+      this.cliRenderer = renderer;
+      this.root = createRoot(renderer);
+      this.root.render(<LiveView renderer={this} />);
+    } catch (error) {
+      const reason = error instanceof Error ? formatShort(error.message, 120) : 'unknown error';
+      console.error(`${badge('TUI', 'warn')} OpenTUI mount failed (${reason})`);
+    }
+  }
+
+  private unmountRoot(): void {
+    this.mountCancelled = true;
+    if (this.root) {
+      this.root.unmount();
+      this.root = null;
+    }
+    if (this.cliRenderer) {
+      this.cliRenderer.destroy();
+      this.cliRenderer = null;
+    }
+  }
+
   getSnapshot = (): LiveRunState => this.state;
   getHeaderState = (): LiveRunHeaderState => this.stateStore.getHeaderState();
   getAgentSelector = (agentId: number): LiveRunAgentSelector =>
@@ -2305,7 +2381,7 @@ export class InkLiveRunRenderer {
     return [...this.toasts];
   };
 
-  transition(input: string, key: InkInputKey): TuiInteractionState | null {
+  transition(input: string, key: TuiInputKey): TuiInteractionState | null {
     const base = syncTuiInteractionState(
       this.uiState,
       this.state.agentIds.length,
@@ -2355,16 +2431,24 @@ export class InkLiveRunRenderer {
     this.emit();
   }
 
-  setBeadsSnapshot(snapshot: BeadsSnapshot | null): void {
-    this.stateStore.setBeadsSnapshot(snapshot);
+  setTasksSnapshot(snapshot: TasksSnapshot | null): void {
+    this.stateStore.setTasksSnapshot(snapshot);
     this.state = this.stateStore.getSnapshot();
     this.emit();
   }
 
-  setAgentPickedBead(agentId: number, issue: BeadIssue): void {
-    this.stateStore.setAgentPickedBead(agentId, issue);
+  setBeadsSnapshot(snapshot: TasksSnapshot | null): void {
+    this.setTasksSnapshot(snapshot);
+  }
+
+  setAgentPickedTask(agentId: number, issue: TaskIssue): void {
+    this.stateStore.setAgentPickedTask(agentId, issue);
     this.state = this.stateStore.getSnapshot();
     this.emit();
+  }
+
+  setAgentPickedBead(agentId: number, issue: TaskIssue): void {
+    this.setAgentPickedTask(agentId, issue);
   }
 
   setAgentLogPath(agentId: number, path: string): void {
@@ -2492,10 +2576,7 @@ export class InkLiveRunRenderer {
     this.state = this.stateStore.getSnapshot();
     this.emit();
 
-    if (this.app) {
-      this.app.unmount();
-      this.app = null;
-    }
+    this.unmountRoot();
     if (message) {
       console.log(`${badge('DONE', tone)} ${message}`);
     }
@@ -2510,14 +2591,11 @@ export class InkLiveRunRenderer {
       clearInterval(this.timer);
       this.timer = null;
     }
-    if (this.app) {
-      this.app.unmount();
-      this.app = null;
-    }
+    this.unmountRoot();
     try {
       process.kill(process.pid, 'SIGINT');
     } catch {
-      process.exit(130);
+      process.emit('SIGINT');
     }
   }
 

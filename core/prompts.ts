@@ -106,6 +106,12 @@ export function resolvePromptPath(
  */
 export function resolveDeveloperPromptPath(cwd: string, explicitPath?: string): string {
   const resolved = resolvePromptPath('developer', cwd, explicitPath);
+  if (explicitPath) {
+    const explicitResolved = path.resolve(cwd, explicitPath);
+    if (!existsSync(explicitResolved)) {
+      throw new Error(`No developer prompt found at explicit path: ${explicitResolved}`);
+    }
+  }
   if (!resolved) {
     throw new Error(
       `No developer prompt found. Provide --prompt / --developer-prompt, create ${PROMPTS_DIR}/developer.md or ${LEGACY_PROMPT}, or run with built-in docs prompts.`,

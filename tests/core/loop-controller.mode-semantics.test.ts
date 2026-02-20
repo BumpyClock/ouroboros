@@ -1,4 +1,4 @@
-import { afterAll, afterEach, beforeEach, describe, expect, it, mock } from 'bun:test';
+import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import * as path from 'node:path';
@@ -21,57 +21,12 @@ type IterationRunResult = {
   reviewOutcomes: Map<number, unknown>;
 };
 
-type AggregatedIterationOutput = {
-  pickedByAgent: Map<number, { id: string; title: string; status: string }>;
-  usageAggregate: null;
-  failed: Array<{
-    status: number | null;
-    combinedOutput: string;
-    result: IterationRunResult['results'][number];
-  }>;
-  stopDetected: boolean;
-  reviewOutcomes: Map<number, unknown>;
-};
-
 let state = { current_iteration: 0, max_iterations: 1 };
+let projectRoot = '';
 let loadCalls: LoadBeadsCall[] = [];
 let iterationCalls: unknown[][] = [];
 let snapshot: BeadsSnapshot = makeSnapshot({ available: true });
 let runIterationResult: IterationRunResult = makeIterationResult();
-let aggregatedOutput: AggregatedIterationOutput = makeAggregatedOutput();
-
-mock.module('../../core/state', () => ({
-  loadIterationState: () => state,
-  isCircuitBroken: ({
-    current_iteration,
-    max_iterations,
-  }: {
-    current_iteration: number;
-    max_iterations: number;
-  }) => current_iteration >= max_iterations,
-  writeIterationState: () => {},
-  sleep: async () => {},
-}));
-
-mock.module('../../core/beads', () => ({
-  loadBeadsSnapshot: async (
-    projectRoot: string,
-    topLevelBeadId?: string,
-  ): Promise<BeadsSnapshot> => {
-    loadCalls.push({ projectRoot, topLevelBeadId });
-    return snapshot;
-  },
-}));
-
-mock.module('../../core/iteration-execution', () => ({
-  runIteration: async (...args: unknown[]) => {
-    iterationCalls.push(args);
-    return runIterationResult;
-  },
-  aggregateIterationOutput: (_params: AggregatedIterationOutput) => {
-    return aggregatedOutput;
-  },
-}));
 
 const mockProvider: ProviderAdapter = {
   name: 'mock',
@@ -126,19 +81,6 @@ function makeIterationResult(): IterationRunResult {
   };
 }
 
-function makeAggregatedOutput(
-  values: Partial<AggregatedIterationOutput> = {},
-): AggregatedIterationOutput {
-  return {
-    pickedByAgent: new Map(),
-    usageAggregate: null,
-    failed: [],
-    stopDetected: false,
-    reviewOutcomes: new Map(),
-    ...values,
-  };
-}
-
 function makeOptions(overrides: Partial<CliOptions>): CliOptions {
   return {
     projectRoot,
@@ -164,9 +106,35 @@ function makeOptions(overrides: Partial<CliOptions>): CliOptions {
   };
 }
 
+function makeDependencies() {
+  return {
+    loadIterationState: () => state,
+    isCircuitBroken: ({
+      current_iteration,
+      max_iterations,
+    }: {
+      current_iteration: number;
+      max_iterations: number;
+    }) => current_iteration >= max_iterations,
+    writeIterationState: () => {},
+    sleep: async () => {},
+    loadTasksSnapshot: async (
+      projectRoot: string,
+      topLevelTaskId?: string,
+    ): Promise<BeadsSnapshot> => {
+      loadCalls.push({ projectRoot, topLevelBeadId: topLevelTaskId });
+      return snapshot;
+    },
+    runIteration: async (...args: unknown[]) => {
+      iterationCalls.push(args);
+      return runIterationResult;
+    },
+    createLiveRenderer: () => null,
+  };
+}
+
 describe('runLoopController mode-specific termination', () => {
   let loopControllerModule: typeof import('../../core/loop-controller') | null = null;
-  let projectRoot = '';
   let promptPath = '';
   let statePath = '';
   let logDir = '';
@@ -183,17 +151,14 @@ describe('runLoopController mode-specific termination', () => {
     iterationCalls = [];
     snapshot = makeSnapshot();
     runIterationResult = makeIterationResult();
-    aggregatedOutput = makeAggregatedOutput();
 
-    loopControllerModule = await import('../../core/loop-controller');
+    loopControllerModule = await import(
+      `../../core/loop-controller.ts?loop-mode-${Date.now()}-${Math.random().toString(36).slice(2)}`
+    );
   });
 
   afterEach(() => {
     rmSync(projectRoot, { recursive: true, force: true });
-  });
-
-  afterAll(() => {
-    mock.restore();
   });
 
   it('stops before any iteration when top-level scope is exhausted', async () => {
@@ -202,32 +167,33 @@ describe('runLoopController mode-specific termination', () => {
       throw new Error('runLoopController module not initialized');
     }
 
-    await loopControllerModule.runLoopController({
-      options: makeOptions({
-        beadMode: 'top-level',
-        topLevelBeadId: 'ouroboros-13.12',
-      }),
-      provider: mockProvider,
-      reviewerProvider: mockProvider,
-      promptPath,
-      statePath,
-      logDir,
-      command: 'resolved:mock command',
-      reviewerCommand: 'resolved:mock reviewer command',
-      activeChildren: new Set(),
-      activeSpinnerStopRef: { value: null },
-      shutdownProbe: { isShuttingDown: () => false },
-    });
+    await loopControllerModule.runLoopController(
+      {
+        options: makeOptions({
+          beadMode: 'top-level',
+          topLevelBeadId: 'ouroboros-13.12',
+        }),
+        provider: mockProvider,
+        reviewerProvider: mockProvider,
+        promptPath,
+        statePath,
+        logDir,
+        command: 'resolved:mock command',
+        reviewerCommand: 'resolved:mock reviewer command',
+        activeChildren: new Set(),
+        activeSpinnerStopRef: { value: null },
+        shutdownProbe: { isShuttingDown: () => false },
+      },
+      makeDependencies(),
+    );
 
     expect(iterationCalls).toHaveLength(0);
     expect(loadCalls).toEqual([{ projectRoot, topLevelBeadId: 'ouroboros-13.12' }]);
   });
 
-  it('does not apply top-level scope when bead mode is auto', async () => {
+  it('does not apply top-level scope when task scope mode is auto', async () => {
     state.max_iterations = 2;
     snapshot = makeSnapshot({ available: true, remaining: 0 });
-    aggregatedOutput = makeAggregatedOutput({ stopDetected: true });
-
     if (!loopControllerModule) {
       throw new Error('runLoopController module not initialized');
     }
@@ -237,21 +203,24 @@ describe('runLoopController mode-specific termination', () => {
       topLevelBeadId: 'ouroboros-13.12',
     });
 
-    await loopControllerModule.runLoopController({
-      options,
-      provider: mockProvider,
-      reviewerProvider: mockProvider,
-      promptPath,
-      statePath,
-      logDir,
-      command: 'resolved:mock command',
-      reviewerCommand: 'resolved:mock reviewer command',
-      activeChildren: new Set(),
-      activeSpinnerStopRef: { value: null },
-      shutdownProbe: { isShuttingDown: () => false },
-    });
+    await loopControllerModule.runLoopController(
+      {
+        options,
+        provider: mockProvider,
+        reviewerProvider: mockProvider,
+        promptPath,
+        statePath,
+        logDir,
+        command: 'resolved:mock command',
+        reviewerCommand: 'resolved:mock reviewer command',
+        activeChildren: new Set(),
+        activeSpinnerStopRef: { value: null },
+        shutdownProbe: { isShuttingDown: () => false },
+      },
+      makeDependencies(),
+    );
 
-    expect(iterationCalls).toHaveLength(1);
+    expect(iterationCalls).toHaveLength(2);
     expect(loadCalls[0]).toEqual({ projectRoot, topLevelBeadId: undefined });
     expect(iterationCalls[0][7]).toBe('base developer prompt');
     expect(iterationCalls[0][6]).toBe(snapshot);
@@ -266,26 +235,30 @@ describe('runLoopController mode-specific termination', () => {
       throw new Error('runLoopController module not initialized');
     }
 
-    await loopControllerModule.runLoopController({
-      options: makeOptions({
-        beadMode: 'top-level',
-        topLevelBeadId: 'ouroboros-13.12',
-      }),
-      provider: mockProvider,
-      reviewerProvider: mockProvider,
-      promptPath,
-      statePath,
-      logDir,
-      command: 'resolved:mock command',
-      reviewerCommand: 'resolved:mock reviewer command',
-      activeChildren: new Set(),
-      activeSpinnerStopRef: { value: null },
-      shutdownProbe: { isShuttingDown: () => false },
-    });
+    await loopControllerModule.runLoopController(
+      {
+        options: makeOptions({
+          beadMode: 'top-level',
+          topLevelBeadId: 'ouroboros-13.12',
+        }),
+        provider: mockProvider,
+        reviewerProvider: mockProvider,
+        promptPath,
+        statePath,
+        logDir,
+        command: 'resolved:mock command',
+        reviewerCommand: 'resolved:mock reviewer command',
+        activeChildren: new Set(),
+        activeSpinnerStopRef: { value: null },
+        shutdownProbe: { isShuttingDown: () => false },
+      },
+      makeDependencies(),
+    );
 
     expect(iterationCalls).toHaveLength(1);
     expect(iterationCalls[0][7] as string).toContain('Top-level scope');
     expect(iterationCalls[0][7] as string).toContain('ouroboros-13.12');
+    expect(iterationCalls[0][7] as string).toContain('no_tasks_available');
     expect(loadCalls[0]).toEqual({ projectRoot, topLevelBeadId: 'ouroboros-13.12' });
   });
 });

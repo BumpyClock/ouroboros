@@ -179,7 +179,7 @@ async function runIterationWithLine(
   }
 }
 
-describe('runIteration bead picking for staged launch', () => {
+describe('runIteration task picking for staged launch', () => {
   beforeAll(async () => {
     iterationExecutionModule = await import('../../core/iteration-execution');
   });
@@ -188,7 +188,7 @@ describe('runIteration bead picking for staged launch', () => {
     mock.restore();
   });
 
-  it('launches the next agent early when a remaining bead id exists only in raw stdout', async () => {
+  it('launches the next agent early when a remaining task id exists only in raw stdout', async () => {
     const snapshot = createSnapshot(['ouroboros-7.1'], ['ouroboros-1']);
     const line = `{"type":"user","content":"${'x'.repeat(500)} ouroboros-7.1"}`;
 
@@ -198,7 +198,7 @@ describe('runIteration bead picking for staged launch', () => {
     expect(result.pickedByAgent.get(1)?.id).toBe('ouroboros-7.1');
   });
 
-  it('does not treat closed bead ids as a staged-launch readiness signal', async () => {
+  it('does not treat closed task ids as a staged-launch readiness signal', async () => {
     const snapshot = createSnapshot(['ouroboros-7.1'], ['ouroboros-1']);
     const line = `{"type":"user","content":"${'x'.repeat(500)} ouroboros-1"}`;
 

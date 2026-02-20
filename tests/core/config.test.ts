@@ -1,4 +1,5 @@
-import { afterAll, afterEach, beforeEach, describe, expect, it, mock } from 'bun:test';
+import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
+import { execFileSync } from 'node:child_process';
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import * as path from 'node:path';
@@ -7,10 +8,6 @@ let projectRoot = '';
 let tempHome = '';
 let previousHome: string | undefined;
 
-mock.module('node:child_process', () => ({
-  execSync: () => `${projectRoot}\n`,
-}));
-
 let loadOuroborosConfig: typeof import('../../core/config').loadOuroborosConfig;
 
 beforeEach(async () => {
@@ -18,10 +15,16 @@ beforeEach(async () => {
   mkdirSync(path.join(tempHome, '.ouroboros'), { recursive: true });
   projectRoot = mkdtempSync(path.join(tmpdir(), 'ouroboros-project-'));
   mkdirSync(path.join(projectRoot, '.ouroboros'), { recursive: true });
+  execFileSync('git', ['init', '-q'], {
+    cwd: projectRoot,
+    stdio: ['ignore', 'ignore', 'ignore'],
+  });
   previousHome = process.env.HOME;
   process.env.HOME = tempHome;
 
-  ({ loadOuroborosConfig } = await import('../../core/config'));
+  ({ loadOuroborosConfig } = (await import(
+    `../../core/config.ts?config-test-${Date.now()}-${Math.random().toString(36).slice(2)}`
+  )) as typeof import('../../core/config'));
 });
 
 afterEach(() => {
@@ -35,10 +38,6 @@ afterEach(() => {
   rmSync(projectRoot, { recursive: true, force: true });
   tempHome = '';
   projectRoot = '';
-});
-
-afterAll(() => {
-  mock.restore();
 });
 
 function writeConfig(filePath: string, contents: string): void {
@@ -156,7 +155,7 @@ theme = "matrix"
     expect(loaded.runtimeConfig.theme).toBe('matrix');
   });
 
-  it('merges bead mode config with project overrides', async () => {
+  it('merges task scope mode config with project overrides (legacy bead keys)', async () => {
     writeConfig(
       path.join(tempHome, '.ouroboros', 'config.toml'),
       `
@@ -178,7 +177,7 @@ topLevelBeadId = "ouroboros-11.2"
     expect(loaded.runtimeConfig.topLevelBeadId).toBe('ouroboros-11.2');
   });
 
-  it('keeps global bead mode when project config omits it', async () => {
+  it('keeps global task scope mode when project config omits it', async () => {
     writeConfig(
       path.join(tempHome, '.ouroboros', 'config.toml'),
       `

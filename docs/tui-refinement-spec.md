@@ -1,16 +1,16 @@
-# TUI Refinement Spec (Bead 10.1)
+# TUI Refinement Spec (Task 10.1)
 
 ## Overview
-- Scope: Ink live TUI card shell refinement before implementation beads `ouroboros-10.2` to `ouroboros-10.5`.
+- Scope: OpenTUI live card shell refinement before implementation tasks `ouroboros-10.2` to `ouroboros-10.5` (legacy tracker IDs retained).
 - Goal: clearer per-agent context with:
   - top-notch label `Agent N`
-  - card title `<bead id> · <bead title>`
+  - card title `<task id> · <task title>`
   - `Dev` / `Review` tabs with review-phase auto-switch
   - bottom iteration strip with responsive collapse and retry/failure markers
 - Design direction: utility + function, dense, minimal color, no decorative motion.
 
 ## Inputs and Constraints
-- Platform: terminal (Ink), cross-platform width behavior by terminal columns (not CSS px).
+- Platform: terminal (OpenTUI), cross-platform width behavior by terminal columns (not CSS px).
 - Existing runtime states:
   - implement stream/event rows
   - review phases `reviewing` and `fixing`
@@ -48,7 +48,7 @@
 +---------------------------------------------------------------+
 ```
 
-### Full-screen shell contract (current Ink renderer)
+### Full-screen shell contract (current OpenTUI renderer)
 - The live TUI renders as a single full-screen frame sized to terminal rows/columns.
 - Shell regions are persistent:
   - top status strip (run readiness, active view, iteration progress, elapsed seconds)
@@ -73,18 +73,18 @@
 - Tone: muted neutral; never semantic color-coded.
 
 ### Title Copy
-- Canonical title format: `<bead id> · <bead title>`.
-- If no bead picked: `no bead picked` (existing fallback stays valid).
+- Canonical title format: `<task id> · <task title>`.
+- If no task picked: `no task picked` (existing fallback stays valid).
 - Separator is middle dot with spaces: ` · `.
 
 ### Truncation Rules
 - Compute `headerTextMax = cardInnerWidth - statusBadgeWidth - fixedPadding`.
-- Truncate title first; preserve full bead id whenever possible.
+- Truncate title first; preserve full task id whenever possible.
 - Truncation sequence:
   1. full `<id> · <title>` if fit
   2. `<id> · <title...>` with trailing ellipsis
   3. if still too long, clamp id to `<id...>` then keep separator only when space allows
-- Never truncate from the left; keep leading bead identity stable for scanability.
+- Never truncate from the left; keep leading task identity stable for scanability.
 
 ## Dev / Review Tab Contract
 
@@ -144,7 +144,7 @@
   - if reduced motion enabled, disable transitions (`0ms`) and perform immediate state swap.
 - Accessibility in terminal context:
   - badge text (`REVIEW`, `FIX`, `R`, `F`) must carry meaning without relying on color.
-  - truncation always keeps bead id prefix when feasible for disambiguation.
+  - truncation always keeps task id prefix when feasible for disambiguation.
 
 ## Interaction model and state transitions
 
@@ -185,11 +185,11 @@
 - If help/dashboard text is out of date, update both `docs/tui-refinement-spec.md` and `tests/tui/tui.test.ts`.
 
 ## Empty/Error States
-- No picked bead: keep header copy `no bead picked`; tabs still render with `Dev` active.
+- No picked task: keep header copy `no task picked`; tabs still render with `Dev` active.
 - No reviewer content yet: `Review` tab shows `pending review output`.
 - Snapshot unavailable for iteration metadata: strip fallback `Iter <current>/<max>` without retry/failure counts.
 
-## Implementation Notes for Follow-up Beads
+## Implementation Notes for Follow-up Tasks
 - `ouroboros-10.2`: add slot-local active-tab memory + review auto-switch restore contract.
 - `ouroboros-10.3`: implement notch and header truncation utility.
 - `ouroboros-10.4`: implement tab UI and review/dev content split.

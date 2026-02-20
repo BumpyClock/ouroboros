@@ -25,7 +25,7 @@ function makeSnapshot(available: boolean, remaining: number): BeadsSnapshot {
 }
 
 describe('loop controller stop-marker behavior', () => {
-  it('does not suppress stop-marker when beads snapshot is unavailable', () => {
+  it('does not suppress stop-marker when task snapshot is unavailable', () => {
     const snapshot = makeSnapshot(false, 0);
     expect(
       shouldIgnoreStopMarkerForNoBeads({
@@ -36,7 +36,7 @@ describe('loop controller stop-marker behavior', () => {
     ).toBeFalse();
   });
 
-  it('suppresses stop-marker when beads are available and no work was picked', () => {
+  it('suppresses stop-marker when tasks are available and no work was picked', () => {
     const snapshot = makeSnapshot(true, 0);
     expect(
       shouldIgnoreStopMarkerForNoBeads({
@@ -75,10 +75,10 @@ describe('loop controller stop-marker behavior', () => {
     expect(scopedPrompt).toContain('Base prompt body');
     expect(scopedPrompt).toContain('Top-level scope');
     expect(scopedPrompt).toContain('ouroboros-13');
-    expect(scopedPrompt).toContain('no_beads_available');
+    expect(scopedPrompt).toContain('no_tasks_available');
   });
 
-  it('does not modify developer prompt when top-level bead is not provided', () => {
+  it('does not modify developer prompt when top-level task is not provided', () => {
     const basePrompt = 'Base prompt body';
     expect(buildTopLevelScopePrompt(basePrompt, undefined)).toBe(basePrompt);
   });

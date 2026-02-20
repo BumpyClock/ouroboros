@@ -25,14 +25,14 @@ Keep all shared parsing, retry extraction, and marker detection in shared module
   - `hasStopMarker` from `parsing.ts`
 - Custom behavior is allowed only when a provider has proven output semantics that cannot be represented by shared helpers.
 - If custom behavior is added, add/extend tests near the adapter module to lock behavior.
-- If a provider can parse JSON output directly with a stable schema, keep that inside adapter-specific collection only and still keep stop/retry/no-beads shared.
+- If a provider can parse JSON output directly with a stable schema, keep that inside adapter-specific collection only and still keep stop/retry/no-task marker logic shared (including legacy no-beads markers for compatibility).
 - Retry policy is:
   - first attempt to extract structured retry delay keys (`retry_after_seconds`, `reset_seconds`, `resets_in_seconds`)
   - then parse common prose patterns (`retry`/`try again` + seconds/minutes)
 
 ## Decision links
 
-- Decision artifact: `ouroboros-6` (beads)
+- Decision artifact: `ouroboros-6` (legacy bead naming)
 - Provider refactor and cleanup tasks that adopted this boundary:
   - `ouroboros-1`, `ouroboros-1.1`, `ouroboros-1.2`, `ouroboros-1.3`, `ouroboros-1.4`
   - `ouroboros-6.3`, `ouroboros-6.4`

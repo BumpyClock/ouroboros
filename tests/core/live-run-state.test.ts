@@ -4,7 +4,7 @@ import type { BeadIssue, UsageSummary } from '../../core/types';
 
 const makeIssue = (id: string): BeadIssue => ({
   id,
-  title: `Issue ${id}`,
+  title: `Task ${id}`,
   status: 'open',
 });
 

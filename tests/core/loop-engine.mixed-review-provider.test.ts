@@ -1,5 +1,11 @@
-import { beforeEach, describe, expect, it, mock } from 'bun:test';
+import { describe, expect, it } from 'bun:test';
+import { type RunLoopDependencies, runLoop } from '../../core/loop-engine';
+import * as realPrompts from '../../core/prompts';
 import type { CliOptions } from '../../core/types';
+import {
+  getProviderAdapter as getRealProviderAdapter,
+  listProviderNames as listRealProviderNames,
+} from '../../providers/registry';
 import type { ProviderAdapter } from '../../providers/types';
 
 const capturedInput: {
@@ -51,69 +57,45 @@ const mockReviewerProvider: ProviderAdapter = {
   formatCommandHint: (command) => `reviewer:${command}`,
 };
 
-mock.module('../../core/process-runner', () => ({
-  resolveRunnableCommand: (command: string) => `resolved:${command}`,
-  runAgentProcess: async () => ({ status: 0, stdout: '', stderr: '' }),
-  terminateChildProcess: async () => {},
-}));
+function buildDeps(): RunLoopDependencies {
+  capturedInput.providerName = undefined;
+  capturedInput.reviewerProviderName = undefined;
+  capturedInput.command = undefined;
+  capturedInput.reviewerCommand = undefined;
+  capturedInput.reviewerPromptPath = undefined;
+  capturedInput.reviewerModel = undefined;
 
-mock.module('../../core/prompts', () => ({
-  resolveDeveloperPromptPath: () => '.tmp/dev-prompt.md',
-  resolveReviewerPromptPath: () => '.tmp/reviewer-prompt.md',
-}));
-
-mock.module('../../providers/registry', () => ({
-  getProviderAdapter: (name: string) => {
-    if (name === 'primary') {
-      return mockPrimaryProvider;
-    }
-    if (name === 'reviewer') {
-      return mockReviewerProvider;
-    }
-    throw new Error(`unsupported provider in test: ${name}`);
-  },
-  listProviderNames: () => 'primary,reviewer',
-}));
-
-mock.module('../../core/loop-controller', () => ({
-  runLoopController: async (input: {
-    options: CliOptions;
-    provider: ProviderAdapter;
-    reviewerProvider: ProviderAdapter;
-    reviewerCommand: string;
-    command: string;
-    reviewerPromptPath?: string;
-  }) => {
-    capturedInput.providerName = input.provider.name;
-    capturedInput.reviewerProviderName = input.reviewerProvider.name;
-    capturedInput.command = input.command;
-    capturedInput.reviewerCommand = input.reviewerCommand;
-    capturedInput.reviewerPromptPath = input.reviewerPromptPath;
-    capturedInput.reviewerModel = input.options.reviewerModel;
-    return null;
-  },
-}));
+  return {
+    getProviderAdapter: (name: string) => {
+      if (name === 'primary') {
+        return mockPrimaryProvider;
+      }
+      if (name === 'reviewer') {
+        return mockReviewerProvider;
+      }
+      return getRealProviderAdapter(name);
+    },
+    resolveRunnableCommand: (command: string) => `resolved:${command}`,
+    runLoopController: async (input) => {
+      capturedInput.providerName = input.provider.name;
+      capturedInput.reviewerProviderName = input.reviewerProvider.name;
+      capturedInput.command = input.command;
+      capturedInput.reviewerCommand = input.reviewerCommand;
+      capturedInput.reviewerPromptPath = input.reviewerPromptPath;
+      capturedInput.reviewerModel = input.options.reviewerModel;
+      return null;
+    },
+  };
+}
 
 describe('runLoop mixed-review-provider wiring', () => {
-  let loopEngineModule: typeof import('../../core/loop-engine') | null = null;
-
-  beforeEach(async () => {
-    loopEngineModule = await import('../../core/loop-engine');
-    capturedInput.providerName = undefined;
-    capturedInput.reviewerProviderName = undefined;
-    capturedInput.command = undefined;
-    capturedInput.reviewerCommand = undefined;
-    capturedInput.reviewerPromptPath = undefined;
-    capturedInput.reviewerModel = undefined;
-  });
-
   it('passes reviewer adapter + reviewer command from reviewer provider defaults', async () => {
     const baseOptions: CliOptions = {
       projectRoot: process.cwd(),
       projectKey: 'ouroboros',
       provider: 'primary',
       reviewerProvider: 'reviewer',
-      developerPromptPath: '.ai_agents/prompt.md',
+      developerPromptPath: undefined,
       iterationLimit: 1,
       iterationsSet: true,
       previewLines: 2,
@@ -130,17 +112,16 @@ describe('runLoop mixed-review-provider wiring', () => {
       reviewMaxFixAttempts: 5,
     };
 
-    if (!loopEngineModule) {
-      throw new Error('loopEngineModule did not initialize');
-    }
-    await loopEngineModule.runLoop(baseOptions, mockPrimaryProvider);
+    await runLoop(baseOptions, mockPrimaryProvider, buildDeps());
 
     expect(capturedInput.providerName).toBe('primary');
     expect(capturedInput.reviewerProviderName).toBe('reviewer');
     expect(capturedInput.command).toBe('resolved:primary run command');
     expect(capturedInput.reviewerCommand).toBe('resolved:reviewer default cmd');
     expect(capturedInput.reviewerModel).toBe('reviewer-model-override');
-    expect(capturedInput.reviewerPromptPath).toBe('.tmp/reviewer-prompt.md');
+    expect(capturedInput.reviewerPromptPath).toBe(
+      realPrompts.resolveReviewerPromptPath(process.cwd()) ?? undefined,
+    );
   });
 
   it('uses explicit reviewerCommand override for reviewer subprocess', async () => {
@@ -149,7 +130,7 @@ describe('runLoop mixed-review-provider wiring', () => {
       projectKey: 'ouroboros',
       provider: 'primary',
       reviewerProvider: 'reviewer',
-      developerPromptPath: '.ai_agents/prompt.md',
+      developerPromptPath: undefined,
       iterationLimit: 1,
       iterationsSet: true,
       previewLines: 2,
@@ -167,10 +148,7 @@ describe('runLoop mixed-review-provider wiring', () => {
       reviewMaxFixAttempts: 5,
     };
 
-    if (!loopEngineModule) {
-      throw new Error('loopEngineModule did not initialize');
-    }
-    await loopEngineModule.runLoop(overrideOptions, mockPrimaryProvider);
+    await runLoop(overrideOptions, mockPrimaryProvider, buildDeps());
 
     expect(capturedInput.reviewerCommand).toBe('resolved:/opt/review/reviewer-cli --json');
   });
@@ -181,7 +159,7 @@ describe('runLoop mixed-review-provider wiring', () => {
       projectKey: 'ouroboros',
       provider: 'primary',
       reviewerProvider: 'primary',
-      developerPromptPath: '.ai_agents/prompt.md',
+      developerPromptPath: undefined,
       iterationLimit: 1,
       iterationsSet: true,
       previewLines: 2,
@@ -198,13 +176,14 @@ describe('runLoop mixed-review-provider wiring', () => {
       reviewMaxFixAttempts: 5,
     };
 
-    if (!loopEngineModule) {
-      throw new Error('loopEngineModule did not initialize');
-    }
-    await loopEngineModule.runLoop(sameProviderOptions, mockPrimaryProvider);
+    await runLoop(sameProviderOptions, mockPrimaryProvider, buildDeps());
 
     expect(capturedInput.command).toBe('resolved:primary run command');
     expect(capturedInput.reviewerCommand).toBe('resolved:primary run command');
     expect(capturedInput.reviewerProviderName).toBe('primary');
+  });
+
+  it('keeps provider registry list source stable for fallback coverage', () => {
+    expect(listRealProviderNames().length).toBeGreaterThan(0);
   });
 });

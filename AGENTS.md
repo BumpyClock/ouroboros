@@ -4,7 +4,7 @@ ork style: telegraph; noun-phrases ok; drop grammar; min tokens.
 
 - read `docs/` and keep them updated with implementation.
 - read `~/.codex/AGENTS.md`
-- use `beads` skill.
+- use `tasque` skill.
 
 
 # GOAL

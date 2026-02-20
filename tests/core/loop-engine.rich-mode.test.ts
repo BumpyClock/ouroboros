@@ -1,28 +1,68 @@
-import { afterAll, beforeAll, describe, expect, it, mock } from 'bun:test';
+import { describe, expect, it } from 'bun:test';
 import type { LoopPhase } from '../../core/live-run-state';
-import type { CliOptions, IterationState, Tone } from '../../core/types';
+import { type LoopControllerDependencies, runLoopController } from '../../core/loop-controller';
+import { resolveBuiltinPromptPath } from '../../core/prompts';
+import type { CliOptions, Tone } from '../../core/types';
 import type { ProviderAdapter } from '../../providers/types';
 
 type RendererCall = {
   setRunContextCount: number;
   setIterationSummaryCount: number;
-  setLoopNotice: Array<{ message: string; tone: Tone }>;
-  setPauseState: Array<number | null>;
-  setRetryState: Array<number | null>;
   setLoopPhase: LoopPhase[];
-  setIteration: number[];
-  setAgentLogPathCount: number;
-  setBeadsSnapshotCount: number;
-  stopped: boolean;
-  stop: Array<{ message: string; tone: Tone }>;
 };
+
+class MockRenderer {
+  private readonly enabled: boolean;
+
+  constructor(
+    enabled: boolean,
+    private readonly calls: RendererCall,
+  ) {
+    this.enabled = enabled;
+  }
+
+  isEnabled(): boolean {
+    return this.enabled;
+  }
+
+  setIteration(): void {}
+  update(): void {}
+  setBeadsSnapshot(): void {}
+  setAgentLogPath(): void {}
+
+  setRunContext(): void {
+    this.calls.setRunContextCount += 1;
+  }
+
+  setIterationSummary(): void {
+    this.calls.setIterationSummaryCount += 1;
+  }
+
+  setLoopNotice(): void {}
+  setPauseState(): void {}
+  setRetryState(): void {}
+  markIterationRetry(): void {}
+  setIterationOutcome(): void {}
+
+  setLoopPhase(phase: LoopPhase): void {
+    this.calls.setLoopPhase.push(phase);
+  }
+
+  setAgentPickedBead(): void {}
+  setAgentQueued(): void {}
+  setAgentLaunching(): void {}
+  setAgentActiveTab(): void {}
+  setAgentReviewPhase(): void {}
+  clearAgentReviewPhase(): void {}
+  stop(): void {}
+}
 
 const baseOptions: CliOptions = {
   projectRoot: process.cwd(),
   projectKey: 'ouroboros',
   provider: 'mock',
-  reviewerProvider: 'mock',
-  developerPromptPath: '.ai_agents/prompt.md',
+  reviewerProvider: 'codex',
+  developerPromptPath: resolveBuiltinPromptPath('developer'),
   iterationLimit: 1,
   iterationsSet: true,
   previewLines: 2,
@@ -38,194 +78,6 @@ const baseOptions: CliOptions = {
   reviewEnabled: false,
   reviewMaxFixAttempts: 5,
 };
-
-const rendererCalls: RendererCall = {
-  setRunContextCount: 0,
-  setIterationSummaryCount: 0,
-  setLoopNotice: [],
-  setPauseState: [],
-  setRetryState: [],
-  setLoopPhase: [],
-  setIteration: [],
-  setAgentLogPathCount: 0,
-  setBeadsSnapshotCount: 0,
-  stopped: false,
-  stop: [],
-};
-
-let iterationState: IterationState = {
-  current_iteration: 0,
-  max_iterations: 1,
-};
-let runAgentStatus = 0;
-let runAgentStdout = '';
-let runAgentStderr = '';
-
-function resetState(): void {
-  rendererCalls.setRunContextCount = 0;
-  rendererCalls.setIterationSummaryCount = 0;
-  rendererCalls.setLoopNotice.length = 0;
-  rendererCalls.setPauseState.length = 0;
-  rendererCalls.setRetryState.length = 0;
-  rendererCalls.setLoopPhase.length = 0;
-  rendererCalls.setIteration.length = 0;
-  rendererCalls.setAgentLogPathCount = 0;
-  rendererCalls.setBeadsSnapshotCount = 0;
-  rendererCalls.stopped = false;
-  rendererCalls.stop.length = 0;
-  iterationState = {
-    current_iteration: 0,
-    max_iterations: 1,
-  };
-  runAgentStatus = 0;
-  runAgentStdout = '';
-  runAgentStderr = '';
-}
-
-mock.module('../../core/beads', () => ({
-  extractReferencedBeadIds: () => [],
-  loadBeadsSnapshot: async (projectRoot: string) => {
-    return {
-      available: true,
-      source: 'mock',
-      projectRoot,
-      total: 1,
-      remaining: 1,
-      open: 1,
-      inProgress: 0,
-      blocked: 0,
-      closed: 0,
-      deferred: 0,
-      remainingIssues: [],
-      byId: new Map(),
-    };
-  },
-}));
-
-mock.module('../../core/state', () => ({
-  buildRunFileBase: (iteration: number) => `iter-${String(iteration).padStart(3, '0')}-test`,
-  isCircuitBroken: (state: IterationState) => state.current_iteration >= state.max_iterations,
-  loadIterationState: () => ({ ...iterationState }),
-  resolveIterationStatePath: () => '/tmp/ouroboros-iteration-state.json',
-  sleep: async (ms: number) => {
-    if (ms > 0) {
-      await Promise.resolve();
-    }
-  },
-  writeIterationState: () => {},
-}));
-
-mock.module('../../core/process-runner', () => ({
-  resolveRunnableCommand: (command: string) => command,
-  runAgentProcess: async () => {
-    return {
-      status: runAgentStatus,
-      stdout: runAgentStdout,
-      stderr: runAgentStderr,
-    };
-  },
-  terminateChildProcess: async () => {},
-}));
-
-mock.module('../../tui/tui', () => ({
-  InkLiveRunRenderer: class {
-    constructor(
-      public iteration: number,
-      _maxIterations: number,
-      _agentIds: number[],
-      _previewLines: number,
-    ) {
-      rendererCalls.setIteration.push(iteration);
-    }
-
-    private readonly enabled = true;
-    private phase: LoopPhase = 'starting';
-
-    isEnabled(): boolean {
-      return this.enabled;
-    }
-
-    setIteration(iteration: number): void {
-      rendererCalls.setIteration.push(iteration);
-    }
-
-    update(): void {
-      return;
-    }
-
-    setBeadsSnapshot(): void {
-      rendererCalls.setBeadsSnapshotCount += 1;
-    }
-
-    setAgentLogPath(): void {
-      rendererCalls.setAgentLogPathCount += 1;
-    }
-
-    setRunContext(): void {
-      rendererCalls.setRunContextCount += 1;
-    }
-
-    setIterationSummary(): void {
-      rendererCalls.setIterationSummaryCount += 1;
-    }
-
-    setLoopNotice(message: string, tone: Tone): void {
-      rendererCalls.setLoopNotice.push({ message, tone });
-    }
-
-    setPauseState(milliseconds: number | null): void {
-      rendererCalls.setPauseState.push(milliseconds);
-    }
-
-    setRetryState(seconds: number | null): void {
-      rendererCalls.setRetryState.push(seconds);
-    }
-
-    markIterationRetry(): void {
-      return;
-    }
-
-    setIterationOutcome(): void {
-      return;
-    }
-
-    setLoopPhase(phase: LoopPhase): void {
-      this.phase = phase;
-      rendererCalls.setLoopPhase.push(phase);
-    }
-
-    setAgentPickedBead(): void {
-      return;
-    }
-
-    setAgentQueued(): void {
-      return;
-    }
-
-    setAgentLaunching(): void {
-      return;
-    }
-
-    setAgentActiveTab(): void {
-      return;
-    }
-
-    setAgentReviewPhase(): void {
-      return;
-    }
-
-    clearAgentReviewPhase(): void {
-      return;
-    }
-
-    stop(message: string, tone = 'success' as Tone): void {
-      rendererCalls.stopped = true;
-      rendererCalls.stop.push({ message, tone });
-    }
-  },
-}));
-
-let loopEngineModule: typeof import('../../core/loop-engine') | null = null;
 
 const mockProvider: ProviderAdapter = {
   name: 'mock',
@@ -247,23 +99,78 @@ const mockProvider: ProviderAdapter = {
   formatCommandHint: (command) => `format(${command})`,
 };
 
+function buildDependencies(renderer: MockRenderer): LoopControllerDependencies {
+  return {
+    loadIterationState: () => ({ current_iteration: 0, max_iterations: 1 }),
+    isCircuitBroken: (state) => state.current_iteration >= state.max_iterations,
+    writeIterationState: () => {},
+    sleep: async () => {},
+    loadBeadsSnapshot: async (projectRoot: string) => ({
+      available: true,
+      source: 'mock',
+      projectRoot,
+      total: 1,
+      remaining: 1,
+      open: 1,
+      inProgress: 0,
+      blocked: 0,
+      closed: 0,
+      deferred: 0,
+      remainingIssues: [],
+      byId: new Map(),
+    }),
+    runIteration: (async (...args: unknown[]) => {
+      const liveRenderer = args[13] as MockRenderer | null;
+      if (liveRenderer?.isEnabled()) {
+        liveRenderer.setRunContext();
+        liveRenderer.setLoopPhase('starting');
+      } else {
+        console.log('[START] 12:00:00');
+        console.log('[RUN] mock run');
+        console.log('[BATCH] target 1 parallel agent(s), staged startup');
+      }
+      return {
+        results: [
+          {
+            agentId: 1,
+            jsonlLogPath: '.tmp/mock.jsonl',
+            lastMessagePath: '.tmp/mock.last-message.txt',
+            result: { status: 0, stdout: '', stderr: '' },
+          },
+        ],
+        pickedByAgent: new Map(),
+        reviewOutcomes: new Map(),
+      };
+    }) as LoopControllerDependencies['runIteration'],
+    createLiveRenderer: () => renderer,
+  };
+}
+
+function buildControllerInput(options: CliOptions) {
+  return {
+    options,
+    provider: mockProvider,
+    reviewerProvider: mockProvider,
+    promptPath: resolveBuiltinPromptPath('developer'),
+    reviewerPromptPath: undefined,
+    statePath: '.tmp/state.json',
+    logDir: '.tmp/logs',
+    command: 'mock agent',
+    reviewerCommand: 'mock reviewer',
+    activeChildren: new Set(),
+    activeSpinnerStopRef: { value: null as ((message: string, tone?: Tone) => void) | null },
+    shutdownProbe: { isShuttingDown: () => false },
+  };
+}
+
 describe('runLoop rich-mode lifecycle', () => {
-  beforeAll(async () => {
-    loopEngineModule = await import('../../core/loop-engine');
-  });
-
-  afterAll(() => {
-    rendererCalls.stop.length = 0;
-    rendererCalls.setLoopPhase.length = 0;
-  });
-
   it('writes loop lifecycle through renderer state in rich mode without standalone iteration rows', async () => {
-    if (!loopEngineModule) {
-      throw new Error('loop-engine module failed to import');
-    }
-    resetState();
-    const originalTty = process.stdout.isTTY;
-    process.stdout.isTTY = true;
+    const calls: RendererCall = {
+      setRunContextCount: 0,
+      setIterationSummaryCount: 0,
+      setLoopPhase: [],
+    };
+    const renderer = new MockRenderer(true, calls);
     const logs: string[] = [];
     const originalLog = console.log;
     console.log = (...args: unknown[]) => {
@@ -271,17 +178,19 @@ describe('runLoop rich-mode lifecycle', () => {
     };
 
     try {
-      await loopEngineModule.runLoop({ ...baseOptions, iterationLimit: 1 }, mockProvider);
+      await runLoopController(
+        buildControllerInput({ ...baseOptions }),
+        buildDependencies(renderer),
+      );
     } finally {
       console.log = originalLog;
-      process.stdout.isTTY = originalTty;
     }
 
-    expect(rendererCalls.setRunContextCount).toBe(1);
-    expect(rendererCalls.setIterationSummaryCount).toBe(1);
-    expect(rendererCalls.setLoopPhase).toContain('starting');
-    expect(rendererCalls.setLoopPhase).toContain('collecting');
-    expect(rendererCalls.setLoopPhase).toContain('completed');
+    expect(calls.setRunContextCount).toBe(1);
+    expect(calls.setIterationSummaryCount).toBe(1);
+    expect(calls.setLoopPhase).toContain('starting');
+    expect(calls.setLoopPhase).toContain('collecting');
+    expect(calls.setLoopPhase).toContain('completed');
 
     const hasLifecycleLines = logs.some(
       (line) =>
@@ -291,18 +200,18 @@ describe('runLoop rich-mode lifecycle', () => {
         line.includes('[PAUSE]') ||
         line.includes('[RETRY]') ||
         line.includes('[TOKENS]') ||
-        line.includes('picked bead'),
+        line.includes('picked task'),
     );
     expect(hasLifecycleLines).toBeFalse();
   });
 
   it('keeps legacy row output in non-TTY mode', async () => {
-    if (!loopEngineModule) {
-      throw new Error('loop-engine module failed to import');
-    }
-    resetState();
-    const originalTty = process.stdout.isTTY;
-    process.stdout.isTTY = false;
+    const calls: RendererCall = {
+      setRunContextCount: 0,
+      setIterationSummaryCount: 0,
+      setLoopPhase: [],
+    };
+    const renderer = new MockRenderer(false, calls);
     const logs: string[] = [];
     const originalLog = console.log;
     console.log = (...args: unknown[]) => {
@@ -310,10 +219,12 @@ describe('runLoop rich-mode lifecycle', () => {
     };
 
     try {
-      await loopEngineModule.runLoop({ ...baseOptions, iterationLimit: 1 }, mockProvider);
+      await runLoopController(
+        buildControllerInput({ ...baseOptions }),
+        buildDependencies(renderer),
+      );
     } finally {
       console.log = originalLog;
-      process.stdout.isTTY = originalTty;
     }
 
     const hasLegacyRows = logs.some(

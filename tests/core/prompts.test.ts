@@ -27,7 +27,9 @@ describe('builtin prompt assets', () => {
   test('developer default advertises one-task loop execution discipline', () => {
     const developerDefault = readBuiltinPrompt('developer');
     expect(developerDefault).toContain('One loop iteration = one meaningful task');
-    expect(developerDefault).toContain('Pick exactly one bead');
+    expect(developerDefault).toContain('Pick exactly one task');
+    expect(developerDefault).toContain('no_tasks_available');
+    expect(developerDefault).toContain('tsq ready --lane coding');
   });
 
   test('reviewer default enforces strict JSON verdict contract', () => {
