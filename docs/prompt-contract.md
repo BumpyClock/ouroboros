@@ -18,6 +18,7 @@ This document defines the canonical default prompt content contract for Ouroboro
 - Runtime default locations: `.ai_agents/prompts/developer.md`, `.ai_agents/prompts/reviewer.md`
 - Legacy developer fallback: `.ai_agents/prompt.md`
 - Built-in fallback files: `docs/prompts/developer.default.md`, `docs/prompts/reviewer.default.md`
+- Compiled binaries embed built-in defaults and materialize them to a temp cache when `docs/prompts/*` is unavailable.
 
 Resolution order remains documented in `docs/config.md`.
 

@@ -206,7 +206,7 @@ Example relying on built-in defaults (no project prompt files required):
 ouroboros --provider codex --command npx -y codex
 ```
 
-When neither project prompt exists, the run still starts and uses `docs/prompts/developer.default.md` and `docs/prompts/reviewer.default.md` (if review is enabled).
+When neither project prompt exists, the run still starts and uses `docs/prompts/developer.default.md` and `docs/prompts/reviewer.default.md` (if review is enabled). For compiled binaries without bundled `docs/prompts/*`, defaults are embedded and materialized to a temp cache (e.g. `$TMP/ouroboros/prompts/developer.default.md`).
 
 ### Reviewer prompt
 
