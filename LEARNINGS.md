@@ -32,6 +32,7 @@
 - When migrating renderer frameworks, preserve the `IterationLiveRenderer` method contract first and swap runtime wiring second; this keeps loop-controller/iteration-execution stable while replacing UI internals.
 - OpenTUI React bootstrap is async (`createCliRenderer`), so renderer init should be wrapped in a destroy-aware mount guard to avoid leaked terminals when shutdown happens during startup.
 - OpenTUI key handling emits structured `KeyEvent` names (`left`, `right`, `enter`, `escape`, etc.); map these into the existing interaction-state key shape to preserve shortcut semantics without rewriting state reducers.
+- Keep task hierarchy metadata (`parent_id`) on normalized TSQ issues so rich TUI surfaces can render parent/child task trees and apply local visibility filters (for example hide/show closed tasks) without extra `tsq` calls.
 
 ## Process
 - Add regression tests for bug fixes when scope permits.

@@ -75,6 +75,7 @@ export type RunResult = {
 
 export type TaskIssue = {
   id: string;
+  parentId?: string;
   title: string;
   status: string;
   priority?: number;

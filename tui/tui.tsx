@@ -56,6 +56,7 @@ const DEFAULT_HELP_TEXT = [
   'r/s: retry/skip conflict action',
   'Esc: close detail/overlay view',
   '1/2/3/4: direct view selection',
+  'c: toggle closed tasks in tree',
   'd: dashboard overlay',
 ];
 const TOAST_TTL_MS_BY_TONE: Record<Tone, number> = {
@@ -129,6 +130,7 @@ export type TuiInteractionState = {
   conflictPanelVisible: boolean;
   helpVisible: boolean;
   dashboardVisible: boolean;
+  showClosedTasks: boolean;
   agentCount: number;
   maxIterations: number;
 };
@@ -156,6 +158,7 @@ export function buildInitialTuiInteractionState(
     conflictPanelVisible: false,
     helpVisible: false,
     dashboardVisible: false,
+    showClosedTasks: false,
     agentCount: safeAgentCount,
     maxIterations: safeMaxIterations,
   };
@@ -369,6 +372,13 @@ export function transitionTuiInteractionState(
     return {
       ...state,
       dashboardVisible: !state.dashboardVisible,
+    };
+  }
+
+  if (normalized === 'c') {
+    return {
+      ...state,
+      showClosedTasks: !state.showClosedTasks,
     };
   }
 
@@ -707,7 +717,121 @@ function renderRunContext(state: LiveRunState): React.JSX.Element[] {
   return rows;
 }
 
-function renderTasks(state: LiveRunState): React.JSX.Element | null {
+type TaskTreeRow = {
+  key: string;
+  text: string;
+  tone: Tone;
+};
+
+function sortTaskIssues(issues: TaskIssue[]): TaskIssue[] {
+  return [...issues].sort((left, right) => {
+    const leftPriority = left.priority ?? -1;
+    const rightPriority = right.priority ?? -1;
+    if (leftPriority !== rightPriority) {
+      return rightPriority - leftPriority;
+    }
+    return left.id.localeCompare(right.id);
+  });
+}
+
+function taskStatusTone(status: string): Tone {
+  if (status === 'in_progress') {
+    return 'info';
+  }
+  if (status === 'blocked') {
+    return 'warn';
+  }
+  if (status === 'closed') {
+    return 'muted';
+  }
+  if (status === 'deferred') {
+    return 'neutral';
+  }
+  return 'success';
+}
+
+function taskStatusIcon(status: string): string {
+  if (status === 'in_progress') {
+    return '>';
+  }
+  if (status === 'blocked') {
+    return '!';
+  }
+  if (status === 'closed') {
+    return 'x';
+  }
+  if (status === 'deferred') {
+    return '~';
+  }
+  return 'o';
+}
+
+export function buildTaskTreeRows(
+  snapshot: TasksSnapshot,
+  showClosedTasks: boolean,
+  maxRows = 12,
+): { rows: TaskTreeRow[]; hiddenCount: number; total: number } {
+  const visibleIssues = [...snapshot.byId.values()].filter(
+    (issue) => showClosedTasks || issue.status !== 'closed',
+  );
+  if (visibleIssues.length === 0) {
+    return { rows: [], hiddenCount: 0, total: 0 };
+  }
+
+  const visibleById = new Map(visibleIssues.map((issue) => [issue.id, issue]));
+  const childrenByParentId = new Map<string, TaskIssue[]>();
+  const rootIssues: TaskIssue[] = [];
+  for (const issue of visibleIssues) {
+    if (issue.parentId && visibleById.has(issue.parentId)) {
+      const existing = childrenByParentId.get(issue.parentId) ?? [];
+      existing.push(issue);
+      childrenByParentId.set(issue.parentId, existing);
+    } else {
+      rootIssues.push(issue);
+    }
+  }
+
+  const rows: TaskTreeRow[] = [];
+  const visited = new Set<string>();
+  const visit = (issue: TaskIssue, ancestors: boolean[], isLast: boolean) => {
+    if (rows.length >= maxRows || visited.has(issue.id)) {
+      return;
+    }
+    visited.add(issue.id);
+    const ancestorPrefix = ancestors.map((hasNext) => (hasNext ? '│  ' : '   ')).join('');
+    const branch = isLast ? '└─ ' : '├─ ';
+    const assignee = issue.assignee ? ` @${issue.assignee}` : '';
+    rows.push({
+      key: issue.id,
+      tone: taskStatusTone(issue.status),
+      text: `${ancestorPrefix}${branch}${taskStatusIcon(issue.status)} ${issue.id} [${issue.status}] ${issue.title}${assignee}`,
+    });
+
+    const children = sortTaskIssues(childrenByParentId.get(issue.id) ?? []);
+    for (let index = 0; index < children.length; index += 1) {
+      visit(children[index], [...ancestors, !isLast], index === children.length - 1);
+      if (rows.length >= maxRows) {
+        break;
+      }
+    }
+  };
+
+  const sortedRoots = sortTaskIssues(rootIssues);
+  for (let index = 0; index < sortedRoots.length; index += 1) {
+    visit(sortedRoots[index], [], index === sortedRoots.length - 1);
+    if (rows.length >= maxRows) {
+      break;
+    }
+  }
+
+  return {
+    rows,
+    hiddenCount: Math.max(0, visibleIssues.length - rows.length),
+    total: visibleIssues.length,
+  };
+}
+
+function renderTasks(state: LiveRunState, uiState: TuiInteractionState): React.JSX.Element | null {
   const tasks = state.tasksSnapshot;
   if (!tasks) {
     return null;
@@ -740,16 +864,40 @@ function renderTasks(state: LiveRunState): React.JSX.Element | null {
           text={` tasks remaining ${tasks.remaining} | in_progress ${tasks.inProgress} | open ${tasks.open} | blocked ${tasks.blocked} | closed ${tasks.closed}`}
         />
       </text>
-      {tasks.remainingIssues.slice(0, 3).map((issue, index) => {
-        const assignee = issue.assignee ? ` @${issue.assignee}` : '';
+      <text>
+        {renderStatusBadge('TREE', 'muted')}{' '}
+        <StatusText
+          tone="muted"
+          text={`closed ${uiState.showClosedTasks ? 'on' : 'off'} (press c)`}
+        />
+      </text>
+      {(() => {
+        const tree = buildTaskTreeRows(tasks, uiState.showClosedTasks, 14);
+        if (tree.total === 0) {
+          return (
+            <text key="task-tree-empty">
+              <StatusText tone="muted" text=" no active tasks to show" />
+            </text>
+          );
+        }
         return (
-          <text key={issue.id}>
-            <StatusText tone="muted" dim text={` ${String(index + 1).padStart(2, ' ')}.`} />{' '}
-            {renderStatusBadge('REM', 'muted')}{' '}
-            <StatusText tone="neutral" text={` ${issue.id} ${issue.title}${assignee}`} />
-          </text>
+          <>
+            {tree.rows.map((row) => (
+              <text key={row.key}>
+                <StatusText
+                  tone={row.tone}
+                  text={formatShort(row.text, Math.max(24, (process.stdout.columns ?? 120) - 44))}
+                />
+              </text>
+            ))}
+            {tree.hiddenCount > 0 ? (
+              <text key="task-tree-more">
+                <StatusText tone="muted" text={` … +${tree.hiddenCount} more`} />
+              </text>
+            ) : null}
+          </>
         );
-      })}
+      })()}
     </box>
   );
 }
@@ -1265,7 +1413,7 @@ function renderFooterStrip(): React.JSX.Element {
       <text>
         <StatusText
           tone="muted"
-          text="q:Quit  w:Workers  m:Merge  a/r/s:Conflict  Enter:Detail  Esc:Back  Tab:Focus  ↑↓:Navigate  ?:Help"
+          text="q:Quit  c:Closed toggle  w:Workers  m:Merge  a/r/s:Conflict  Enter:Detail  Esc:Back  Tab:Focus  ↑↓:Navigate  ?:Help"
         />
       </text>
     </box>
@@ -1968,7 +2116,11 @@ function renderAgentListPanel(
   );
 }
 
-function renderTaskSummaryPanel(state: LiveRunState, columns: number): React.JSX.Element {
+function renderTaskSummaryPanel(
+  state: LiveRunState,
+  uiState: TuiInteractionState,
+  columns: number,
+): React.JSX.Element {
   return (
     <box marginTop={1} flexDirection="column" width={Math.min(columns - 2, 120)}>
       <text>
@@ -1977,7 +2129,7 @@ function renderTaskSummaryPanel(state: LiveRunState, columns: number): React.JSX
       </text>
       {renderIterationSummary(state).map((line) => line)}
       {renderRunContext(state).map((line) => line)}
-      {renderTasks(state)}
+      {renderTasks(state, uiState)}
     </box>
   );
 }
@@ -2051,7 +2203,7 @@ function _renderViewContent(
   if (columns < 100) {
     return [
       <box key="tasks-stack" marginTop={1} flexDirection="column">
-        {renderTaskSummaryPanel(state, columns)}
+        {renderTaskSummaryPanel(state, uiState, columns)}
         {renderAgentListPanel(state, renderer, uiState, columns)}
         {renderIterationHistoryList(
           timeline,
@@ -2066,7 +2218,7 @@ function _renderViewContent(
   return [
     <box key="tasks-layout" marginTop={1} flexDirection="row" width={columns - 2} gap={1}>
       <box width={Math.max(60, Math.floor(columns * 0.64))} flexDirection="column">
-        {renderTaskSummaryPanel(state, columns)}
+        {renderTaskSummaryPanel(state, uiState, columns)}
         {renderAgentListPanel(state, renderer, uiState, columns)}
       </box>
       <box flexDirection="column" flexGrow={1}>

@@ -1,10 +1,11 @@
 import { describe, expect, it } from 'bun:test';
-import type { BeadIssue } from '../../core/types';
+import type { TaskIssue, TasksSnapshot } from '../../core/types';
 import {
   buildAgentNotchLine,
   buildInitialTuiInteractionState,
   buildIterationStripParts,
   buildRunContextInfoLines,
+  buildTaskTreeRows,
   formatAgentTitle,
   transitionTuiInteractionState,
 } from '../../tui/tui';
@@ -12,10 +13,25 @@ import {
 const makeIssue = (
   id: string,
   title = 'Implement robust cross-platform path handling for user home resolution',
-): BeadIssue => ({
+): TaskIssue => ({
   id,
   title,
   status: 'open',
+});
+
+const makeSnapshot = (issues: TaskIssue[]): TasksSnapshot => ({
+  available: true,
+  source: 'tsq list --json',
+  projectRoot: '/tmp/project',
+  total: issues.length,
+  remaining: issues.filter((issue) => issue.status !== 'closed').length,
+  open: issues.filter((issue) => issue.status === 'open').length,
+  inProgress: issues.filter((issue) => issue.status === 'in_progress').length,
+  blocked: issues.filter((issue) => issue.status === 'blocked').length,
+  closed: issues.filter((issue) => issue.status === 'closed').length,
+  deferred: issues.filter((issue) => issue.status === 'deferred').length,
+  remainingIssues: issues.filter((issue) => issue.status !== 'closed'),
+  byId: new Map(issues.map((issue) => [issue.id, issue])),
 });
 
 const makeTimeline = (currentIteration: number, maxIterations: number) => ({
@@ -132,6 +148,42 @@ describe('Ink TUI rendering helpers', () => {
     ]);
     expect(lines.find((line) => line.label === 'YOLO')?.value).toBe('enabled');
   });
+
+  it('builds a task tree and filters closed tasks by toggle', () => {
+    const snapshot = makeSnapshot([
+      {
+        id: 'tsq-parent',
+        title: 'Parent task',
+        status: 'open',
+      },
+      {
+        id: 'tsq-parent.1',
+        parentId: 'tsq-parent',
+        title: 'Child open',
+        status: 'in_progress',
+      },
+      {
+        id: 'tsq-parent.2',
+        parentId: 'tsq-parent',
+        title: 'Child closed',
+        status: 'closed',
+      },
+      {
+        id: 'tsq-standalone',
+        title: 'Standalone closed',
+        status: 'closed',
+      },
+    ]);
+
+    const openOnly = buildTaskTreeRows(snapshot, false, 12);
+    expect(openOnly.total).toBe(2);
+    expect(openOnly.rows.map((row) => row.text).join('\n')).not.toContain('[closed]');
+
+    const withClosed = buildTaskTreeRows(snapshot, true, 12);
+    expect(withClosed.total).toBe(4);
+    expect(withClosed.rows.map((row) => row.text).join('\n')).toContain('[closed]');
+    expect(withClosed.rows.map((row) => row.text).join('\n')).toContain('tsq-parent.2');
+  });
 });
 
 describe('Ink TUI interaction state', () => {
@@ -235,6 +287,18 @@ describe('Ink TUI interaction state', () => {
     expect(closed.dashboardVisible).toBeFalse();
     expect(closed.view).toBe(state.view);
     expect(closed.focusedPane).toBe(state.focusedPane);
+  });
+
+  it('toggles closed-task visibility in task tree', () => {
+    const state = buildInitialTuiInteractionState(2, 8);
+    expect(state.showClosedTasks).toBeFalse();
+
+    const enabled = transitionTuiInteractionState(state, 'c', {});
+    expect(enabled.showClosedTasks).toBeTrue();
+    expect(enabled.view).toBe(state.view);
+
+    const disabled = transitionTuiInteractionState(enabled, 'c', {});
+    expect(disabled.showClosedTasks).toBeFalse();
   });
 
   it('toggles parallel and merge views with Ralph-style shortcuts', () => {

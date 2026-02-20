@@ -129,6 +129,7 @@ function normalizeIssue(raw: unknown): TaskIssue | null {
   }
   return {
     id,
+    parentId: toStringValue(record.parent_id) || undefined,
     title,
     status,
     priority: toNumberValue(record.priority),

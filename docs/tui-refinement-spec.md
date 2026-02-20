@@ -58,6 +58,9 @@
   - `LOOP`, `PROVIDER`, `PROJECT`, `PROJECT_KEY`
   - `COMMAND`, `PROMPT`, `LOGS`, `LIMIT`
   - `MODEL`, `EFFORT`, `PARALLEL`, `YOLO`
+- The task summary panel includes a TSQ task tree (hierarchical by parent/child when available).
+  - Closed tasks are hidden by default.
+  - Press `c` to toggle closed tasks on/off.
 - Left pane content is mode-driven:
   - tasks/reviewer: per-agent task rows
   - iterations: iteration rows
@@ -158,6 +161,7 @@
 | `d` | global | Toggle dashboard overlay |
 | `w` | global | Toggle parallel workers overview (`tasks` ↔ `parallel-overview`) |
 | `m` | global | Toggle merge progress view (`tasks` ↔ `merge-progress`) |
+| `c` | global | Toggle closed-task visibility in the TSQ task tree |
 | `Tab` | `tasks` view | Toggle focused pane (`agents` ↔ `iterations`) |
 | `←` / `→` | global | Cycle to previous/next view (`tasks` → `iterations` → `iteration-detail` → `reviewer` → `parallel-overview` → `merge-progress`) |
 | `1`/`2`/`3`/`4` | global | Jump to `tasks` / `iterations` / `iteration-detail` / `reviewer` |
